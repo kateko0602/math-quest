@@ -1055,3 +1055,50 @@ button.gitem-row{width:100%;font-family:var(--font);text-align:left}
 /* 폼 요소도 앱 기본 글꼴로 통일 (설정 ⚙️ 등) */
 button,input,select,textarea{font-family:var(--font)}
 .icon-btn{font-family:var(--font)}
+
+/* ---------- 🎓 어머님용 성취도 리포트 (전문 학원 성적표 톤) ---------- */
+.report-card{
+  background:#fff;border:1px solid #E7E2DA;border-radius:16px;padding:16px 14px 10px;
+  box-shadow:0 6px 18px rgba(30,41,59,.06);color:#1F2937;margin-top:2px;
+}
+.rc-hd{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding-bottom:9px;border-bottom:1px solid #EAE5DD}
+.rc-brand{font-size:12.5px;font-weight:900;color:#1E293B;letter-spacing:-.2px}
+.rc-period{font-size:10.5px;font-weight:700;color:#8A94A6;white-space:nowrap}
+.rc-who{padding:11px 0 2px}
+.rc-name{font-size:20px;font-weight:900;letter-spacing:-.6px;color:#111827;line-height:1.25}
+.rc-nick{font-size:11px;font-weight:700;color:#9AA1AD;margin-left:6px;letter-spacing:0}
+.rc-class{font-size:11px;font-weight:700;color:#8A94A6;margin-top:3px}
+.rc-sec{padding-top:13px}
+.rc-t{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:900;color:#1E293B;letter-spacing:-.1px;margin-bottom:8px}
+.rc-t::before{content:'';width:3px;height:11px;border-radius:2px;background:#D9532B;flex:0 0 auto}
+.rc-grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rc-stat{background:#F8FAFC;border-radius:10px;padding:9px 12px}
+.rc-stat .v{font-size:18px;font-weight:900;letter-spacing:-.4px;color:#1E293B}
+.rc-stat .l{font-size:9.5px;font-weight:800;color:#8A94A6;margin-top:2px}
+.rc-bar{height:6px;border-radius:99px;background:#EEF1F5;overflow:hidden;margin-top:9px}
+.rc-bar i{display:block;height:100%;border-radius:99px;background:#1E293B}
+.rc-bar.mint i{background:#0F8F68}
+.rc-bar.sm{height:4px;margin-top:5px}
+.rc-line{font-size:11.5px;font-weight:700;color:#4B5563;line-height:1.55;word-break:keep-all}
+.rc-line b{font-weight:900;color:#1F2937}
+.rc-sub{font-size:9.5px;font-weight:700;color:#9AA1AD;margin-top:6px}
+.rc-tag{margin-bottom:9px}
+.rc-tag:last-child{margin-bottom:0}
+.rc-tagline{display:flex;align-items:center;gap:6px}
+.rc-dot{width:6px;height:6px;border-radius:50%;flex:0 0 auto}
+.rc-taglab{flex:1;font-size:11px;font-weight:800;color:#374151;min-width:0}
+.rc-tagpct{font-size:11px;font-weight:900}
+.rc-unit{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px dashed #EFEAE3}
+.rc-unit:last-child{border-bottom:none}
+.rc-unit-nm{flex:1;font-size:11.5px;font-weight:800;color:#374151;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rc-unit-nm small{font-size:9.5px;font-weight:700;color:#A3AAB5;margin-left:3px}
+.rc-unit-v{font-size:10.5px;font-weight:700;color:#6B7280;white-space:nowrap}
+.rc-unit-v b{font-size:12px;font-weight:900;color:#C0392B}
+.rc-unit-v small{font-size:9.5px;color:#9AA1AD;font-weight:700}
+.rc-unit.exam .rc-unit-v b{color:#1E293B}
+.rc-avg{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+.rc-avg b{font-size:19px;font-weight:900;letter-spacing:-.5px;color:#D9532B}
+.rc-avg span{font-size:9.5px;font-weight:800;color:#8A94A6}
+.rc-empty{font-size:10.5px;font-weight:700;color:#A3AAB5;padding:4px 0;line-height:1.5}
+.rc-foot{font-size:9px;font-weight:700;color:#B0B6C0;text-align:right;margin-top:10px;padding-top:8px;border-top:1px solid #EFEAE3}
+.report-img{width:100%;border-radius:12px;display:block;border:1px solid #EAE5DD;background:#fff}

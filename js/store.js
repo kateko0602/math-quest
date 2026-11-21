@@ -662,19 +662,180 @@ window.EMA = window.EMA || {};
         rate: Math.round(daysWith / Math.max(1, Math.min(days, hist.length + 1)) * 100)
       };
     }
+    /* ---------- 어머님용 전문 성취도 리포트 ----------
+       학원 성적표 톤: 게임 용어(펫·불꽃·보스·XP·코인) 없이
+       기간 안의 채점 기록·제출 기록·단원평가만 모아 정리합니다.
+       → 학습 성실도 / 풀이·오답 해결 / 오답 원인 3비율 / 취약 단원 / 단원평가 */
+    parentReport(classId, sid, range) {
+      const today = this.state.today;
+      const days = range === 'week' ? 7 : range === 'month' ? 30 : 120;
+      const from = shiftISO(today, -(days - 1));
+      const c = this.getClass(classId) || {};
+      const s = this.student(classId, sid) || {};
+      const inRange = d => !!d && d >= from && d <= today;
+
+      /* ① 기간 안 채점 기록 — 날짜별 키: classId|date|sid (프린트는 뒤에 |print) */
+      let solved = 0, wrong = 0, fixed = 0;
+      const unitMap = {};
+      const tagCounts = { calc: 0, read: 0, concept: 0 };
+      const gradedDates = {};
+      const addUnit = (book, page, isFixed) => {
+        const unit = this.unitNameOf(book, page) || book || '기타';
+        const u = unitMap[unit] || (unitMap[unit] = { name: unit, wrong: 0, fixed: 0 });
+        u.wrong++;
+        if (isFixed) u.fixed++;
+        return u;
+      };
+      Object.keys(this.state.grades || {}).forEach(k => {
+        const p = String(k).split('|');
+        if (p[0] !== classId || p[2] !== sid) return;
+        const d = p[1];
+        if (!inRange(d)) return;
+        gradedDates[d] = true;
+        const row = this.state.grades[k] || {};
+        Object.keys(row.marks || {}).forEach(mk => {
+          const m = row.marks[mk];
+          if (m !== 'o' && m !== 'x') return;
+          solved++;
+          if (m !== 'x') return;
+          wrong++;
+          const isFixed = (row.cleanup || {})[mk] === 'fixed';
+          if (isFixed) fixed++;
+          const mp = String(mk).split('|');
+          addUnit(mp[0], parseInt(String(mp[1] || '').split(':')[0], 10), isFixed);
+          const tg = (row.tags || {})[mk];
+          if (tg && tagCounts[tg] != null) tagCounts[tg]++;
+        });
+      });
+
+      /* ② 아직 못 고친 오답 (밀린문제) / 재풀이 완료 기록 */
+      ((this.state.carried || {})[sid] || []).forEach(m => {
+        if (!inRange(m.date)) return;
+        if ((m.reason || 'x') === 'skip') return;       // 안 푼 문제는 오답이 아님
+        wrong++;
+        addUnit(m.book, m.page, false);
+      });
+      ((this.state.solvedCarried || {})[sid] || []).forEach(m => {
+        if (!inRange(m.date)) return;
+        wrong++; fixed++;
+        addUnit(m.book, m.page, true);
+      });
+      ((this.state.monsters || {})[sid] || []).forEach(m => {
+        if (m.fromCarry) return;                        // 밀린문제 해결분은 위에서 셈
+        if (!inRange(m.date)) return;
+        wrong++;
+        if (m.captured) fixed++;
+        addUnit(m.book, m.page, !!m.captured);
+      });
+
+      /* ③ 풀이 문항 수 — 채점 기록이 없는 날은 기존 학습 기록으로 보충 */
+      const hist = (this.state.history[sid] || []).filter(h => inRange(h.date) && !gradedDates[h.date]);
+      const histSolved = hist.reduce((a, h) => a + (h.solved || 0), 0);
+      const histActive = hist.filter(h => (h.solved || 0) > 0).length;
+      const totalSolved = solved + histSolved;
+
+      /* ④ 학습 성실도 — 연속 학습일 · 숙제 완료율(수업일 기준) */
+      const streak = this.streak(classId, sid);
+      const dowMap = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6 };
+      let dowSet = [];
+      String(c.days || '').split(/[^가-힣]+/).forEach(tok => {
+        String(tok).split('').forEach(ch => { if (dowMap[ch] != null && dowSet.indexOf(dowMap[ch]) < 0) dowSet.push(dowMap[ch]); });
+      });
+      if (!dowSet.length) dowSet = [2, 3, 4, 5, 6];      // 수업일 정보가 없으면 화~토
+      const doneDays = {};
+      Object.keys(this.state.submissions || {}).forEach(k => {
+        const p = String(k).split('|');
+        if (p[0] !== classId || p[2] !== sid) return;
+        const st = this.state.submissions[k];
+        if (st && inRange(p[1]) && (st.status === 'submitted' || st.status === 'stamped')) doneDays[p[1]] = true;
+      });
+      (this.state.history[sid] || []).forEach(h => {
+        if (inRange(h.date) && (h.solved || 0) >= FLAME_MIN) doneDays[h.date] = true;
+      });
+      let classDays = 0, doneClassDays = 0;
+      // 기록이 시작되기 전 날은 '숙제가 나간 날'인지 알 수 없으니 분모에서 뺍니다
+      let startFrom = from;
+      const recordDates = Object.keys(gradedDates).concat(((this.state.history[sid] || []).filter(h => inRange(h.date)).map(h => h.date)));
+      if (recordDates.length) {
+        const first = recordDates.sort()[0];
+        if (first > startFrom) startFrom = first;
+      }
+      for (let d = startFrom; d <= today; d = shiftISO(d, 1)) {
+        const wd = new Date(d + 'T12:00:00').getDay();
+        if (dowSet.indexOf(wd) < 0) continue;
+        classDays++;
+        if (doneDays[d]) doneClassDays++;
+      }
+      const hwRate = classDays ? Math.round(doneClassDays / classDays * 100) : 0;
+
+      /* ⑤ 오답 원인 3비율 (항상 세 가지를 모두 표시) */
+      const defs = GAME().tags || [];
+      const tagTotal = tagCounts.calc + tagCounts.read + tagCounts.concept;
+      const tags = defs.map(d => ({
+        id: d.id,
+        label: d.id === 'concept' ? '개념 보완 필요' : d.label,
+        em: d.em, count: tagCounts[d.id] || 0,
+        pct: tagTotal ? Math.round((tagCounts[d.id] || 0) / tagTotal * 100) : 0
+      }));
+
+      /* ⑥ 취약 단원 · 단원평가 */
+      const units = Object.keys(unitMap)
+        .map(name => unitMap[name])
+        .sort((a, b) => (b.wrong - a.wrong) || (b.fixed - a.fixed))
+        .slice(0, 3);
+      const exams = this.exam(classId, sid).filter(e => e.score != null && e.date >= from);
+      const avgExam = exams.length ? Math.round(exams.reduce((a, e) => a + (e.score || 0), 0) / exams.length) : null;
+
+      return {
+        range,
+        label: range === 'week' ? '이번 주' : range === 'month' ? '이번 달' : '이번 학기',
+        from, to: today, days,
+        streak, hwRate, classDays, doneClassDays,
+        solved: totalSolved, wrong, fixed,
+        fixRate: wrong ? Math.round(fixed / wrong * 100) : 0,
+        units, tags, tagTotal,
+        exams, avgExam,
+        activeDays: histActive + Object.keys(gradedDates).length
+      };
+    }
     kakaoSummary(classId, sid, range) {
-      const s = this.student(classId, sid);
-      const a = this.achievement(classId, sid, range);
-      const ex = this.exam(classId, sid).filter(e => e.score != null).slice(-2);
-      const exTxt = ex.length ? ex.map(e => `${e.unit.replace(' 평가', '')} ${e.score}점${e.retest ? `(재시 ${e.retest}점)` : ''}`).join(' · ') : '아직 없음';
-      const todayLine = (a.todayWrong + a.todayFixed + a.todayQuestion)
-        ? `오늘은 틀린 문제 ${a.todayWrong}개 중 ${a.todayFixed}개를 스스로 고쳤고, 질문 ${a.todayQuestion}개를 정리했어요.`
-        : '오늘은 앱에 새 기록이 없어요(숙제 확인 후 업데이트됩니다).';
-      return `안녕하세요 어머님, ${s.name} 어머니입니다 :)
-${a.label} 숙제 성실도는 ${a.flameDays}일 불꽃(하루 3문제 이상) · 모두 ${a.totalSolved}문제를 풀었어요.
-${todayLine}
-단원평가: ${exTxt}
-펫은 ${a.owned}마리 모았어요. 집에서도 "오늘 숙제 먼저" 습관 응원 부탁드려요! 감사합니다.`;
+      const s = this.student(classId, sid) || {};
+      const c = this.getClass(classId) || {};
+      const r = this.parentReport(classId, sid, range);
+      const pct = id => { const t = r.tags.find(x => x.id === id); return t ? t.pct : 0; };
+      const kd = iso => iso.slice(5).replace('-', '.');
+      const lines = [];
+      lines.push(`안녕하세요 어머님, ${c.name || ''} 담임입니다.`);
+      lines.push(`${s.name} 학생의 ${r.label} 학습 리포트를 보내 드립니다. (${kd(r.from)} ~ ${kd(r.to)})`);
+      lines.push('');
+      lines.push('■ 학습 성실도');
+      lines.push(`· 연속 ${r.streak}일 학습 · 숙제 완료율 ${r.hwRate}%`);
+      lines.push('');
+      lines.push('■ 풀이 및 오답 해결');
+      lines.push(`· 총 ${r.solved}문항 풀이 · 오답 ${r.wrong}개 중 ${r.fixed}개 재풀이 완료 (${r.fixRate}%)`);
+      lines.push('');
+      lines.push('■ 오답 원인 분석');
+      lines.push(`· 계산 실수 ${pct('calc')}% · 문제 잘못 읽음 ${pct('read')}% · 개념 보완 필요 ${pct('concept')}%`);
+      lines.push('');
+      lines.push('■ 취약 단원');
+      if (r.units.length) {
+        r.units.forEach(u => lines.push(`· ${u.name} — 오답 ${u.wrong}개${u.fixed ? ` (재풀이 ${u.fixed}개)` : ''}`));
+      } else {
+        lines.push('· 이 기간에 오답 기록이 없습니다.');
+      }
+      lines.push('');
+      lines.push('■ 학원 단원평가');
+      if (r.exams.length) {
+        r.exams.slice(-3).forEach(e => {
+          lines.push(`· ${e.unit.replace(' 평가', '')} ${e.score}점${e.retest != null ? ` (재시험 ${e.retest}점)` : ''}`);
+        });
+        if (r.avgExam != null) lines.push(`· 평균 ${r.avgExam}점`);
+      } else {
+        lines.push('· 이 기간에 응시한 단원평가가 없습니다.');
+      }
+      lines.push('');
+      lines.push('가정에서도 꾸준한 복습을 응원해 주시면 좋겠습니다. 감사합니다.');
+      return lines.join('\n');
     }
   }
 

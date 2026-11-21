@@ -32,7 +32,7 @@ window.EMA = window.EMA || {};
     pmBook: null, pmPage: null, pmInput: '',
     lessonEditBook: null, lessonEditPages: null,
     pinReveal: null,
-    reportSid: null, reportRange: 'week',
+    reportSid: null, reportRange: 'week', reportImg: null, reportImgName: '',
     petDetail: null, monsterDetail: null, printSid: null, printInput: '',
     lastResult: null,
     bigPhotoSid: null, bigPhotoAt: '', bigPhotoFrom: '',
@@ -1051,7 +1051,7 @@ window.EMA = window.EMA || {};
         ${rows.map(r => `<button class="reprow" data-act="openReport" data-id="${r.student.id}">
           ${avatarHtml(r.student, 34)}
           <span class="grow" style="min-width:0"><b>${esc(r.student.name)}</b> <small>${esc(r.student.nickname || '')}</small></span>
-          <span class="muted">🔥${store.streak(cid, r.student.id)} · 🐾${store.myPets(cid, r.student.id).length}</span>
+          <span class="muted">연속 ${store.streak(cid, r.student.id)}일 · 오답해결 ${store.parentReport(cid, r.student.id, 'week').fixRate}%</span>
           <span class="chev">›</span></button>`).join('')}
       </div>`;
   }
@@ -1104,7 +1104,7 @@ window.EMA = window.EMA || {};
     const map = {
       gallery: sheetGallery, carry: sheetCarry, onboard: sheetOnboard, pinchange: sheetPinChange,
       profile: sheetProfile, shop: sheetShop, pet: sheetPet, monster: sheetMonster,
-      top5big: sheetTop5Big, report: sheetReport, printset: sheetPrintSet,
+      top5big: sheetTop5Big, report: sheetReport, reportimg: sheetReportImg, printset: sheetPrintSet,
       lessonEdit: sheetLessonEdit, pmpage: sheetPmPage, yesterday: sheetYesterday,
       photocopy: sheetPhotoCopy, printpick: sheetPrintPick,
       story: storySheet, photoconfirm: sheetPhotoConfirm, nextday: sheetNextDay,
@@ -1371,38 +1371,267 @@ window.EMA = window.EMA || {};
     `, { wide: true });
   }
 
+  /* =========================================================
+     🎓 어머님용 성취도 리포트 — 전문 학원 성적표 톤 (게임 용어 없음)
+       학습 성실도 / 풀이·오답 해결 / 오답 원인 3비율 / 취약 단원 / 단원평가
+  ========================================================= */
+  const TAG_COLOR = { calc: '#2B5FA8', read: '#B07A16', concept: '#C0392B' };
+  const dotted = iso => String(iso || '').slice(0, 10).replace(/-/g, '.');
+  const shortDot = iso => { const p = String(iso || '').split('-'); return p.length === 3 ? (+p[1] + '.' + p[2]) : ''; };
+
+  function rcBar(pct, cls) {
+    const w = Math.max(0, Math.min(100, Math.round(pct || 0)));
+    return `<div class="rc-bar ${cls || ''}"><i style="width:${w}%"></i></div>`;
+  }
+
+  function reportCardHtml(s, c, r) {
+    const nm = s.nickname && s.nickname !== s.name ? `<span class="rc-nick">${esc(s.nickname)}</span>` : '';
+    const tags = r.tags.map(t => `<div class="rc-tag">
+        <div class="rc-tagline">
+          <span class="rc-dot" style="background:${TAG_COLOR[t.id] || '#334155'}"></span>
+          <span class="rc-taglab">${esc(t.label)}</span>
+          <span class="rc-tagpct" style="color:${TAG_COLOR[t.id] || '#334155'}">${t.pct}%</span>
+        </div>
+        <div class="rc-bar sm"><i style="width:${t.pct}%;background:${TAG_COLOR[t.id] || '#334155'}"></i></div>
+      </div>`).join('');
+    const units = r.units.length
+      ? r.units.map(u => `<div class="rc-unit">
+          <span class="rc-unit-nm">${esc(u.name)}</span>
+          <span class="rc-unit-v">오답 <b>${u.wrong}</b>${u.fixed ? ` · 재풀이 <b>${u.fixed}</b>` : ''}</span>
+        </div>`).join('')
+      : '<div class="rc-empty">이 기간에 오답 기록이 없습니다.</div>';
+    const exams = r.exams.length
+      ? r.exams.slice(-3).map(e => `<div class="rc-unit exam">
+          <span class="rc-unit-nm">${esc(e.unit.replace(' 평가', ''))} <small>${esc(shortDot(e.date))}</small></span>
+          <span class="rc-unit-v"><b>${e.score}점</b>${e.retest != null ? ` <small>재시 ${e.retest}점</small>` : ''}</span>
+        </div>`).join('')
+      : '<div class="rc-empty">이 기간에 응시한 단원평가가 없습니다.</div>';
+
+    return `<div class="report-card">
+      <div class="rc-hd">
+        <span class="rc-brand">학습 성취도 리포트</span>
+        <span class="rc-period">${dotted(r.from)} – ${shortDot(r.to)}</span>
+      </div>
+      <div class="rc-who">
+        <div class="rc-name">${esc(s.name)}${nm}</div>
+        <div class="rc-class">${esc(c.name || '')}${c.days ? ` · ${esc(c.days)}` : ''}${c.time ? ` ${esc(c.time)}` : ''}</div>
+      </div>
+      <div class="rc-sec">
+        <div class="rc-t">학습 성실도</div>
+        <div class="rc-grid2">
+          <div class="rc-stat"><div class="v">${r.streak}일</div><div class="l">연속 학습</div></div>
+          <div class="rc-stat"><div class="v">${r.hwRate}%</div><div class="l">숙제 완료율</div></div>
+        </div>
+        ${rcBar(r.hwRate)}
+        <div class="rc-sub">수업일 ${r.doneClassDays}일 / ${r.classDays}일 완료</div>
+      </div>
+      <div class="rc-sec">
+        <div class="rc-t">풀이 및 오답 해결</div>
+        <div class="rc-line">총 <b>${r.solved}</b>문항 풀이 · 오답 <b>${r.wrong}</b>개 중 <b>${r.fixed}</b>개 재풀이 완료</div>
+        ${rcBar(r.fixRate, 'mint')}
+        <div class="rc-sub">오답 해결률 ${r.fixRate}%</div>
+      </div>
+      <div class="rc-sec">
+        <div class="rc-t">오답 원인 분석</div>
+        ${tags}
+        ${r.tagTotal ? '' : '<div class="rc-empty">이 기간에 선택된 오답 원인이 없습니다.</div>'}
+      </div>
+      <div class="rc-sec">
+        <div class="rc-t">취약 단원</div>
+        ${units}
+      </div>
+      <div class="rc-sec">
+        <div class="rc-t">학원 단원평가</div>
+        ${r.avgExam != null ? `<div class="rc-avg"><b>${r.avgExam}점</b><span>기간 평균 · ${r.exams.length}회 응시</span></div>` : ''}
+        ${exams}
+      </div>
+      <div class="rc-foot">${dotted(r.to)} 기준 · 학습 기록 자동 집계</div>
+    </div>`;
+  }
+
+  /** 같은 내용을 PNG 이미지로 — 정확히 같은 항목만 담습니다 */
+  function reportImageData(s, c, r) {
+    const W = 380, PAD = 26, SCALE = 2;
+    const INK = '#1F2937', MUTED = '#6B7280', LINE = '#E5E7EB', NAVY = '#1E293B', SOFT = '#F8FAFC';
+    const FONT = '-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif';
+
+    function draw(ctx) {
+      ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, W, 2400);
+      let y = 32;
+      const setF = (size, weight) => { ctx.font = `${weight || 400} ${size}px ${FONT}`; };
+      const txt = (str, x, yy, size, weight, color, align) => {
+        setF(size, weight); ctx.fillStyle = color || INK;
+        ctx.textAlign = align || 'left';
+        ctx.fillText(String(str), x, yy);
+        ctx.textAlign = 'left';
+      };
+      const hair = (yy) => { ctx.fillStyle = LINE; ctx.fillRect(PAD, yy, W - PAD * 2, 0.7); };
+      const rr = (x, yy, w, h, rad, fill) => {
+        const r0 = Math.min(rad, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + r0, yy); ctx.lineTo(x + w - r0, yy);
+        ctx.quadraticCurveTo(x + w, yy, x + w, yy + r0);
+        ctx.lineTo(x + w, yy + h - r0);
+        ctx.quadraticCurveTo(x + w, yy + h, x + w - r0, yy + h);
+        ctx.lineTo(x + r0, yy + h);
+        ctx.quadraticCurveTo(x, yy + h, x, yy + h - r0);
+        ctx.lineTo(x, yy + r0);
+        ctx.quadraticCurveTo(x, yy, x + r0, yy);
+        ctx.closePath();
+        ctx.fillStyle = fill; ctx.fill();
+      };
+      const bar = (pct, yy, color, h) => {
+        const w = W - PAD * 2;
+        rr(PAD, yy, w, h || 5, (h || 5) / 2, '#EEF1F5');
+        const fw = Math.max(0, Math.min(1, (pct || 0) / 100)) * w;
+        if (fw > 0) rr(PAD, yy, Math.max(fw, (h || 5)), h || 5, (h || 5) / 2, color || '#1E293B');
+      };
+      const section = (label) => {
+        y += 21;
+        ctx.fillStyle = '#D9532B';
+        ctx.fillRect(PAD, y - 9, 2.5, 10);
+        txt(label, PAD + 9, y, 10, 700, NAVY);
+        y += 14;
+      };
+
+      /* 머리 */
+      txt('학습 성취도 리포트', PAD, y, 13, 700, NAVY);
+      txt(`${dotted(r.from)} – ${shortDot(r.to)}`, W - PAD, y, 9, 500, MUTED, 'right');
+      y += 12; hair(y);
+      y += 26;
+      setF(21, 700);
+      txt(s.name, PAD, y, 21, 700, INK);
+      if (s.nickname && s.nickname !== s.name) {
+        const nw = ctx.measureText(s.name).width;
+        txt(s.nickname, PAD + nw + 6, y, 10, 500, MUTED);
+      }
+      y += 15;
+      txt(`${c.name || ''}${c.days ? ' · ' + c.days : ''}${c.time ? ' ' + c.time : ''}`, PAD, y, 9, 500, MUTED);
+
+      /* 학습 성실도 */
+      section('학습 성실도');
+      const bw = (W - PAD * 2 - 8) / 2;
+      rr(PAD, y, bw, 46, 8, SOFT); rr(PAD + bw + 8, y, bw, 46, 8, SOFT);
+      txt(`${r.streak}일`, PAD + 12, y + 21, 17, 700, NAVY);
+      txt('연속 학습', PAD + 12, y + 36, 8.5, 600, MUTED);
+      txt(`${r.hwRate}%`, PAD + bw + 20, y + 21, 17, 700, NAVY);
+      txt('숙제 완료율', PAD + bw + 20, y + 36, 8.5, 600, MUTED);
+      y += 54;
+      bar(r.hwRate, y, '#1E293B', 5);
+      y += 16;
+      txt(`수업일 ${r.doneClassDays}일 / ${r.classDays}일 완료`, PAD, y, 8, 500, MUTED);
+
+      /* 풀이 및 오답 해결 */
+      section('풀이 및 오답 해결');
+      txt(`총 ${r.solved}문항 풀이 · 오답 ${r.wrong}개 중 ${r.fixed}개 재풀이 완료`, PAD, y, 9.5, 600, INK);
+      y += 10;
+      bar(r.fixRate, y, '#0F8F68', 5);
+      y += 16;
+      txt(`오답 해결률 ${r.fixRate}%`, PAD, y, 8, 500, MUTED);
+
+      /* 오답 원인 분석 */
+      section('오답 원인 분석');
+      r.tags.forEach(t => {
+        txt(t.label, PAD, y, 9.5, 600, INK);
+        txt(t.pct + '%', W - PAD, y, 9.5, 700, TAG_COLOR[t.id] || INK, 'right');
+        y += 6;
+        bar(t.pct, y, TAG_COLOR[t.id] || '#334155', 4);
+        y += 16;
+      });
+      if (!r.tagTotal) txt('이 기간에 선택된 오답 원인이 없습니다.', PAD, y - 4, 8.5, 500, MUTED);
+      y -= 4;
+
+      /* 취약 단원 */
+      section('취약 단원');
+      if (r.units.length) {
+        r.units.forEach(u => {
+          txt(u.name, PAD, y, 9.5, 600, INK);
+          txt(`오답 ${u.wrong}${u.fixed ? ` · 재풀이 ${u.fixed}` : ''}`, W - PAD, y, 8.5, 600, MUTED, 'right');
+          y += 18;
+        });
+        y -= 4;
+      } else {
+        txt('이 기간에 오답 기록이 없습니다.', PAD, y, 8.5, 500, MUTED);
+        y += 14;
+      }
+
+      /* 학원 단원평가 */
+      section('학원 단원평가');
+      if (r.avgExam != null) {
+        setF(17, 700);
+        txt(`${r.avgExam}점`, PAD, y + 3, 17, 700, NAVY);
+        const aw = ctx.measureText(`${r.avgExam}점`).width;
+        txt(`기간 평균 · ${r.exams.length}회 응시`, PAD + aw + 8, y + 3, 8.5, 500, MUTED);
+        y += 16;
+      }
+      if (r.exams.length) {
+        r.exams.slice(-3).forEach(e => {
+          txt(`${e.unit.replace(' 평가', '')} (${shortDot(e.date)})`, PAD, y, 9, 500, INK);
+          txt(`${e.score}점${e.retest != null ? ` · 재시 ${e.retest}점` : ''}`, W - PAD, y, 9, 700, NAVY, 'right');
+          y += 16;
+        });
+        y -= 4;
+      } else {
+        txt('이 기간에 응시한 단원평가가 없습니다.', PAD, y, 8.5, 500, MUTED);
+        y += 14;
+      }
+
+      /* 꼬리 */
+      y += 12; hair(y);
+      y += 14;
+      txt(`${dotted(r.to)} 기준 · 학습 기록 자동 집계`, PAD, y, 8, 500, '#9CA3AF');
+      return y + 16;
+    }
+
+    const tmp = document.createElement('canvas');
+    tmp.width = W * SCALE; tmp.height = 2400;
+    const endY = draw(tmp.getContext('2d'));
+    const cv = document.createElement('canvas');
+    cv.width = W * SCALE; cv.height = Math.ceil(endY) * SCALE;
+    draw(cv.getContext('2d'));
+    return { data: cv.toDataURL('image/png'), w: W, h: Math.ceil(endY) };
+  }
+
   function sheetReport() {
     const cid = view.classId;
     const sid = view.reportSid;
     const s = store.student(cid, sid);
     if (!s) return '';
+    const c = store.getClass(cid);
     const rg = view.reportRange || 'week';
-    const a = store.achievement(cid, sid, rg);
+    const r = store.parentReport(cid, sid, rg);
     const text = store.kakaoSummary(cid, sid, rg);
-    return sheetWrap('📊 ' + esc(s.name) + ' 성취도', `
+    return sheetWrap('📊 ' + esc(s.name) + ' 성취도 리포트', `
       <div class="segmented">
         <button class="${rg === 'week' ? 'on' : ''}" data-act="reportRange" data-r="week">이번 주</button>
         <button class="${rg === 'month' ? 'on' : ''}" data-act="reportRange" data-r="month">이번 달</button>
         <button class="${rg === 'semester' ? 'on' : ''}" data-act="reportRange" data-r="semester">이번 학기</button>
       </div>
-      <div class="stat-grid" style="margin-top:10px">
-        <div class="stat"><div class="v">🔥 ${a.flameDays}일</div><div class="l">불꽃 인정</div></div>
-        <div class="stat"><div class="v">✏️ ${a.totalSolved}</div><div class="l">푼 문제</div></div>
-        <div class="stat"><div class="v">⚔️ ${a.todayFixed}</div><div class="l">오늘 고친 오답</div></div>
-      </div>
-      <div class="stat-grid" style="margin-top:8px">
-        <div class="stat"><div class="v">${a.avgExam != null ? a.avgExam + '점' : '—'}</div><div class="l">단원평가 평균</div></div>
-        <div class="stat"><div class="v">🐾 ${a.owned}</div><div class="l">펫</div></div>
-        <div class="stat"><div class="v">📅 ${a.activeDays}일</div><div class="l">숙제한 날</div></div>
-      </div>
-      <div style="margin-top:10px">${weakCard(cid, sid, s.name)}</div>
-      <div class="card tight" style="margin-top:10px">
-        <div class="card-hd"><span class="t">📋 어머님께 보낼 카톡 요약</span></div>
+      ${reportCardHtml(s, c, r)}
+      <div class="card tight" style="margin-top:12px">
+        <div class="card-hd"><span class="t">📋 어머님께 보낼 카톡</span></div>
         <pre class="kakao" id="kakaoText">${esc(text)}</pre>
-        <button class="btn btn-primary btn-block" data-act="copyReport">📋 1초 복사</button>
+        <div class="row" style="gap:8px">
+          <button class="btn btn-primary grow" data-act="copyReport">📋 카톡 복사</button>
+          <button class="btn btn-ghost grow" data-act="saveReportImage">📸 이미지로 저장</button>
+        </div>
       </div>
 
-    `);
+    `, { wide: true });
+  }
+
+  function sheetReportImg() {
+    if (!view.reportImg) return '';
+    const nm = view.reportImgName || '성취도리포트.png';
+    return sheetWrap('📸 성취도 리포트 이미지', `
+      <div class="sub">아래 이미지를 저장해 카톡으로 보내면 됩니다.</div>
+      <img class="report-img" src="${view.reportImg}" alt="성취도 리포트 이미지">
+      <a class="btn btn-primary btn-block" style="margin-top:12px" href="${view.reportImg}" download="${esc(nm)}">⬇️ 이미지 저장</a>
+      <div class="hint center" style="margin-top:8px">아이폰은 이미지를 길게 눌러 <b>사진에 저장</b>을 눌러 주세요.</div>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="backReport">← 리포트로 돌아가기</button>
+    `, { wide: true });
   }
 
   function sheetPrintSet() {
@@ -1887,7 +2116,11 @@ window.EMA = window.EMA || {};
       if (view.lastResult && view.lastResult.reupload) EMA.ui.toast('사진을 새로 올렸어요! 남은 시간 동안 한 번 더 바꿀 수 있어요');
     },
     gallery() { view.sheet = 'gallery'; EMA.ui.sound('tap'); render(); },
-    closeSheet() { view.sheet = view.sheet === 'bigphoto' && view.bigPhotoFrom === 'gallery' ? 'gallery' : null; view.bigPhotoFrom = ''; view.printSid = null; view.printInput = ''; render(); },
+    closeSheet() {
+      if (view.sheet === 'reportimg') { view.reportImg = null; view.sheet = 'report'; render(); return; }
+      view.sheet = view.sheet === 'bigphoto' && view.bigPhotoFrom === 'gallery' ? 'gallery' : null;
+      view.bigPhotoFrom = ''; view.printSid = null; view.printInput = ''; view.reportImg = null; render();
+    },
     carry() { view.homeTab = 'carry'; view.sheet = null; render(); },
 
     /* ---- 세계관·도감 ---- */
@@ -2118,10 +2351,27 @@ window.EMA = window.EMA || {};
       render();
     },
     openReport(d) {
-      view.reportSid = d.id; view.reportRange = 'week';
+      view.reportSid = d.id; view.reportRange = 'week'; view.reportImg = null;
       view.sheet = 'report'; EMA.ui.sound('tap'); render();
     },
-    reportRange(d) { view.reportRange = d.r; render(); },
+    reportRange(d) { view.reportRange = d.r; view.reportImg = null; render(); },
+    saveReportImage() {
+      const cid = view.classId, sid = view.reportSid, rg = view.reportRange || 'week';
+      const s = store.student(cid, sid), c = store.getClass(cid);
+      if (!s) return;
+      const r = store.parentReport(cid, sid, rg);
+      try {
+        const out = reportImageData(s, c, r);
+        view.reportImg = out.data;
+        view.reportImgName = '성취도리포트_' + s.name + '_' + r.to + '.png';
+        view.sheet = 'reportimg';
+        EMA.ui.sound('coin');
+        render();
+      } catch (e) {
+        EMA.ui.toast('이미지를 만들지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+      }
+    },
+    backReport() { view.sheet = 'report'; render(); },
     async copyReport() {
       const cid = view.classId;
       const text = store.kakaoSummary(cid, view.reportSid, view.reportRange);
