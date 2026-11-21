@@ -908,6 +908,7 @@ window.EMA = window.EMA || {};
     if (sub && sub.stampAt) out.push(`<button class="tbtn" data-act="unlock" data-id="${s.id}">🔓 제출 풀기</button>`);
     if (sub && !sub.stampAt && sub.status !== 'submitted') out.push(`<button class="tbtn" data-act="resubmit" data-id="${s.id}">📷 재제출</button>`);
     out.push(`<button class="tbtn ${s.sick ? 'on' : ''}" data-act="toggleSick" data-id="${s.id}">🤒 아픔${s.sick ? ' ON' : ''}</button>`);
+    if (sub && store.photo(sub.photoId)) out.push(`<button class="tbtn" data-act="photoBig" data-sid="${s.id}" data-at="${esc(sub.at)}">📸 사진</button>`);
     out.push(`<button class="tbtn ${store.hasPrint(cid, s.id) ? 'on' : ''}" data-act="openPrintSet" data-id="${s.id}">📝 프린트${store.hasPrint(cid, s.id) ? ' ' + store.printInfo(cid, s.id).count : ''}</button>`);
     out.push(`<button class="tbtn" data-act="openReport" data-id="${s.id}">📊 성취도</button>`);
     return `<div class="tbtns">${out.join('')}</div>`;
@@ -923,10 +924,12 @@ window.EMA = window.EMA || {};
       <div class="pad">
         ${rows.map(r => {
           const sub = r.sub;
-          const status = sub && sub.stampAt ? `<span class="pill ok">도장 ${esc(sub.stampAt)}</span>`
-            : sub && sub.status === 'submitted' ? `<span class="pill warn">제출</span>`
-              : sub && sub.status === 'resubmit' ? `<span class="pill bad">재제출</span>`
-                : sub && sub.status === 'unlocked' ? `<span class="pill info">풀림</span>` : `<span class="pill">미제출</span>`;
+          const hasPh = sub && store.photo(sub.photoId);
+          const cls = sub && sub.stampAt ? 'ok' : sub && sub.status === 'submitted' ? 'warn' : sub && sub.status === 'resubmit' ? 'bad' : sub && sub.status === 'unlocked' ? 'info' : '';
+          const label = sub && sub.stampAt ? '도장 ' + esc(sub.stampAt) : sub && sub.status === 'submitted' ? '제출' : sub && sub.status === 'resubmit' ? '재제출' : sub && sub.status === 'unlocked' ? '풀림' : '미제출';
+          const status = hasPh
+            ? `<button class="pill ${cls} pillbtn" data-act="photoBig" data-sid="${r.student.id}" data-at="${esc(sub.at)}">${label} 📸</button>`
+            : `<span class="pill ${cls}">${label}</span>`;
           const open = !!view.stuOpen[r.student.id];
           return `<div class="sturow ${open ? 'open' : ''}">
             <div class="stuhd">
@@ -1497,10 +1500,13 @@ window.EMA = window.EMA || {};
     const s = store.student(cid, sid);
     const who = esc((s && (s.nickname || s.name)) || '풀이');
     if (!ph) return sheetWrap('📸 ' + who + ' 풀이', '<div class="empty">사진이 없어요</div>');
+    const v = (sub && sub.verify) || null;
+    const meta = [v ? '🎲 ' + esc(v.book || '') + ' ' + esc(v.page || '') + '쪽' : '', view.bigPhotoAt ? esc(view.bigPhotoAt) + ' 제출' : ''].filter(Boolean).join(' · ');
     return sheetWrap('📸 ' + who + ' 풀이', `
       <div class="fullphoto">
+        ${meta ? `<div class="fp-meta">${meta}</div>` : ''}
         <img class="fp-img" src="${ph.data}" alt="${who} 풀이 사진">
-        ${view.bigPhotoAt ? `<div class="fp-nm">${esc(view.bigPhotoAt)} 제출</div>` : ''}
+        ${sub && sub.stampAt ? `<div class="fp-nm">✅ 도장 ${esc(sub.stampAt)}</div>` : ''}
       </div>
     `, { full: true });
   }

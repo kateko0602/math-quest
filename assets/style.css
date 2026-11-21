@@ -1046,3 +1046,8 @@ button.gitem-row{width:100%;font-family:var(--font);text-align:left}
 .tagrow .tag-q{font-size:10.5px}
 .tagrow .tag-list{display:flex;gap:5px;width:100%}
 .tagrow .tag-list .tag{flex:1 1 0;min-width:0;font-size:10.5px;padding:0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* 선생님: 상태 배지 자체가 사진 보기 버튼 */
+.pillbtn{border:none;cursor:pointer;font-family:var(--font);min-height:30px}
+.pillbtn:active{transform:scale(.96)}
+.fullphoto .fp-meta{font-size:12px;font-weight:900;color:#5B5145;text-align:center;background:#FFF6DF;border-radius:10px;padding:6px 10px}
