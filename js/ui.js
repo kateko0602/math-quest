@@ -119,22 +119,29 @@ window.EMA = window.EMA || {};
 
   /** 복사 — 아이폰 사파리에서도 되도록 '클릭 안에서' textarea+execCommand 를 먼저 실행 */
   ui.copySync = function (text) {
-    let ok = false;
-    let ta = null;
-    try {
-      ta = document.createElement('textarea');
-      ta.value = text;
-      ta.setAttribute('readonly', '');
-      ta.setAttribute('aria-hidden', 'true');
-      ta.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;padding:0;border:0;opacity:0.01;font-size:16px;-webkit-user-select:text;user-select:text;z-index:-1;';
-      document.body.appendChild(ta);
-      ta.focus({ preventScroll: true });
-      ta.select();
-      try { ta.setSelectionRange(0, 999999); } catch (e) { }
-      ok = document.execCommand('copy');
-    } catch (e) { ok = false; }
-    if (ta && ta.parentNode) ta.parentNode.removeChild(ta);
-    return !!ok;
+    const ua = navigator.userAgent || '';
+    const isIOS = /iP(ad|hone|od)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const attempt = (iosMode) => {
+      let ta = null;
+      try {
+        ta = document.createElement('textarea');
+        ta.value = text;
+        if (iosMode) { ta.readOnly = false; ta.contentEditable = 'true'; ta.textContent = text; }
+        else ta.setAttribute('readonly', '');
+        ta.setAttribute('aria-hidden', 'true');
+        ta.style.cssText = 'position:fixed;left:0;top:0;width:2em;height:2em;padding:0;border:0;outline:0;box-shadow:none;background:transparent;opacity:0;font-size:16px;-webkit-user-select:text;user-select:text;z-index:9999;';
+        document.body.appendChild(ta);
+        ta.focus({ preventScroll: true });
+        ta.select();
+        try { ta.setSelectionRange(0, 999999); } catch (e) { }
+        const ok = document.execCommand('copy');
+        return !!ok;
+      } catch (e) { return false; }
+      finally { if (ta && ta.parentNode) ta.parentNode.removeChild(ta); }
+    };
+    if (attempt(false)) return true;
+    if (isIOS) return attempt(true);   // iOS 구버전: contentEditable 로 한 번 더
+    return false;
   };
   ui.copy = function (text) {
     // ① 동기 방식이 먼저 — iOS 사파리는 await 뒤에서 execCommand 를 막습니다
