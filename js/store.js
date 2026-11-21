@@ -1,4 +1,11 @@
-/* 저장소 v0.4 — 로컬(브라우저) 모드와 시트 API 모드를 같은 인터페이스로 씁니다.
+/* 저장소 v0.8 — 로컬(브라우저) 모드와 시트 API 모드를 같은 인터페이스로 씁니다.
+
+   ★ v0.8 안정화의 핵심 세 가지 ★
+     ① 날짜가 바뀌어도 데이터가 사라지지 않습니다 (예전엔 자정이 지나면 seed로 통째 재생성).
+        · state.today만 오늘로 넘기고(roll_forward), 그날의 학습 기록·XP를 확정해 쌓습니다.
+        · 스키마 버전이 올라가도 migrate()가 기존 데이터를 살려서 옮깁니다.
+     ② 선생님 PIN은 코드·화면에 없습니다. 이 기기에 해시로만 저장합니다(js/auth.js).
+     ③ 사진은 localStorage가 아니라 IndexedDB(js/photos.js)에 저장하고 7일 뒤 자동 삭제합니다.
    로컬 모드: localStorage (지금 바로 테스트)
    API 모드  : Apps Script Web App / 모의 서버 (관리시트 연동)
 
@@ -26,11 +33,35 @@ window.EMA = window.EMA || {};
     dt.setDate(dt.getDate() + d);
     return dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate());
   };
-  const KEY = 'ema.state.v4';
+  const KEY = 'ema.state.v5';
+  const DEMO_KEY = 'ema.state.demo.v5';       // 연습(?mode=demo)은 실제 운영 데이터와 다른 칸에 쌓입니다
+  const LEGACY_KEYS = ['ema.state.v4', 'ema.state.v3'];
+  const SCHEMA = 5;
   const SESSION = 'ema.session.v2';
   const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
-  EMA.util = { todayISO, nowHHMM, DOW, pad, shiftISO };
+  /** 쪽수 입력 파서 — '8~10쪽', '8 ∼ 10', '8,9,10', '8-10쪽' 모두 받습니다 */
+  function parsePages(raw) {
+    const out = [];
+    const push = n => { const v = parseInt(n, 10); if (v > 0 && v < 1000 && out.indexOf(v) < 0) out.push(v); };
+    const txt = String(raw == null ? '' : raw)
+      .replace(/쪽/g, ' ')
+      .replace(/[∼〜～]/g, '~')
+      .replace(/[–—－]/g, '-')
+      .replace(/[^0-9,\s~-]/g, ' ')
+      .replace(/\s*([~-])\s*/g, '$1')     // '8 ∼ 10', '8 - 10' → '8~10'
+      .trim();
+    txt.split(/[,\s]+/).filter(Boolean).forEach(part => {
+      const m = part.match(/^(\d+)\s*[~-]\s*(\d+)$/);
+      if (m) {
+        const a = +m[1], b = +m[2];
+        for (let i = Math.min(a, b); i <= Math.max(a, b); i++) push(i);
+      } else if (/^\d+$/.test(part)) push(part);
+    });
+    return out.sort((a, b) => a - b);
+  }
+
+  EMA.util = { todayISO, nowHHMM, DOW, pad, shiftISO, parsePages };
 
   const CAP_XP = 200;       // 일일 XP 상한 (몰아치기 방지)
   const FLAME_MIN = 3;      // 불꽃 인정 최소 문제 수
@@ -44,14 +75,15 @@ window.EMA = window.EMA || {};
     for (const ch of String(str)) h = (h * 31 + ch.charCodeAt(0)) % 100003;
     return h;
   }
-  /** [6,7,8] → '6~8' · [8] → '8' (연속이 아니면 쉼표) */
+  /** [6,7,8] → '6-8' · [8] → '8' (연속이 아니면 쉼표)
+      카톡은 한 줄의 '~ ~' 사이 전체에 취소선을 그어서, 범위는 하이픈으로 씁니다. */
   function pageSpan(pages) {
     const ps = (pages || []).map(Number).filter(n => !isNaN(n)).sort((a, b) => a - b);
     if (!ps.length) return '';
     if (ps.length === 1) return String(ps[0]);
     let run = true;
     for (let i = 1; i < ps.length; i++) if (ps[i] !== ps[i - 1] + 1) run = false;
-    return run ? ps[0] + '~' + ps[ps.length - 1] : ps.join(', ');
+    return run ? ps[0] + '-' + ps[ps.length - 1] : ps.join(', ');
   }
   /** '2026-11-19' → '목' */
   function dowName(iso) {
@@ -213,14 +245,38 @@ window.EMA = window.EMA || {};
       if (due && d >= due) return { kind: 'shield', label: '몰아치기' };
       return { kind: 'normal', label: '제때 제출' };
     }
-    /** 사진 인증 — 오늘 숙제 범위에서 '이 학생'에게 뽑힌 1쪽 */
+    /** 사진 인증 — '이 학생이 실제로 ⭕/❌를 누른 쪽'에서만 뽑습니다.
+        (전체 숙제 쪽에서 뽑으면 안 푼 쪽을 찍어 오라는 안내가 나갔습니다)
+        아직 아무것도 안 눌렀으면 문제가 많은 쪽 → 그래도 없으면 숙제 첫 쪽. */
     verifyTarget(classId, sid) {
       const bs = this.books(classId);
-      const pages = [];
-      bs.forEach(b => (b.pages || []).forEach(p => pages.push({ book: b.book, page: p })));
-      if (!pages.length) return null;
-      const i = hash(sid + '|' + this.state.today + '|verify') % pages.length;
-      return pages[i];
+      if (!bs.length) return null;
+      const g = this.grade(classId, sid);
+      const marks = {};
+      this.tiles(classId).forEach(t => {
+        if (!g.marks[t.key] || t.missing) return;
+        const k = t.book + '|' + t.page;
+        const row = marks[k] || (marks[k] = { book: t.book, page: t.page, count: 0 });
+        row.count++;
+      });
+      let pool = Object.keys(marks).map(k => marks[k]);
+      if (pool.length) {
+        pool.sort((a, b) => (b.count - a.count) || (a.page - b.page));
+        const i = hash(sid + '|' + this.state.today + '|verify') % pool.length;
+        return { book: pool[i].book, page: pool[i].page };
+      }
+      const all = [];
+      bs.forEach(b => (b.pages || []).forEach(p => all.push({ book: b.book, page: p })));
+      if (!all.length) return null;
+      const i = hash(sid + '|' + this.state.today + '|verify') % all.length;
+      return all[i];
+    }
+    /** 지금 ② 정리 화면에서 안내할 쪽 — 이미 낸 제출이 있으면 그때 뽑힌 쪽을 그대로 */
+    verifyHint(classId, sid, kind) {
+      const sub = this.submission(classId, sid, null, kind);
+      if (sub && sub.verify) return sub.verify;
+      if (kind === 'print') return { book: '오답프린트', page: '프린트' };
+      return this.verifyTarget(classId, sid);
     }
 
     /* ---------- 채점 ---------- */
@@ -314,9 +370,23 @@ window.EMA = window.EMA || {};
       const protectedDay = s && s.sick;
       return (s ? s.streak : 0) + ((todaySolved >= FLAME_MIN || protectedDay) ? 1 : 0);
     }
+    /** 오늘 낸 숙제(숙제·프린트)에 이미 '확정'된 XP — 두 번 더하지 않으려고 뺍니다 */
+    todayBankedXp(classId, sid) {
+      const S = this.state.submissions || {};
+      let n = 0;
+      [K(classId, this.state.today, sid), K(classId, this.state.today, sid) + '|print'].forEach(k => {
+        const sub = S[k];
+        if (sub && sub.xp) n += Number(sub.xp) || 0;
+      });
+      return n;
+    }
+    /** 누적 XP = 지금까지 확정된 XP + 오늘 아직 확정 전인 몫 (레벨이 진짜로 오릅니다) */
     totalXP(classId, sid) {
       const s = this.student(classId, sid);
-      return (s ? (s.xp || 0) + (s.bonusXp || 0) : 0) + this.stats(classId, sid).xp;
+      const banked = s ? (s.xp || 0) + (s.bonusXp || 0) : 0;
+      const live = this.stats(classId, sid).xp + this.printStats(classId, sid).xp;
+      const delta = Math.max(0, live - this.todayBankedXp(classId, sid));
+      return banked + delta;
     }
     level(classId, sid) {
       const xp = this.totalXP(classId, sid);
@@ -351,22 +421,26 @@ window.EMA = window.EMA || {};
       const k = classId + '|' + this.weekIndex();
       return (this.state.bossBoosts || {})[k] || 0;
     }
+    /** 보스 HP — 도장 80% · 오답 수정 20% + 동료(펫) 공격력(반 전체 최대 15%p).
+        예전엔 화면에만 '공격력 +n%'라고 쓰고 실제 데미지에는 한 글자도 안 들어갔습니다. */
     boss(classId) {
       const rows = this.classDay(classId);
       const total = rows.length || 1;
       const stamped = rows.filter(r => r.sub && r.sub.stampAt).length;
       const submitted = rows.filter(r => r.sub || r.printSub).length;
       const fixed = rows.reduce((a, r) => a + r.c3 + r.p3, 0);
-      const dmg = (stamped / total) * 0.8 + Math.min(0.2, (fixed / (total * 3)) * 0.2);
+      const power = rows.reduce((a, r) => a + (this.companionPower(classId, r.student.id) || 0), 0);
+      const petDmg = Math.min(0.15, power * 0.01);          // 동료 1 = 보스 HP 1%p
+      const dmg = (stamped / total) * 0.8 + Math.min(0.2, (fixed / (total * 3)) * 0.2) + petDmg;
       const hp = Math.max(0, Math.round((1 - dmg) * 100 - this.bossBoost(classId)));
       const killed = hp <= 0;
       return {
-        total, stamped, submitted, fixed,
+        total, stamped, submitted, fixed, power, petDmg: Math.round(petDmg * 100),
         hp, left: total - stamped, def: this.bossDef(classId), killed,
         myShare: 0
       };
     }
-    /** 내가 깎은 HP (%) — 반 전체 데미지 중 내 몫 + 수학 동료 공격력 보너스 */
+    /** 내가 깎은 HP (%) — 반 전체 데미지 중 내 몫 (도장 + 오답 수정 + 내 동료 공격력) */
     myDamage(classId, sid) {
       const total = (this.getClass(classId).students.length) || 1;
       const st = this.stats(classId, sid);
@@ -374,7 +448,7 @@ window.EMA = window.EMA || {};
       const row = this.submission(classId, sid);
       const stampPt = (row && row.stampAt) ? 0.8 / total : 0;
       const fixedPt = Math.min(0.2, ((st.c3 + p.c3) / (total * 3)) * 0.2);
-      const compPt = Math.min(0.015, this.companionPower(classId, sid) * 0.001); // 동료 최대 +1.5%p
+      const compPt = this.companionPower(classId, sid) * 0.01;   // 동료 1 = 1%p
       return Math.round((stampPt + fixedPt + compPt) * 100 * 10) / 10;
     }
     myBombShare(classId, sid) {
@@ -570,16 +644,16 @@ window.EMA = window.EMA || {};
     }
 
     /* ---------- 수학 동료 (v0.4 세계관) ---------- */
-    /** 동료 공격력 — 동료 수 + 성장(lv) 합계, 최대 15 */
+    /** 동료 공격력 — 동료 수 + 성장(lv) 합계, 최대 15 (= 보스 HP 15%p까지) */
     companionPower(classId, sid) {
       const pets = this.myPets(classId, sid);
       let p = 0;
       pets.forEach(x => { p += Math.max(1, Math.min(3, x.lv || 1)); });
       return Math.min(15, p);
     }
-    /** 보스에게 주는 동료 보너스 (%) — 화면 표시용 */
+    /** 화면 표기용 — 동료 공격력 1당 보스 HP 1%p (표시와 실제 데미지가 같습니다) */
     companionPct(classId, sid) {
-      return Math.round(this.companionPower(classId, sid) * 1.5);
+      return this.companionPower(classId, sid);
     }
     /** 지금 화면에 보여 줄 '어둠의 오답 알' — 오늘 안 고친 ❌ + 밀린문제 */
     darkEggs(classId, sid) {
@@ -618,8 +692,14 @@ window.EMA = window.EMA || {};
         if (g.marks[t.key] !== 'x') return;
         add(t.book, t.page, g.cleanup[t.key] === 'fixed');
       });
-      ((this.state.carried || {})[sid] || []).forEach(m => add(m.book, m.page, false));
-      ((this.state.solvedCarried || {})[sid] || []).forEach(m => add(m.book, m.page, true));
+      ((this.state.carried || {})[sid] || []).forEach(m => {
+        if ((m.reason || 'x') === 'skip') return;      // ⏭️ 안 푼 문제는 오답 통계가 아닙니다
+        add(m.book, m.page, false);
+      });
+      ((this.state.solvedCarried || {})[sid] || []).forEach(m => {
+        if ((m.reason || 'x') === 'skip' || m.skip) return;
+        add(m.book, m.page, true);
+      });
       ((this.state.monsters || {})[sid] || []).forEach(m => { if (m.fromCarry) return; add(m.book, m.page, !!m.captured); });
 
       const units = Object.keys(wrongByUnit)
@@ -763,11 +843,12 @@ window.EMA = window.EMA || {};
       });
       ((this.state.solvedCarried || {})[sid] || []).forEach(m => {
         if (!inRange(m.date)) return;
+        if ((m.reason || 'x') === 'skip' || m.skip) return;   // ⏭️ 안 푼 문제 해결은 '오답을 고친 것'이 아닙니다
         wrong++; fixed++;
         addUnit(m.book, m.page, true);
       });
       ((this.state.monsters || {})[sid] || []).forEach(m => {
-        if (m.fromCarry) return;                        // 밀린문제 해결분은 위에서 셈
+        if (m.fromCarry || m.skip) return;                        // 밀린문제 해결분은 위에서 셈
         if (!inRange(m.date)) return;
         wrong++;
         if (m.captured) fixed++;
@@ -882,7 +963,7 @@ window.EMA = window.EMA || {};
       const kd = iso => iso.slice(5).replace('-', '.');
       const lines = [];
       lines.push(`안녕하세요 어머님, ${c.name || ''} 담임입니다.`);
-      lines.push(`${s.name} 학생의 ${r.label} 학습 리포트를 보내 드립니다. (${kd(r.from)} ~ ${kd(r.to)})`);
+      lines.push(`${s.name} 학생의 ${r.label} 학습 리포트를 보내 드립니다. (${kd(r.from)} - ${kd(r.to)})`);
       lines.push('');
       if (r.dayList.length || r.printList.length) {
         lines.push(`■ ${r.label} 진도 및 숙제`);
@@ -934,64 +1015,202 @@ window.EMA = window.EMA || {};
 
   /* ================= 로컬 저장소 ================= */
   class LocalStore extends BaseStore {
-    constructor(seedFn) { super(); this.seedFn = seedFn; this.mode = 'local'; }
-    async init() {
-      let st = null;
-      try { st = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { st = null; }
-      const today = todayISO();
-      if (!st || st.version !== 4) {
-        // v0.2(v3) 기록은 구조가 달라 그대로 쓸 수 없어 예시 데이터로 다시 시작합니다.
-        let keep = null;
-        try {
-          const old = JSON.parse(localStorage.getItem('ema.state.v3') || 'null');
-          if (old && old.pageMaps) keep = old.pageMaps;
-        } catch (e) { }
-        st = this.seedFn(today);
-        if (keep && keep.교재 && Object.keys(keep.교재).length) st.pageMaps = keep;
-      } else if (st.today !== today) {
-        // 데모: 날짜가 바뀌면 예시 데이터를 그날 기준으로 다시 맞춘다 (쪽수표 수정은 보존)
-        const keep = st.pageMaps;
-        const keepLesson = st.lessons;
-        const keepClaims = (st.shop || {}).claims;
-        st = this.seedFn(today);
-        if (keep) st.pageMaps = keep;
-        if (keepLesson && Object.keys(keepLesson).length) st.lessons = keepLesson;
-        if (keepClaims) st.shop.claims = keepClaims;
-      }
-      if (!st.carried) st.carried = {};
-      if (!st.prints) st.prints = {};
-      if (!st.solvedCarried) st.solvedCarried = {};
-      if (!st.lateUploads) st.lateUploads = {};
-      if (!st.bossBoosts) st.bossBoosts = {};
-      if (!st.bossKills) st.bossKills = {};
+    constructor(seedFn, opts) {
+      super();
+      this.seedFn = seedFn;
+      this.mode = 'local';
+      this.demo = !!(opts && opts.demo);
+      this.key = this.demo ? DEMO_KEY : KEY;
+    }
+    _read(key) {
+      try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) { return null; }
+    }
+    _write(key, val) {
+      try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { return false; }
+    }
+    /** 스키마 마이그레이션 — 버전이 달라도 데이터를 버리지 않고 빠진 칸만 채웁니다 */
+    migrate(st) {
+      if (!st || typeof st !== 'object') return this.seedFn(todayISO());
+      const from = Number(st.version || 0);
+      if (from > SCHEMA) console.warn('저장 구조가 앱보다 새 버전입니다(데이터는 그대로 사용):', from);
+      if (from < SCHEMA) this._write(this.key + '.migrate.v' + from, st);   // 옮기기 전 원본 백업
+      if (st.teacherPin) delete st.teacherPin;          // 옛 선생님 PIN은 저장 구조에서 삭제
+      st.version = SCHEMA;
+      st.classes = st.classes || [];
+      st.lessons = st.lessons || {};
+      st.dayLessons = st.dayLessons || {};
+      st.exams = st.exams || {};
+      st.pageMaps = st.pageMaps || window.EMA_PAGE_MAPS || { 교재: {} };
+      st.grades = st.grades || {};
+      st.submissions = st.submissions || {};
+      st.history = st.history || {};
+      st.monsters = st.monsters || {};
+      st.carried = st.carried || {};
+      st.solvedCarried = st.solvedCarried || {};
+      st.prints = st.prints || {};
+      st.lateUploads = st.lateUploads || {};
+      st.photos = st.photos || {};
+      st.carryResolve = st.carryResolve || {};
       if (!st.shop) st.shop = { rewardsOn: true, claims: [] };
       if (!st.gallery) st.gallery = { mode: 'auto' };
-      // v0.4 보강 — 기존 기록을 그대로 살리며 새 항목만 채운다
-      Object.keys(st.grades || {}).forEach(k => { const g = st.grades[k]; if (g && !g.tags) g.tags = {}; });
-      (st.classes || []).forEach(c => (c.students || []).forEach(s => {
-        if (!s.purified) s.purified = {};
-        s.pets = (s.pets || []).map(p => Object.assign({ lv: 1 }, p));
-      }));
+      if (!st.bossBoosts) st.bossBoosts = {};
+      if (!st.bossKills) st.bossKills = {};
+      if (!st.meta) st.meta = {};
+      if (this.demo) { st.meta.demo = true; st.meta.origin = 'demo'; }
+      st.classes.forEach(c => {
+        c.students = c.students || [];
+        c.textbooks = c.textbooks || [];
+        c.students.forEach(s => {
+          if (!s.purified) s.purified = {};
+          s.pets = (s.pets || []).map(p => Object.assign({ lv: 1 }, p));
+          s.bag = s.bag || { snack: 0, shield: 0, bomb: 0 };
+          s.titles = s.titles || [];
+          if (typeof s.xp !== 'number') s.xp = 0;
+          if (typeof s.bonusXp !== 'number') s.bonusXp = 0;
+          if (typeof s.coins !== 'number') s.coins = 0;
+          if (!s.pin) s.pin = '1234';
+        });
+      });
+      Object.keys(st.grades).forEach(k => {
+        const g = st.grades[k];
+        if (!g) return;
+        if (!g.marks) g.marks = {};
+        if (!g.cleanup) g.cleanup = {};
+        if (!g.tags) g.tags = {};
+      });
+      // 사진은 지워져도 '사진을 냈다'는 사실은 영구히 남깁니다
+      Object.keys(st.submissions).forEach(k => {
+        const sub = st.submissions[k];
+        if (!sub) return;
+        if (sub.photoId) { sub.photoSubmitted = true; if (!sub.photoAt) sub.photoAt = sub.at || ''; }
+      });
+      return st;
+    }
+
+    async init() {
+      const today = todayISO();
+      if (window.EMA.photos) await EMA.photos.load();
+      let st = this._read(this.key);
+      if (!st && !this.demo) {
+        // v0.7 이하(ema.state.v4) 데이터가 있으면 통째로 살려서 옮깁니다 — 버리지 않습니다
+        for (const k of LEGACY_KEYS) {
+          const old = this._read(k);
+          if (old && (old.classes || old.grades || old.submissions)) {
+            st = old;
+            this._write(this.key + '.legacy.' + k.split('.').pop(), old);
+            break;
+          }
+        }
+      }
+      if (!st) {
+        st = this.seedFn(today);
+        if (this.demo) st.meta = Object.assign({}, st.meta, { demo: true, origin: 'demo' });
+      }
+      st = this.migrate(st);
       this.state = st;
+      await this._afterLoad(today);
       this.save();
       return this.state;
     }
-    save() {
-      try { localStorage.setItem(KEY, JSON.stringify(this.state)); }
-      catch (e) { console.warn('저장 실패(용량?)', e); }
+
+    /** 부팅 뒤처리 — ① 날짜 넘기기 ② 사진 이전 ③ 7일 지난 사진 삭제 */
+    async _afterLoad(today) {
+      const st = this.state;
+      const rolled = this._rollForward(today);
+      if (rolled.moved) console.info('날짜 넘김 — 기록 유지:', rolled.from, '→', rolled.to);
+      if (window.EMA.photos && Object.keys(st.photos || {}).length) {
+        const r = await EMA.photos.migrateFrom(st.photos, st.today || today);
+        if (r.moved) console.info('사진을 IndexedDB로 옮겼습니다:', r.moved, '장');
+        if (r.failed) console.warn('사진 이전 실패:', r.failed, '장');
+      }
+      await this.purgePhotos();
     }
-    reset() {
+
+    /** 날짜 넘기기 — 펬·코인·XP·모음·채점·도장·기록은 그대로 두고 '오늘'만 옮깁니다 */
+    _rollForward(today) {
+      const st = this.state;
+      const from = st.today;
+      if (!from) { st.today = today; return { moved: 0 }; }
+      if (from === today) return { moved: 0 };
+      if (from > today) { st.today = today; return { moved: 0, back: true }; }   // 기기 시계를 되돌린 경우
+      let d = from, n = 0, guard = 0;
+      while (d < today && guard++ < 800) {
+        this._bankDay(d);
+        d = shiftISO(d, 1);
+        n++;
+      }
+      st.today = today;
+      st.meta = Object.assign({}, st.meta, { rolledAt: new Date().toISOString() });
+      return { moved: n, from, to: today };
+    }
+    /** 지나간 날의 기록을 확정합니다 — XP 적립 + 그날 학습 기록(달력·성취도에 쓰임) */
+    _bankDay(date) {
+      const st = this.state;
+      const S = st.submissions || {};
+      Object.keys(S).forEach(k => {
+        const p = String(k).split('|');
+        if (p[1] !== date) return;
+        const sub = S[k];
+        if (!sub || sub.xpBanked) return;
+        const xp = Number(sub.xp || 0);
+        const hit = this.studentById(p[2]);
+        if (hit && xp) hit.stu.xp = (hit.stu.xp || 0) + xp;
+        sub.xpBanked = true;
+        sub.xpBankedAt = date;
+      });
+      const G = st.grades || {};
+      Object.keys(G).forEach(k => {
+        const p = String(k).split('|');
+        if (p[1] !== date) return;
+        const g = G[k] || {};
+        const marks = Object.keys(g.marks || {}).length;
+        if (!marks) return;
+        const sid = p[2];
+        const hist = st.history[sid] = st.history[sid] || [];
+        const row = hist.find(h => h.date === date);
+        if (row) row.solved = Math.max(row.solved || 0, marks);
+        else hist.push({ date, solved: marks });
+      });
+    }
+
+    save() {
       try {
-        localStorage.removeItem(KEY);
-        localStorage.removeItem('ema.state.v3');
+        localStorage.setItem(this.key, JSON.stringify(this.state));
+        this.saveFailed = false;
+        return true;
+      } catch (e) {
+        this.saveFailed = true;
+        console.warn('저장 실패(용량?)', e);
+        if (!this._warnAt || Date.now() - this._warnAt > 60000) {
+          this._warnAt = Date.now();
+          if (window.EMA && EMA.ui && EMA.ui.toast) EMA.ui.toast('⚠️ 기기 저장 공간이 부족해요. 선생님께 알려 주세요', 3600);
+        }
+        return false;
+      }
+    }
+    /** 초기화 — 지우기 전에 반드시 백업하고 현재 칸(연습/운영)만 비웁니다 */
+    reset() {
+      try { localStorage.setItem(this.key + '.backup', JSON.stringify({ at: new Date().toISOString(), state: this.state })); } catch (e) { }
+      try {
+        localStorage.removeItem(this.key);
+        LEGACY_KEYS.forEach(k => { try { localStorage.removeItem(k); } catch (e) { } });
         localStorage.removeItem(SESSION);
       } catch (e) { }
       return this.init();
     }
     session() {
-      try { return JSON.parse(localStorage.getItem(SESSION) || 'null'); } catch (e) { return null; }
+      let s = null;
+      try { s = JSON.parse(localStorage.getItem(SESSION) || 'null'); } catch (e) { s = null; }
+      if (!s) return null;
+      const ok = window.EMA.auth ? EMA.auth.fresh(s) : true;
+      if (!ok) { try { localStorage.removeItem(SESSION); } catch (e) { } return null; }
+      return s;
     }
-    setSession(s) { s ? localStorage.setItem(SESSION, JSON.stringify(s)) : localStorage.removeItem(SESSION); }
+    setSession(s) {
+      if (!s) { try { localStorage.removeItem(SESSION); } catch (e) { } return; }
+      const row = window.EMA.auth ? EMA.auth.stamp(s) : s;
+      try { localStorage.setItem(SESSION, JSON.stringify(row)); } catch (e) { }
+    }
 
     gradeRow(classId, sid, kind) {
       const k = kind === 'print' ? K(classId, this.state.today, sid) + '|print' : K(classId, this.state.today, sid);
@@ -1061,9 +1280,13 @@ window.EMA = window.EMA || {};
       const owned = new Set(s.pets.map(p => p.id));
       const h = hash(seedKey);
       let pool = [];
-      // 오답을 고쳐 만나는 펫: 일반 78% · 희귀 19% · 전설 3%
-      if (h % 100 < 3) pool = cat.filter(p => p.rarity === 'legend' && !owned.has(p.id));
-      if (!pool.length && h % 100 < 22) pool = cat.filter(p => p.rarity === 'rare' && !owned.has(p.id));
+      // 오답을 고쳐 만나는 펫도 상점 알과 '같은 확률' — 일반 78% · 희귀 19% · 전설 3% (pets.js rarity.rate)
+      const rc = GAME().rarity || {};
+      const rLegend = (rc.legend && rc.legend.rate) || 3;
+      const rRare = (rc.rare && rc.rare.rate) || 19;
+      const roll = h % 100;
+      if (roll < rLegend) pool = cat.filter(p => p.rarity === 'legend' && !owned.has(p.id));
+      if (!pool.length && roll < rLegend + rRare) pool = cat.filter(p => p.rarity === 'rare' && !owned.has(p.id));
       if (!pool.length) pool = cat.filter(p => p.rarity === 'common' && !owned.has(p.id));
       if (!pool.length) pool = cat.filter(p => !owned.has(p.id));
       if (!pool.length) {
@@ -1200,21 +1423,34 @@ window.EMA = window.EMA || {};
     }
 
     submitPhoto(classId, sid, dataUrl, kind) {
+      return this._submitPhoto(classId, sid, dataUrl, kind);
+    }
+    async _submitPhoto(classId, sid, dataUrl, kind) {
       const t = this.timing(classId);
       const rw = this.previewReward(classId, sid, kind);
       const pid = 'ph_' + Date.now().toString(36) + Math.floor(Math.random() * 99);
-      this.state.photos[pid] = { data: dataUrl, at: nowHHMM(), owner: sid };
+      const put = await this._savePhoto(pid, dataUrl, sid, kind);
       const prev = this.submission(classId, sid, null, kind);
       const already = !!(prev && prev.rewarded);
       const sub = {
-        status: 'submitted', at: nowHHMM(), ts: Date.now(), photoId: pid, stampAt: null,
-        verify: this.verifyTarget(classId, sid), kind: kind || 'hw',
+        status: 'submitted', at: nowHHMM(), ts: Date.now(),
+        photoId: put.ok ? pid : null, photoAt: nowHHMM(), photoSubmitted: true,
+        stampAt: null,
+        verify: kind === 'print' ? { book: '오답프린트', page: '프린트' } : this.verifyTarget(classId, sid),
+        kind: kind || 'hw',
         early: t.kind === 'early', shield: t.kind === 'shield',
-        coins: already ? 0 : rw.coins, xp: already ? 0 : rw.xp, rewarded: true
+        coins: already ? 0 : rw.coins, xp: already ? 0 : rw.xp, rewarded: true,
+        xpBanked: false
       };
+      const prevPhoto = prev && prev.photoId;
       this.state.submissions[SK(classId, this.state.today, sid, kind)] = sub;
       const s = this.student(classId, sid);
-      if (!already && s) { s.coins = (s.coins || 0) + rw.coins; }
+      if (!already && s) {
+        s.coins = (s.coins || 0) + rw.coins;
+        s.xp = (s.xp || 0) + rw.xp;              // ★ XP가 실제로 쌓여 레벨에 반영됩니다
+        sub.xpBanked = true;
+      }
+      if (already && put.ok && prevPhoto && prevPhoto !== sub.photoId) await this.deletePhoto(prevPhoto);
       // 안 누른 문제는 바로 밀린문제로 (v0.4)
       const carried = this.carryOverUnmarked(classId, sid, kind);
       const st = kind === 'print' ? this.printStats(classId, sid) : this.stats(classId, sid);
@@ -1225,44 +1461,88 @@ window.EMA = window.EMA || {};
       });
       const killed = this.checkBossKill(classId);
       this.save();
-      return Object.assign({}, rw, { sub, titles, killed, carried, coins: already ? 0 : rw.coins, photoId: pid });
+      return Object.assign({}, rw, {
+        sub, titles, killed, carried, already,
+        coins: already ? 0 : rw.coins, photoId: sub.photoId, photoError: !put.ok
+      });
     }
 
     /** 제출 후 1시간 안 · 선생님 도장 전이면 사진만 교체 (보상은 그대로) */
     reuploadPhoto(classId, sid, dataUrl, kind) {
+      return this._reuploadPhoto(classId, sid, dataUrl, kind);
+    }
+    async _reuploadPhoto(classId, sid, dataUrl, kind) {
       const info = this.reuploadInfo(classId, sid, kind);
       if (!info.ok) return { error: info.stamped ? '선생님이 이미 도장을 찍었어요. 선생님께 말씀드려 주세요' : '사진을 바꿀 수 있는 1시간이 지났어요' };
       const sub = this.submission(classId, sid, null, kind);
       if (!sub) return { error: '먼저 제출해 주세요' };
       const pid = 'ph_' + Date.now().toString(36) + Math.floor(Math.random() * 99);
-      this.state.photos[pid] = { data: dataUrl, at: nowHHMM(), owner: sid };
+      const put = await this._savePhoto(pid, dataUrl, sid, kind);
       const old = sub.photoId;
-      sub.photoId = pid;
+      if (put.ok) {
+        sub.photoId = pid;
+        sub.photoAt = nowHHMM();
+        sub.photoSubmitted = true;
+      }
       sub.status = 'submitted';
-      sub.stampAt = null;
       sub.at = nowHHMM();
       sub.ts = Date.now();
       sub.reup = (sub.reup || 0) + 1;
-      if (old && old !== pid) { try { delete this.state.photos[old]; } catch (e) { } }
+      if (put.ok && old && old !== pid) await this.deletePhoto(old);
       this.save();
-      return { ok: true, sub, mins: 60 };
+      return { ok: put.ok, sub, mins: 60, photoError: !put.ok };
     }
+    /** ② 화면 '고친 내용 저장' — 도장이 찍힌 제출은 절대 건드리지 않습니다 (도장 보호) */
     touchSubmission(classId, sid, kind) {
       const k = SK(classId, this.state.today, sid, kind);
       const sub = this.state.submissions[k];
       if (!sub) return false;
+      if (sub.stampAt || sub.status === 'stamped') return false;   // ⛔ 도장 보호
       sub.at = nowHHMM();
       if (sub.status === 'resubmit') sub.status = 'submitted';
-      sub.stampAt = null;
       this.save();
       return true;
     }
     putPhoto(id, dataUrl, owner) {
-      if (this.state.photos[id]) return;
-      this.state.photos[id] = { data: dataUrl, at: '17:05', owner };
-      this.save();
+      return this._savePhoto(id, dataUrl, owner, 'demo');
     }
-    photo(id) { return this.state.photos[id] || null; }
+
+    /* ---------- 사진 저장소 (IndexedDB · 7일 자동 삭제) ---------- */
+    /** 사진 1장 저장 — IndexedDB 우선, 안 되는 브라우저만 localStorage로 폴백 */
+    async _savePhoto(id, dataUrl, owner, kind) {
+      const rec = { id, data: dataUrl, owner: owner || '', at: nowHHMM(), date: this.state.today, kind: kind || 'hw' };
+      if (window.EMA.photos && !EMA.photos.failed) {
+        const ok = await EMA.photos.put(id, rec);
+        if (ok) return { ok: true, id };
+        console.warn('사진 저장 실패(IndexedDB) — localStorage로 대신 저장합니다');
+      }
+      this.state.photos = this.state.photos || {};
+      this.state.photos[id] = rec;
+      const saved = this.save();
+      return { ok: saved, id, fallback: true };
+    }
+    photo(id) {
+      if (!id) return null;
+      if (window.EMA.photos) { const r = EMA.photos.get(id); if (r) return r; }
+      return (this.state.photos || {})[id] || null;
+    }
+    /** 사진이 이미 지워졌는지(7일 경과·선생님 삭제) */
+    photoGone(id) { return !!id && !this.photo(id); }
+    /** 선생님이 확인한 뒤 직접 삭제 — 제출 기록은 남습니다 */
+    async deletePhoto(id) {
+      if (!id) return false;
+      if (window.EMA.photos) await EMA.photos.del(id);
+      if (this.state.photos && this.state.photos[id]) { delete this.state.photos[id]; this.save(); }
+      return true;
+    }
+    /** 7일 지난 사진 자동 삭제 — 제출 시각·채점·사진 제출 여부는 영구 유지 */
+    async purgePhotos() {
+      if (!window.EMA.photos) return [];
+      let gone = [];
+      try { gone = await EMA.photos.purge(EMA.photos.KEEP_DAYS || 7); } catch (e) { gone = []; }
+      if (gone.length) console.info('7일 지난 사진 자동 삭제:', gone.length, '장');
+      return gone;
+    }
 
     stamp(classId, sid, kind) {
       const k = SK(classId, this.state.today, sid, kind);
@@ -1312,10 +1592,16 @@ window.EMA = window.EMA || {};
 
     /* ---------- 어제분 올리기 ---------- */
     submitYesterday(classId, sid, dataUrl, solved) {
+      return this._submitYesterday(classId, sid, dataUrl, solved);
+    }
+    async _submitYesterday(classId, sid, dataUrl, solved) {
       const y = shiftISO(this.state.today, -1);
       const pid = 'ph_y_' + Date.now().toString(36);
-      this.state.photos[pid] = { data: dataUrl, at: nowHHMM(), owner: sid };
-      this.state.lateUploads[K(classId, y, sid)] = { at: nowHHMM(), photoId: pid, solved: Math.max(FLAME_MIN, solved || FLAME_MIN) };
+      const put = await this._savePhoto(pid, dataUrl, sid, 'yesterday');
+      this.state.lateUploads[K(classId, y, sid)] = {
+        at: nowHHMM(), photoId: put.ok ? pid : null, photoSubmitted: true,
+        solved: Math.max(FLAME_MIN, solved || FLAME_MIN)
+      };
       const hist = this.state.history[sid] || (this.state.history[sid] = []);
       const row = hist.find(h => h.date === y);
       if (row) { row.solved = Math.max(row.solved, FLAME_MIN); row.late = true; }
@@ -1406,8 +1692,10 @@ window.EMA = window.EMA || {};
       const rarityMeta = GAME().rarity || {};
       const roll = Math.random() * 100;
       let rarity = 'common';
-      if (roll < (rarityMeta.legend || { rate: 5 }).rate) rarity = 'legend';
-      else if (roll < (rarityMeta.legend || { rate: 5 }).rate + (rarityMeta.rare || { rate: 25 }).rate) rarity = 'rare';
+      const rLegend = (rarityMeta.legend || { rate: 3 }).rate;
+      const rRare = (rarityMeta.rare || { rate: 19 }).rate;
+      if (roll < rLegend) rarity = 'legend';
+      else if (roll < rLegend + rRare) rarity = 'rare';
       let pool = (GAME().pets || []).filter(p => p.rarity === rarity);
       // 이미 가진 펫은 덜 나오게: 한 번만 걸러서 새 펫 우선
       const owned = new Set(((s && s.pets) || []).map(p => p.id));
@@ -1477,24 +1765,51 @@ window.EMA = window.EMA || {};
     }
 
     /* ---------- 밀린 오답 해결 → 알 정화 ---------- */
-    resolveCarried(classId, sid, id) {
+    /** ⭕ 맞았어요 → 해결. ⏭️ 안 푼 문제는 보상·통계를 분리하고, 하루 정식 보상은 5개까지 */
+    resolveCarried(classId, sid, id, whyTag) {
       const list = (this.state.carried || {})[sid] || [];
       const i = list.findIndex(x => x.id === id);
       if (i < 0) return null;
       const item = list.splice(i, 1)[0];
       item.solvedAt = this.state.today;
+      if (whyTag) item.why = whyTag;
+      const isSkip = (item.reason || 'x') === 'skip';
+      if (isSkip) item.skip = true;
       (this.state.solvedCarried[sid] = this.state.solvedCarried[sid] || []).push(item);
       // 몬스터 도감에 포획 기록
       (this.state.monsters[sid] = this.state.monsters[sid] || []).push({
         id: 'm_' + id, book: item.book, page: item.page, num: item.num, label: item.label,
-        date: this.state.today, captured: true, fromCarry: true, origin: item.date
+        date: this.state.today, captured: true, fromCarry: true, skip: isSkip, origin: item.date
       });
+      // 하루 인정 개수 — 정식 보상(코인·XP·펫 알)은 5개까지
+      this.state.carryResolve = this.state.carryResolve || {};
+      const dk = this.state.today + '|' + sid;
+      const n = (this.state.carryResolve[dk] || 0) + 1;
+      this.state.carryResolve[dk] = n;
+      let coins = 0, xp = 0, join = null;
       const s = this.student(classId, sid);
-      if (s) { s.coins = (s.coins || 0) + 5; s.bonusXp = (s.bonusXp || 0) + 10; }
-      const join = this.purifyEgg(classId, sid, 'carry|' + id);
+      if (s) {
+        if (isSkip) coins = 1;                       // ⏭️ 안 푼 문제: 코인 1개만 (펫 알·XP 없음)
+        else if (n <= 5) { coins = 3; xp = 8; }
+        else coins = 1;                              // 6개째부터는 소액
+        s.coins = (s.coins || 0) + coins;
+        if (xp) s.bonusXp = (s.bonusXp || 0) + xp;
+        if (!isSkip && n <= 5) join = this.purifyEgg(classId, sid, 'carry|' + id);
+      }
       const killed = this.checkBossKill(classId);
       this.save();
-      return { item, coins: 5, xp: 10, killed, join };
+      return { item, coins, xp, killed, join, skip: isSkip, count: n, capped: !isSkip && n > 5 };
+    }
+    /** ❌ 틀렸어요 — 이유를 골라 두고 목록에는 그대로 남깁니다(다시 도전) */
+    retryCarried(classId, sid, id, tag) {
+      const list = (this.state.carried || {})[sid] || [];
+      const item = list.find(x => x.id === id);
+      if (!item) return null;
+      item.why = tag || 'x';
+      item.tries = (item.tries || 0) + 1;
+      item.lastTry = this.state.today;
+      this.save();
+      return item;
     }
 
     /* ---------- 선생님 설정 ---------- */
@@ -1614,8 +1929,11 @@ window.EMA = window.EMA || {};
   EMA.createStore = function () {
     const cfg = window.EMA_CONFIG || { mode: 'local' };
     if (cfg.mode === 'api' && cfg.apiUrl) return new ApiStore(cfg.apiUrl);
-    return new LocalStore(EMA.buildSeed);
+    return new LocalStore(EMA.buildSeed, { demo: !!cfg.demo });
   };
+  EMA.SCHEMA = SCHEMA;
+  EMA.STATE_KEY = KEY;
+  EMA.STATE_KEY_DEMO = DEMO_KEY;
   EMA.FLAME_MIN = FLAME_MIN;
   EMA.CAP_XP = CAP_XP;
   EMA.tileKey = tileKey;

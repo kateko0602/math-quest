@@ -1,4 +1,4 @@
-/* 숙제 대소동 v0.5 — 화면과 동선 (미니멀 대청소)
+/* 숙제 대소동 v0.8 — 화면과 동선 (1단계 안정화)
    ─────────────────────────────────────────────────────────────
    세계관: 〈숫자 왕국 구출 대작전〉 — 알은 하나, '펫 알'뿐
      · 못 고친 오답 → 다시 풀어 ⚔️ 해결하면 '펫 알 부화!' → 펫 합류
@@ -6,7 +6,8 @@
    아이 동선(딱 3단계): 숙제 → ① 채점(⭕/❌) → ② 정리·사진 → ③ 제출 완료
    · 하단 탭 3개: 🔥 숙제 | 🐾 내 도감 | 🏆 랭킹
    · 소리·로그아웃·이야기는 우측 상단 ⚙️ 설정 시트로
-   · 선생님(PIN 2580): '오늘 제출 확인 & 한꺼번에 도장' + 학생 목록, 나머지 도구는 ⚙️ 관리
+   · 선생님: 첫 접속 때 직접 정한 PIN(4~6자리 · 해시 저장 · 세션 12시간)으로 들어갑니다.
+     '오늘 제출 확인 & 한꺼번에 도장' + 학생 목록, 나머지 도구는 ⚙️ 관리
 */
 window.EMA = window.EMA || {};
 (function () {
@@ -19,9 +20,10 @@ window.EMA = window.EMA || {};
 
   const view = {
     role: 'login',            // login | student | teacher
-    step: 'class',            // class | student | pin | teacherPin
+    step: 'class',            // class | student | pin | teacherPin | teacherSetup | teacherSetup2 | teacherRecover
     classId: null, studentId: null,
     pin: '', pinTarget: 'student',
+    newPin1: '', recoveryCode: '',
     tab: 'home', homeTab: 'today', teacherTab: 'today',
     rankMode: 'first', rankScope: 'class',
     sheet: null,
@@ -29,7 +31,8 @@ window.EMA = window.EMA || {};
     gradeSource: 'homework',  // homework | print
     gradeBook: null,
     pending: { photo: null, avatar: null, nickname: '', yphoto: null, tempPhoto: null, tempTarget: null, reupload: false },
-    pmBook: null, pmPage: null, pmInput: '',
+    pmBook: null, pmPage: null, pmInput: '', pmNewPage: '',
+    carryWhy: null,
     lessonEditBook: null, lessonEditPages: null,
     pinReveal: null,
     reportSid: null, reportRange: 'week', reportImg: null, reportImgName: '',
@@ -40,6 +43,8 @@ window.EMA = window.EMA || {};
     scrollTarget: null,
     resetScroll: false
   };
+  const MAX_TEACHER_PIN = 6;
+  const MIN_TEACHER_PIN = 4;
 
   /* =========================================================
      초안 저장 — 누른 즉시 남겨 두고, 다시 열면 그 자리로
@@ -207,15 +212,85 @@ window.EMA = window.EMA || {};
       <button class="setrow" data-act="teacherEntry"><span class="se">👩‍🏫</span><span class="st">선생님 모드</span><span class="chev">›</span></button>
       <div class="sethd">계정</div>
       <button class="setrow" data-act="logout"><span class="se">↩️</span><span class="st">로그아웃</span><span class="chev">›</span></button>
-      <button class="setrow danger" data-act="resetDemo"><span class="se">🧹</span><span class="st">시제품 데이터 초기화</span></button>
-      <div class="hint center" style="margin-top:12px">숙제 대소동 v0.5 시제품 · 숫자 왕국 구출 대작전</div>
+      <button class="setrow danger" data-act="resetDemo"><span class="se">🧹</span><span class="st">연습 데이터 초기화</span></button>
+      <div class="hint" style="margin:6px 6px 0">초기화하면 지금 데이터를 먼저 이 기기에 백업해 두고, 이 화면에서만 새로 시작해요.</div>
+      <div class="hint center" style="margin-top:12px">숙제 대소동 v0.8 · 숫자 왕국 구출 대작전 ${demoChip()}</div>
+    `);
+  }
+
+  /** 비상 복구 키 — 처음 설정할 때 딱 한 번 보여 줍니다 */
+  function sheetRecovery() {
+    const code = view.recoveryCode || '';
+    return sheetWrap('🔑 비상 복구 키', `
+      <div class="sub">PIN을 잊었을 때 쓰는 <b>한 번만 보여 주는 키</b>예요. 지금 적어 두세요.</div>
+      <div class="recovery-code" id="recoveryCode">${esc(code)}</div>
+      <button class="btn btn-primary btn-block" style="margin-top:12px" data-act="copyRecovery">📋 복구 키 복사</button>
+      <div class="hint" style="margin-top:12px">· 이 화면을 닫으면 다시 볼 수 없어요.<br>· PIN을 잊으면 첫 화면 → [선생님 모드] → [PIN을 잊었어요]에서 이 키로 다시 정할 수 있어요.<br>· 이 기기(브라우저)에만 저장되니, 기록을 지우거나 폰을 바꾸면 새로 정해야 해요.</div>
+      <button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="closeRecovery">적어 두었어요</button>
     `);
   }
 
   /* =========================================================
      로그인
   ========================================================= */
+  function demoChip() {
+    const d = store.state && store.state.meta && store.state.meta.demo;
+    return d ? '<span class="pill warn">연습용 예시 데이터</span>' : '';
+  }
+  function pinDotsHtml(max) {
+    return `<div class="pin-dots">${Array.from({ length: max }).map((_, i) => `<div class="pin-dot ${view.pin.length > i ? 'on' : ''}"></div>`).join('')}</div>`;
+  }
+  function keypadHtml() {
+    return `<div class="keypad">
+      ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button class="key" data-act="pinKey" data-k="${n}">${n}</button>`).join('')}
+      <button class="key fn" data-act="pinBack">지우기</button>
+      <button class="key" data-act="pinKey" data-k="0">0</button>
+      <button class="key fn" data-act="pinDel">⌫</button>
+    </div>`;
+  }
+
   function renderLogin() {
+    if (view.step === 'teacherSetup' || view.step === 'teacherSetup2') {
+      const second = view.step === 'teacherSetup2';
+      return `<div class="screen no-nav login">
+        ${topbar({ title: second ? '한 번 더 확인' : '선생님 PIN 만들기', sub: second ? '같은 번호를 한 번 더' : MIN_TEACHER_PIN + '~' + MAX_TEACHER_PIN + '자리 숫자', back: true })}
+        <div class="step" style="margin-top:0">
+          <div class="step-t">${second ? '2단계 · 한 번 더 눌러 주세요' : '1단계 · 새 PIN을 정해요'}</div>
+          ${pinDotsHtml(MAX_TEACHER_PIN)}
+          <div class="hint center" style="margin:0 0 12px">${second ? '앞에서 정한 PIN과 같아야 해요' : 'PIN 원문은 저장하지 않고 암호(해시)로만 이 기기에 남아요'}</div>
+          ${keypadHtml()}
+          <button class="btn btn-primary btn-block btn-lg" style="margin-top:12px" data-act="${second ? 'confirmTeacherSetup2' : 'confirmTeacherSetup1'}" ${view.pin.length < MIN_TEACHER_PIN ? 'disabled' : ''}>${second ? '이 PIN으로 시작하기' : '다음'}</button>
+        </div>
+        ${sheetHtml()}
+      </div>`;
+    }
+    if (view.step === 'teacherRecover') {
+      return `<div class="screen no-nav login">
+        ${topbar({ title: '복구 키로 다시 설정', sub: '선생님 PIN 분실', back: true })}
+        <div class="step" style="margin-top:0">
+          <div class="step-t">1단계 · 비상 복구 키를 넣어 주세요</div>
+          <input id="recoverInput" class="tinput" placeholder="예: K7FD-2MQD" autocomplete="off" autocapitalize="characters" style="text-transform:uppercase">
+          <div class="step-t" style="margin-top:20px">2단계 · 새 PIN (${MIN_TEACHER_PIN}~${MAX_TEACHER_PIN}자리)</div>
+          <input id="recoverPin" class="tinput pininput" inputmode="numeric" maxlength="6" placeholder="새 PIN">
+          <button class="btn btn-primary btn-block" style="margin-top:14px" data-act="teacherRecoverSave">이 PIN으로 바꾸기</button>
+          <div class="hint center" style="margin-top:10px">바꾸면 새 복구 키가 나옵니다. 예전 키는 쓸 수 없어요.</div>
+        </div>
+        ${sheetHtml()}
+      </div>`;
+    }
+    if (view.step === 'teacherPin') {
+      return `<div class="screen no-nav login">
+        ${topbar({ title: '선생님 PIN', sub: MIN_TEACHER_PIN + '~' + MAX_TEACHER_PIN + '자리', back: true })}
+        <div class="step" style="margin-top:0">
+          <div class="step-t">선생님 PIN을 눌러 주세요</div>
+          ${pinDotsHtml(MAX_TEACHER_PIN)}
+          ${keypadHtml()}
+          <button class="btn btn-primary btn-block btn-lg" style="margin-top:12px" data-act="teacherPinOk" ${view.pin.length < MIN_TEACHER_PIN ? 'disabled' : ''}>확인</button>
+          <button class="btn btn-ghost btn-block btn-sm" style="margin-top:10px" data-act="teacherRecoverOpen">PIN을 잊었어요 · 복구 키로 다시 설정</button>
+        </div>
+        ${sheetHtml()}
+      </div>`;
+    }
     if (view.step === 'class') {
       const classes = store.classes();
       const st = STORY();
@@ -238,8 +313,8 @@ window.EMA = window.EMA || {};
         <div class="grow"></div>
         <button class="btn btn-ghost btn-block" data-act="openStory">📖 이야기 보기</button>
         <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="teacherEntry">👩‍🏫 선생님이세요? 선생님 모드</button>
-        <div class="pin-hint">체험용 · 학생 PIN <b>1234</b> · 선생님 PIN <b>2580</b></div>
-        <div class="verline">v0.5 시제품</div>
+        <div class="pin-hint">학생 PIN은 선생님께 물어보세요 · 내 PIN은 ⚙️ 설정에서 바꿀 수 있어요</div>
+        <div class="verline">v0.8 ${demoChip()}</div>
       </div>
       ${sheetHtml()}`;
     }
@@ -258,23 +333,18 @@ window.EMA = window.EMA || {};
           </div>
         </div>
         <div class="grow"></div>
-        <div class="pin-hint">이름은 시트 명단 그대로라 오타·동명이인 걱정이 없어요.</div>      </div>
+        <div class="pin-hint">명단은 선생님이 관리해요. 이름이 없으면 선생님께 말해 주세요.</div>
+      </div>
       ${sheetHtml()}`;
     }
-    const isTeacher = view.pinTarget === 'teacher';
-    const who = isTeacher ? '선생님' : (store.student(view.classId, view.studentId) || {}).name;
+    const who = (store.student(view.classId, view.studentId) || {}).name;
     return `<div class="screen no-nav login">
       ${topbar({ title: '비밀번호 4자리', sub: who, back: true })}
       <div class="step" style="margin-top:0">
-        <div class="step-t">${isTeacher ? '선생님 PIN' : '3단계 · 내 PIN'}</div>
-        <div class="pin-dots">${[0, 1, 2, 3].map(i => `<div class="pin-dot ${view.pin.length > i ? 'on' : ''}"></div>`).join('')}</div>
-        <div class="keypad">
-          ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button class="key" data-act="pinKey" data-k="${n}">${n}</button>`).join('')}
-          <button class="key fn" data-act="pinBack">지우기</button>
-          <button class="key" data-act="pinKey" data-k="0">0</button>
-          <button class="key fn" data-act="pinDel">⌫</button>
-        </div>
-        ${isTeacher ? '' : '<div class="pin-hint">PIN을 잊으면 선생님이 1초에 알려 줄 수 있어요.</div>'}
+        <div class="step-t">3단계 · 내 PIN</div>
+        ${pinDotsHtml(4)}
+        ${keypadHtml()}
+        <div class="pin-hint">PIN을 잊으면 선생님이 1초에 초기화해 줄 수 있어요.</div>
       </div>
       ${sheetHtml()}
     </div>`;
@@ -328,7 +398,7 @@ window.EMA = window.EMA || {};
         { id: 'record', em: '🐾', label: '내 도감' },
         { id: 'rank', em: '🏆', label: '랭킹' }
       ], view.tab)}
-      <input type="file" class="photo-input" data-target="clean" accept="image/*" capture="environment" aria-hidden="true">
+      <input type="file" class="photo-input" data-target="clean" accept="image/*" aria-hidden="true">
       ${sheetHtml()}
     </div>`;
   }
@@ -352,7 +422,7 @@ window.EMA = window.EMA || {};
             const t = store.tiles(cid, b.book);
             return `<div class="bookrow"><span class="be">${b.book.indexOf('응용') >= 0 ? '📙' : '📘'}</span>
               <span class="bn">${esc(b.book)}</span>
-              <span class="bp">${b.pages.length > 1 ? b.pages[0] + '~' + b.pages[b.pages.length - 1] : b.pages[0]}쪽 · ${t.length}문제</span></div>`;
+              <span class="bp">${b.pages.length > 1 ? b.pages[0] + '-' + b.pages[b.pages.length - 1] : b.pages[0]}쪽 · ${t.length}문제</span></div>`;
           }).join('')}
         </div>
         ${timing.kind === 'early' ? '<div class="timing early">⚡ 얼리버드 · 코인 2배</div>'
@@ -388,7 +458,6 @@ window.EMA = window.EMA || {};
         <div class="quickrow">
           <button class="btn btn-ghost btn-sm" data-act="gallery">👀 친구들 풀이</button>
           <button class="btn btn-ghost btn-sm" data-act="openShop">🛍️ 상점</button>
-          ${store.hasPrint(cid, sid) ? '<button class="btn btn-ghost btn-sm" data-act="startPrint">📝 오답프린트</button>' : ''}
         </div>
       </div>
 
@@ -423,7 +492,8 @@ window.EMA = window.EMA || {};
         <div class="card-hd"><span class="t">📸 낸 사진</span><span class="grow"></span>
           ${sub.stampAt ? `<span class="pill ok">✅ 도장 ${esc(sub.stampAt)}</span>` : sub.status === 'resubmit' ? `<span class="pill bad">재제출</span>` : sub.status === 'unlocked' ? `<span class="pill warn">🔓 다시 내기</span>` : `<span class="pill warn">🕒 도장 대기</span>`}
         </div>
-        ${store.photo(sub.photoId) ? `<button class="photo-open" data-act="photoBig" data-sid="${sid}" data-at="${esc(sub.at)}"><img src="${store.photo(sub.photoId).data}" alt="내가 낸 사진"><span class="zoom">확대</span></button>` : ''}
+        ${store.photo(sub.photoId) ? `<button class="photo-open" data-act="photoBig" data-sid="${sid}" data-at="${esc(sub.at)}"><img src="${store.photo(sub.photoId).data}" alt="내가 낸 사진"><span class="zoom">확대</span></button>`
+          : `<div class="muted" style="font-size:12px">🗑 사진은 보관 기간(7일)이 지나 앱에서 지웠어요 · 제출·채점 기록은 그대로 있어요</div>`}
         <div class="row" style="margin-top:10px">
           <button class="btn btn-ghost grow" data-act="gallery">👀 친구들 풀이</button>
           ${up.ok ? `<button class="btn btn-primary grow" data-act="reupload">📸 사진 다시 (${up.mins}분)</button>`
@@ -467,19 +537,39 @@ window.EMA = window.EMA || {};
     const list = store.carried(cid, sid);
     const solved = store.solvedCarried(sid);
     const reasonTxt = { x: '❌ 틀림', star: '⭐ 질문', skip: '⏭️ 안 풀었음' };
+    const tagDefs = GAME().tags || [];
+    const todayKey = store.state.today;
+    const doneToday = ((store.state.carryResolve || {})[todayKey + '|' + sid]) || 0;
     if (!list.length) {
       return `<div class="card"><div class="empty">🎉 밀린 문제가 없어요!${solved.length ? `<br><small>지금까지 ${solved.length}개를 스스로 고쳤어요</small>` : ''}</div></div>`;
     }
     return `
-      ${list.map(m => `
-        <div class="carrycard">
-          <div class="cc-em">${m.em || '👾'}</div>
-          <div class="grow">
-            <div class="cc-nm">${esc(m.name || '못 고친 오답')}</div>
-            <div class="cc-lb">${esc(m.book === '프린트' ? '' : m.book + ' ')}${m.page}쪽 ${esc(m.num)}번 <span class="dot">·</span> ${esc(m.date.slice(5))} <span class="dot">·</span> ${reasonTxt[m.reason] || '❌'}</div>
+      <div class="card tight" style="margin-bottom:10px">
+        <div class="muted" style="font-size:12px">다시 풀어 <b>⭕ 맞았어요</b>를 누르면 해결! · 오늘 정식 보상 <b>${Math.min(doneToday, 5)}/5</b>개</div>
+      </div>
+      ${list.map(m => {
+        const open = view.carryWhy === m.id;
+        const tries = (m.tries || 0) > 0 ? ` · ${m.tries}번 다시 풀었어요` : '';
+        return `<div class="carrywrap">
+          <div class="carrycard">
+            <div class="cc-em">${m.em || '👾'}</div>
+            <div class="grow">
+              <div class="cc-nm">${esc(m.name || '못 고친 오답')}</div>
+              <div class="cc-lb">${esc(m.book === '프린트' ? '' : m.book + ' ')}${m.page}쪽 ${esc(m.num)}번 <span class="dot">·</span> ${esc(m.date.slice(5))} <span class="dot">·</span> ${reasonTxt[m.reason] || '❌'}${tries}</div>
+            </div>
+            <div class="cc-do">
+              <button class="btn btn-mint btn-sm" data-act="resolveCarry" data-id="${m.id}">⭕ 맞았어요</button>
+              <button class="btn btn-ghost btn-sm" data-act="carryWrong" data-id="${m.id}">❌ 틀렸어요</button>
+            </div>
           </div>
-          <button class="btn btn-mint btn-sm" data-act="resolveCarry" data-id="${m.id}">⚔️ 해결!</button>
-        </div>`).join('')}
+          ${open ? `<div class="card tight carry-why">
+            <div class="hint" style="margin-bottom:8px">왜 틀렸는지 하나만 고르면 <b>다시 도전</b> 목록에 남겨 둘게요</div>
+            <div class="tagrow" style="margin:0">
+              <span class="tag-list">${tagDefs.map(td => `<button class="tag ${m.why === td.id ? 'on' : ''}" data-act="carryWhySet" data-id="${m.id}" data-t="${td.id}">${td.em} ${esc(td.label)}</button>`).join('')}</span>
+            </div>
+          </div>` : ''}
+        </div>`;
+      }).join('')}
       ${solved.length ? `<div class="hint center" style="margin:6px 16px">지금까지 ${solved.length}개 고쳤어요</div>` : ''}`;
   }
 
@@ -537,6 +627,7 @@ window.EMA = window.EMA || {};
     </div>` : '';
 
     const untagged = tiles.filter(t => g.marks[t.key] === 'x' && !(g.tags || {})[t.key]).length;
+    const missingN = tiles.filter(t => t.missing).length;
 
     return `<div class="screen flow">
       ${topbar({
@@ -547,6 +638,7 @@ window.EMA = window.EMA || {};
       })}
       ${stepper(1)}
       ${bookTabs}
+      ${missingN ? `<div class="card tight missing-note"><div class="muted" style="font-size:12px">❓ <b>?</b> 칸 ${missingN}개는 쪽수표에 없는 쪽이에요. 선생님 <b>⚙️ 관리 → 쪽수표</b>에서 그 쪽 문제번호를 넣으면 채점할 수 있어요.</div></div>` : ''}
       ${oxSum(cnt)}
       <div class="card oxcard">
         <button class="btn btn-mint btn-block" data-act="markAll">⭕ 모두 맞음</button>
@@ -566,24 +658,28 @@ window.EMA = window.EMA || {};
   function flowClean() {
     const cid = view.classId, sid = view.studentId;
     const isPrint = view.gradeSource === 'print';
-    const tiles = sourceTiles();
+    const kindNow = isPrint ? 'print' : 'hw';
+    // ② 정리 화면은 '모든 교재'의 오답을 빠짐없이 보여 줍니다 (예전엔 첫 교재만 보여서 먹통처럼 느껴졌어요)
+    const tiles = isPrint ? store.printTiles(cid, sid) : store.tiles(cid);
     const g = sourceGrade();
     const cnt = countTiles(tiles, g);
-    const sub = store.submission(cid, sid, null, isPrint ? 'print' : 'hw');
+    const sub = store.submission(cid, sid, null, kindNow);
     const existingPhoto = sub ? store.photo(sub.photoId) : null;
-    const up = store.reuploadInfo(cid, sid, isPrint ? 'print' : 'hw');
+    const up = store.reuploadInfo(cid, sid, kindNow);
+    const stamped = !!(sub && (sub.stampAt || sub.status === 'stamped'));
     const locked = !!(sub && existingPhoto && !up.ok);
-    const verify = isPrint ? { book: '오답프린트', page: '프린트' } : (sub && sub.verify) || store.verifyTarget(cid, sid);
+    const verify = store.verifyHint(cid, sid, kindNow);
 
     const wrong = tiles.filter(t => g.marks[t.key] === 'x');
     const rest = tiles.filter(t => !g.marks[t.key]);
-    const kindNow = isPrint ? 'print' : 'hw';
     const starCnt = store.starCount(cid, sid, kindNow);
+    const multi = store.books(cid).length > 1 && !isPrint;
+    const bkLabel = t => (multi ? `<span class="bk">${esc(t.book.indexOf('응용') >= 0 ? '응용' : '발전')}</span>` : '');
 
     const wrongHtml = wrong.length ? wrong.map(t => {
       const cl = g.cleanup[t.key] || '';
       return `<div class="clean-row">
-        <div class="cl-label">${isPrint ? '' : t.page + '쪽 '}<b>${esc(t.label)}</b>번</div>
+        <div class="cl-label">${bkLabel(t)}${isPrint ? '' : t.page + '쪽 '}<b>${esc(t.label)}</b>번</div>
         <div class="cl-btns">
           <button class="clb fix ${cl === 'fixed' ? 'on' : ''}" data-act="cleanup" data-key="${t.key}" data-k="fixed">⚔️ 해결!</button>
           <button class="clb star ${cl === 'star' ? 'on' : ''} ${starCnt >= 7 && cl !== 'star' ? 'is-full' : ''}" data-act="cleanup" data-key="${t.key}" data-k="star">⭐ 질문</button>
@@ -591,20 +687,24 @@ window.EMA = window.EMA || {};
       </div>`;
     }).join('') : `<div class="empty-note">🎉 틀린 문제가 없어요!</div>`;
 
-    const photoArea = (sub && existingPhoto && up.ok)
-      ? `<div class="photo-preview"><img src="${existingPhoto.data}" alt="낸 사진"><div class="lock">🔒 낸 사진</div></div>
+    const photoArea = stamped
+      ? (existingPhoto
+        ? `<div class="photo-preview"><img src="${existingPhoto.data}" alt="낸 사진"><div class="lock">✅ 선생님 도장 완료</div></div>`
+        : `<div class="empty-note">✅ 선생님이 확인했어요. 고친 내용은 선생님께 직접 말해 주세요.</div>`)
+      : (sub && existingPhoto && up.ok)
+        ? `<div class="photo-preview"><img src="${existingPhoto.data}" alt="낸 사진"><div class="lock">🔒 낸 사진</div></div>
          <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="reupload">📸 사진 다시 (${up.mins}분)</button>`
-      : locked
-      ? `<div class="photo-preview"><img src="${existingPhoto.data}" alt="낸 사진"><div class="lock">🔒 낸 사진 · 바꾸려면 선생님께</div></div>`
-      : (view.pending.photo || existingPhoto)
-        ? `<div class="photo-preview"><img src="${view.pending.photo || existingPhoto.data}" alt="제출 사진"><div class="lock">🔒 나·선생님·(수업 후) 친구들만</div></div>
+        : locked
+          ? `<div class="photo-preview"><img src="${existingPhoto.data}" alt="낸 사진"><div class="lock">🔒 낸 사진 · 바꾸려면 선생님께</div></div>`
+          : (view.pending.photo || existingPhoto)
+            ? `<div class="photo-preview"><img src="${view.pending.photo || existingPhoto.data}" alt="제출 사진"><div class="lock">🔒 나·선생님·(수업 후) 친구들만</div></div>
            <button class="btn btn-ghost btn-sm" style="margin-top:8px" data-act="photoPick">사진 다시 고르기</button>`
-        : `<button class="photo-drop" data-act="photoPick">
+            : `<button class="photo-drop" data-act="photoPick">
             <div class="em">📷</div>
             <div class="t">사진 찍기 / 앨범에서 고르기</div>
           </button>`;
 
-    const verifyHtml = !isPrint && verify
+    const verifyHtml = stamped ? '' : !isPrint && verify
       ? `<div class="verify big">
           <div class="v-em">🎲</div>
           <div class="grow"><div class="v-k">오늘 찍을 쪽</div>
@@ -614,6 +714,11 @@ window.EMA = window.EMA || {};
       : isPrint
         ? `<div class="verify big"><div class="v-em">📝</div><div class="grow"><div class="v-k">오늘 찍을 것</div><div class="v-t">프린트 <b>1장</b></div></div></div>`
         : '';
+
+    const btnLabel = stamped ? '✅ 선생님 확인 완료'
+      : locked ? '✅ 고친 내용 저장'
+        : view.pending.photo && sub ? '📸 새 사진으로 다시 내기'
+          : '📸 사진 올리고 제출';
 
     return `<div class="screen flow">
       ${topbar({ title: '② 정리 · 사진', sub: isPrint ? '오답프린트' : '틀린 문제 정리', back: true, backAct: 'flowBack' })}
@@ -625,20 +730,22 @@ window.EMA = window.EMA || {};
       <div class="sect-t"><span>⏭️ 안 누른 문제 ${rest.length}</span></div>
       <div class="card tight carry-card">
         ${rest.length
-          ? `<div class="carry-list">${rest.map(t => `<span class="cchip">${isPrint ? '' : t.page + '쪽 '}${esc(t.label)}번</span>`).join('')}</div>`
+          ? `<div class="carry-list">${rest.map(t => `<span class="cchip">${multi && !isPrint ? (t.book.indexOf('응용') >= 0 ? '응용 ' : '발전 ') : ''}${isPrint ? '' : t.page + '쪽 '}${esc(t.label)}번</span>`).join('')}</div>`
           : `<div class="muted">모든 문제를 골랐어요 🎉</div>`}
       </div>
 
-      <div class="sect-t"><span>📸 사진</span><span class="grow"></span><span class="hint">${locked ? '제출 완료' : up.ok ? up.mins + '분 안에 교체' : '1장'}</span></div>
+      <div class="sect-t"><span>📸 사진</span><span class="grow"></span><span class="hint">${stamped ? '도장 완료' : up.ok ? up.mins + '분 안에 교체' : '1장'}</span></div>
       <div class="card tight photo-card">
         ${verifyHtml}
         ${photoArea}
+        <div class="privacy-note">📖 문제집 페이지만 찍어요! 얼굴, 방, 이름표 등 개인정보가 나오지 않도록 주의해주세요.</div>
       </div>
 
       <div class="flowfoot">
-        <button class="btn btn-primary btn-block btn-lg" data-act="submit">${locked || (sub && up.ok && !view.pending.photo) ? '✅ 고친 내용 저장' : view.pending.photo && sub ? '📸 새 사진으로 다시 내기' : '📸 사진 올리고 제출'}</button>
+        <button class="btn btn-primary btn-block btn-lg" data-act="submit" ${stamped ? 'disabled' : ''}>${btnLabel}</button>
+        ${stamped ? '<div class="hint center" style="margin-top:8px">선생님이 도장을 찍은 제출은 저장해도 도장이 유지돼요.</div>' : ''}
       </div>
-      <input type="file" class="photo-input" data-target="clean" accept="image/*" capture="environment" aria-hidden="true">
+      <input type="file" class="photo-input" data-target="clean" accept="image/*" aria-hidden="true">
       ${sheetHtml()}
     </div>`;
   }
@@ -694,7 +801,7 @@ window.EMA = window.EMA || {};
           ${up.ok ? `<button class="btn btn-ghost btn-sm" data-act="reupload">📸 사진 다시 (${up.mins}분)</button>` : ''}
         </div>
       </div>
-      <input type="file" class="photo-input" data-target="clean" accept="image/*" capture="environment" aria-hidden="true">
+      <input type="file" class="photo-input" data-target="clean" accept="image/*" aria-hidden="true">
       ${sheetHtml()}
     </div>`;
   }
@@ -791,7 +898,7 @@ window.EMA = window.EMA || {};
               <small>${esc(m.unitName || '')}${m.reason === 'star' ? ' · ⭐질문' : m.reason === 'skip' ? ' · ⏭️안 풀었음' : ''}</small></span>
             ${m.today
               ? `<button class="btn btn-mint btn-sm" data-act="fixNow">⚔️ 고치기</button>`
-              : `<button class="btn btn-mint btn-sm" data-act="resolveCarry" data-id="${m.id}">⚔️ 해결!</button>`}
+              : `<button class="btn btn-mint btn-sm" data-act="homeTab" data-t="carry">⚔️ 고치기 →</button>`}
           </div>`).join('') + (eggs.length > 6 ? `<div class="hint" style="margin-top:8px">외 ${eggs.length - 6}개는 숙제의 밀린문제에서 볼 수 있어요</div>` : '')
           : `<div class="empty-note">못 고친 오답이 없어요 🌟</div>`}
       </div>
@@ -1079,7 +1186,14 @@ window.EMA = window.EMA || {};
         </button>`).join('')}
       </div>
       <div class="kv" style="margin-top:10px"><span class="k">지금 숙제</span><span>${esc(l.homework)}</span></div>
-      <button class="btn btn-primary btn-block" style="margin-top:10px" data-act="lessonEdit">쪽수 바꾸기</button>`;
+      <button class="btn btn-primary btn-block" style="margin-top:10px" data-act="lessonEdit">쪽수 바꾸기</button>
+      <div class="card tight" style="margin-top:10px">
+        <div class="hint">쪽수표에 없는 쪽(예: 56쪽)도 여기서 문제번호를 넣으면 채점할 수 있어요.</div>
+        <div class="row" style="margin-top:8px;gap:8px">
+          <input id="pmNewPage" class="tinput grow" inputmode="numeric" placeholder="쪽 번호 (예: 56)">
+          <button class="btn btn-ghost btn-sm" data-act="pmAddPage">쪽 추가</button>
+        </div>
+      </div>`;
   }
 
   function teacherStudents(c) {
@@ -1090,9 +1204,10 @@ window.EMA = window.EMA || {};
           <span class="grow" style="min-width:0"><b>${esc(s.name)}</b> <small class="muted">${esc(s.nickname || '')}</small></span>
           <span class="pinval" data-pin="${s.id}">${view.pinReveal === s.id ? esc(s.pin) : '••••'}</span>
           <button class="btn btn-ghost btn-sm" data-act="revealPin" data-id="${s.id}">${view.pinReveal === s.id ? '숨기기' : '보기'}</button>
-          <button class="btn btn-ghost btn-sm" data-act="regenPin" data-id="${s.id}">재발급</button>
+          <button class="btn btn-ghost btn-sm" data-act="resetStudentPin" data-id="${s.id}">PIN 초기화</button>
         </div>`).join('')}
       </div>
+      <div class="hint" style="margin:6px 4px 10px">PIN 초기화 = 한 번에 <b>1234</b>로 바꿉니다. 아이가 ⚙️ 설정에서 직접 바꿀 수도 있어요.</div>
       <div class="kv"><span class="k">반</span><span>${esc(c.name)} · ${esc(c.semester)}</span></div>
       <div class="kv"><span class="k">수업</span><span>${esc(c.days)} ${esc(c.time)}</span></div>
       <div class="kv"><span class="k">교재</span><span>${esc((c.textbooks || []).join(' · '))}</span></div>`;
@@ -1110,7 +1225,7 @@ window.EMA = window.EMA || {};
       lessonEdit: sheetLessonEdit, pmpage: sheetPmPage, yesterday: sheetYesterday,
       photocopy: sheetPhotoCopy, printpick: sheetPrintPick,
       story: storySheet, photoconfirm: sheetPhotoConfirm, nextday: sheetNextDay,
-      settings: sheetSettings, bigphoto: sheetBigPhoto
+      settings: sheetSettings, bigphoto: sheetBigPhoto, recovery: sheetRecovery
     };
     const fn = map[view.sheet];
     return fn ? fn() : '';
@@ -1206,7 +1321,7 @@ window.EMA = window.EMA || {};
     return sheetWrap('⚔️ 밀린문제', `
       <div class="sub">다시 풀어 고치면 펫 알이 부화해요 🥚</div>
       ${list.map(m => `<div class="kv"><span class="k">${m.em} ${esc(m.name)}<br><span class="muted" style="font-size:11px">${esc(m.label)} · ${esc(m.date.slice(5))}</span></span>
-        <button class="btn btn-mint btn-sm" data-act="resolveCarry" data-id="${m.id}">고쳤어요 ⚔️</button></div>`).join('')}
+        <button class="btn btn-mint btn-sm" data-act="homeTab" data-t="carry">고치기 →</button></div>`).join('')}
       ${!list.length ? '<div class="empty">밀린문제가 없어요 🎉</div>' : ''}
     `);
   }
@@ -1355,7 +1470,7 @@ window.EMA = window.EMA || {};
       <div class="kv"><span class="k">상태</span><span>${m.reason === 'star' ? '⭐ 질문' : m.reason === 'skip' ? '⏭️ 안 풀었음' : '❌ 틀림'}</span></div>
       ${m.today
         ? `<button class="btn btn-mint btn-block" style="margin-top:12px" data-act="fixNow">⚔️ 지금 고치기</button>`
-        : `<button class="btn btn-mint btn-block" style="margin-top:12px" data-act="resolveCarry" data-id="${m.id}">⚔️ 해결!</button>`}
+        : `<button class="btn btn-mint btn-block" style="margin-top:12px" data-act="homeTab" data-t="carry">⚔️ 밀린문제에서 고치기 →</button>`}
     `);
   }
 
@@ -1750,16 +1865,18 @@ window.EMA = window.EMA || {};
     const books = store.bookList();
     const book = view.lessonEditBook || (store.books(cid)[0] || {}).book || books[0];
     const pages = view.lessonEditPages != null ? view.lessonEditPages : (store.books(cid).find(b => b.book === book) || { pages: [] }).pages.join(',');
-    const list = String(pages).split(/[,\s~]+/).filter(Boolean).map(Number).filter(n => !isNaN(n));
+    const list = EMA.util.parsePages(pages);
     const tiles = store.tilesOf(book, list);
+    const missing = list.filter(p => !store.pageInfo(book, p));
     return sheetWrap('이번 숙제 쪽수 바꾸기', `
-      <div class="sub">시트 <b>숙제</b> 칸에 적는 것과 같은 방식이에요. 쪽수만 적으면 문제 버튼이 자동으로 만들어집니다.</div>
+      <div class="sub">시트 <b>숙제</b> 칸에 적는 것과 같은 방식이에요. <b>8-10쪽</b>, <b>8~10</b>, <b>8, 9, 10쪽</b> 모두 됩니다.</div>
       <div class="tabs-scroll" style="padding:0 0 10px">
         ${books.map(b => `<button class="${b === book ? 'on' : ''}" data-act="lessonBook" data-b="${esc(b)}">${esc(b)}</button>`).join('')}
       </div>
-      <div class="editor"><input id="pageInput" value="${esc(String(pages))}" placeholder="예: 8,9,10 또는 8~10"></div>
+      <div class="editor"><input id="pageInput" value="${esc(String(pages))}" placeholder="예: 8,9,10 또는 8-10쪽"></div>
       <div class="muted" style="margin-top:8px">→ ${tiles.length}개: ${tiles.map(t => t.label).join(', ')}</div>
       <div class="preview-tiles">${tiles.map(t => `<div class="pt">${esc(t.label)}</div>`).join('')}</div>
+      ${missing.length ? `<div class="card tight missing-note" style="margin-top:10px"><div class="muted" style="font-size:12px">⚠️ <b>${missing.join(', ')}쪽</b>은 쪽수표에 없어요. 저장은 되지만 채점하려면 <b>⚙️ 관리 → 쪽수표 → 쪽 추가</b>에서 그 쪽 문제번호를 넣어 주세요.</div></div>` : ''}
       <button class="btn btn-primary btn-block" style="margin-top:14px" data-act="saveLesson">이 쪽수로 저장</button>
     `);
   }
@@ -1785,8 +1902,9 @@ window.EMA = window.EMA || {};
              <div class="s">푼 흔적이 보이면 돼요. 다 맞지 않아도 괜찮아요.</div>
            </button>`}
       <button class="btn btn-primary btn-block" style="margin-top:14px" data-act="submitYesterday">어제분 올리기 (⏰)</button>
+      <div class="privacy-note">📖 문제집 페이지만 찍어요! 얼굴, 방, 이름표 등 개인정보가 나오지 않도록 주의해주세요.</div>
 
-      <input type="file" class="photo-input" data-target="yesterday" accept="image/*" capture="environment" aria-hidden="true">
+      <input type="file" class="photo-input" data-target="yesterday" accept="image/*" aria-hidden="true">
     `);
   }
 
@@ -1808,7 +1926,14 @@ window.EMA = window.EMA || {};
     const ph = sub ? store.photo(sub.photoId) : null;
     const s = store.student(cid, sid);
     const who = esc((s && (s.nickname || s.name)) || '풀이');
-    if (!ph) return sheetWrap('📸 ' + who + ' 풀이', '<div class="empty">사진이 없어요</div>');
+    const teacher = view.role === 'teacher';
+    if (!ph) {
+      const gone = !!(sub && (sub.photoId || sub.photoSubmitted));
+      return sheetWrap('📸 ' + who + ' 풀이', `
+        <div class="empty">${gone ? '사진은 보관 기간(7일)이 지나 앱에서 지웠어요.<br><small>제출 시각·채점·사진 제출 여부 기록은 그대로 남아 있어요.</small>' : '사진이 없어요'}</div>
+        <div class="hint center" style="margin-top:10px">${sub && sub.at ? '제출 ' + esc(sub.at) : '제출 기록 없음'}${sub && sub.photoAt ? ' · 사진 ' + esc(sub.photoAt) : ''}</div>
+      `);
+    }
     const v = (sub && sub.verify) || null;
     const meta = [v ? '🎲 ' + esc(v.book || '') + ' ' + esc(v.page || '') + '쪽' : '', view.bigPhotoAt ? esc(view.bigPhotoAt) + ' 제출' : ''].filter(Boolean).join(' · ');
     return sheetWrap('📸 ' + who + ' 풀이', `
@@ -1817,6 +1942,8 @@ window.EMA = window.EMA || {};
         <img class="fp-img" src="${ph.data}" alt="${who} 풀이 사진">
         ${sub && sub.stampAt ? `<div class="fp-nm">✅ 도장 ${esc(sub.stampAt)}</div>` : ''}
       </div>
+      ${teacher ? `<button class="btn btn-danger btn-block" style="margin-top:12px" data-act="deletePhoto" data-sid="${esc(sid)}">🗑 이 사진 지우기 (선생님 확인 후)</button>
+        <div class="hint center" style="margin-top:8px">확인 후 지우면 다시 볼 수 없어요. 제출·채점 기록은 남습니다. 7일이 지나면 자동으로 지워집니다.</div>` : ''}
     `, { full: true });
   }
 
@@ -1856,7 +1983,19 @@ window.EMA = window.EMA || {};
       inp.addEventListener('input', () => {
         if (inp.id === 'nickInput') view.pending.nickname = inp.value;
         if (inp.id === 'pmInput') view.pmInput = inp.value;
-        if (inp.id === 'pageInput') view.lessonEditPages = inp.value;
+        if (inp.id === 'pageInput') {
+          view.lessonEditPages = inp.value;
+          if (view.sheet === 'lessonEdit') {
+            // 저장 전에 '?쪽' 경고·미리보기가 바로 보이도록 (입력이 멈추면 한 번 다시 그림)
+            clearTimeout(view._pgT);
+            view._pgT = setTimeout(() => {
+              if (view.sheet !== 'lessonEdit') return;
+              render();
+              const el = document.querySelector('#pageInput');
+              if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) { } }
+            }, 400);
+          }
+        }
         if (inp.id === 'printInput') view.printInput = inp.value;
       });
     });
@@ -1908,25 +2047,28 @@ window.EMA = window.EMA || {};
   }
 
   function currentPinVerify() {
-    if (view.pinTarget === 'teacher') {
-      if (view.pin === store.state.teacherPin) {
-        view.role = 'teacher'; view.teacherTab = 'today'; view.sheet = null; view.flow = null;
-        view.classId = view.classId || 'c4m2';
-        store.setSession({ role: 'teacher', classId: view.classId });
-        EMA.ui.sound('levelup');
-        EMA.ui.toast('선생님 모드로 들어왔어요');
-        render();
-        return;
-      }
-      EMA.ui.toast('선생님 PIN이 달라요');
-      EMA.ui.sound('wrong');
-    } else {
-      const s = store.student(view.classId, view.studentId);
-      if (s && s.pin === view.pin) { afterLoginStudent(view.classId, view.studentId); return; }
-      EMA.ui.toast('PIN이 달라요. 선생님께 물어보세요!');
-      EMA.ui.sound('wrong');
-    }
+    const s = store.student(view.classId, view.studentId);
+    if (s && s.pin === view.pin) { afterLoginStudent(view.classId, view.studentId); return; }
+    EMA.ui.toast('PIN이 달라요. 선생님께 물어보세요!');
+    EMA.ui.sound('wrong');
     view.pin = '';
+    render();
+  }
+
+  /** 선생님 모드로 들어가기 (세션 12시간) */
+  function enterTeacher() {
+    view.role = 'teacher';
+    view.teacherTab = 'today';
+    view.flow = null;
+    view.sheet = null;
+    view.pin = '';
+    view.pinTarget = 'student';
+    view.step = 'class';
+    const cid = view.classId || (store.classes()[0] || {}).id || null;
+    view.classId = cid;
+    store.setSession({ role: 'teacher', classId: cid });
+    EMA.ui.sound('levelup');
+    view.resetScroll = true;
     render();
   }
 
@@ -1953,9 +2095,10 @@ window.EMA = window.EMA || {};
     },
     back() {
       if (view.role === 'login') {
-        if (view.step === 'pin') view.step = view.pinTarget === 'teacher' ? 'class' : 'student';
+        if (view.step === 'pin') view.step = 'student';
         else if (view.step === 'student') view.step = 'class';
-        else if (view.step === 'teacherPin') view.step = 'class';
+        else if (view.step === 'teacherRecover') view.step = 'teacherPin';
+        else if (view.step === 'teacherSetup' || view.step === 'teacherSetup2' || view.step === 'teacherPin') view.step = 'class';
         view.pin = ''; view.pinTarget = 'student';
       }
       view.resetScroll = true; render();
@@ -1965,26 +2108,93 @@ window.EMA = window.EMA || {};
       view.resetScroll = true; EMA.ui.sound('tap'); render();
     },
     pinKey(d) {
-      if (view.pin.length >= 4) return;
+      const teacher = view.pinTarget === 'teacher' || view.step === 'teacherSetup' || view.step === 'teacherSetup2';
+      const max = teacher ? MAX_TEACHER_PIN : 4;
+      if (view.pin.length >= max) return;
       view.pin += d.k;
       EMA.ui.sound('tap');
-      if (view.pin.length === 4) { render(); setTimeout(currentPinVerify, 120); return; }
+      if (!teacher && view.pin.length === 4) { render(); setTimeout(currentPinVerify, 120); return; }
       render();
     },
     pinDel() { view.pin = view.pin.slice(0, -1); render(); },
     pinBack() { view.pin = ''; render(); },
     teacherEntry() {
-      view.pinTarget = 'teacher'; view.step = 'teacherPin'; view.pin = '';
+      view.pinTarget = 'teacher'; view.pin = ''; view.newPin1 = '';
+      view.step = (window.EMA.auth && EMA.auth.needsSetup()) ? 'teacherSetup' : 'teacherPin';
       if (view.role !== 'login') view.role = 'login';
       view.sheet = null;
       view.resetScroll = true; render();
+    },
+    /* ---- 선생님 PIN 첫 설정 (4~6자리 → 해시 저장 → 비상 복구 키 1회 안내) ---- */
+    confirmTeacherSetup1() {
+      if (!/^\d{4,6}$/.test(view.pin)) { EMA.ui.toast('숫자 ' + MIN_TEACHER_PIN + '~' + MAX_TEACHER_PIN + '자리로 정해 주세요'); return; }
+      view.newPin1 = view.pin;
+      view.pin = '';
+      view.step = 'teacherSetup2';
+      EMA.ui.sound('tap');
+      render();
+    },
+    async confirmTeacherSetup2() {
+      if (!/^\d{4,6}$/.test(view.pin)) { EMA.ui.toast('숫자 ' + MIN_TEACHER_PIN + '~' + MAX_TEACHER_PIN + '자리로 정해 주세요'); return; }
+      if (view.pin !== view.newPin1) {
+        EMA.ui.toast('두 번 누른 PIN이 달라요. 처음부터 다시 해 주세요');
+        EMA.ui.sound('wrong');
+        view.pin = ''; view.newPin1 = ''; view.step = 'teacherSetup';
+        render();
+        return;
+      }
+      await EMA.auth.setPin(view.pin);
+      view.recoveryCode = await EMA.auth.issueRecovery();
+      view.newPin1 = '';
+      enterTeacher();
+      view.sheet = 'recovery';
+      render();
+    },
+    async teacherPinOk() {
+      if (view.pin.length < MIN_TEACHER_PIN) return;
+      const ok = await EMA.auth.verifyPin(view.pin);
+      if (!ok) {
+        EMA.ui.toast('선생님 PIN이 달라요');
+        EMA.ui.sound('wrong');
+        view.pin = '';
+        render();
+        return;
+      }
+      enterTeacher();
+      EMA.ui.toast('선생님 모드로 들어왔어요');
+    },
+    teacherRecoverOpen() {
+      view.step = 'teacherRecover';
+      view.pin = '';
+      view.resetScroll = true;
+      render();
+    },
+    async teacherRecoverSave() {
+      const code = (document.querySelector('#recoverInput') || {}).value || '';
+      const pin = (document.querySelector('#recoverPin') || {}).value || '';
+      if (!/^\d{4,6}$/.test(pin)) { EMA.ui.toast('새 PIN을 숫자 ' + MIN_TEACHER_PIN + '~' + MAX_TEACHER_PIN + '자리로 정해 주세요'); return; }
+      const r = await EMA.auth.resetWithRecovery(code, pin);
+      if (r.error) { EMA.ui.toast(r.error); EMA.ui.sound('wrong'); return; }
+      view.recoveryCode = r.recovery;
+      enterTeacher();
+      view.sheet = 'recovery';
+      render();
+    },
+    closeRecovery() {
+      view.recoveryCode = '';
+      view.sheet = null;
+      render();
+    },
+    copyRecovery() {
+      const ok = EMA.ui.copy(view.recoveryCode || '');
+      EMA.ui.toast(ok ? '복구 키를 복사했어요 · 안전한 곳에 적어 두세요' : '복구 키를 길게 눌러 직접 적어 주세요', 3000);
     },
     teacherExit() {
       view.role = 'login'; view.step = 'class'; view.pin = ''; view.pinTarget = 'student';
       store.setSession(null); view.resetScroll = true; render();
     },
     tab(d) { view.tab = d.tab; view.sheet = null; view.flow = null; saveDraft(); view.resetScroll = true; EMA.ui.sound('tap'); render(); },
-    homeTab(d) { view.homeTab = d.t; view.sheet = null; saveDraft(); view.resetScroll = true; EMA.ui.sound('tap'); render(); },
+    homeTab(d) { view.homeTab = d.t; view.sheet = null; view.flow = null; saveDraft(); view.resetScroll = true; EMA.ui.sound('tap'); render(); },
     teacherTab(d) { view.teacherTab = d.t; view.sheet = null; view.resetScroll = true; EMA.ui.sound('tap'); render(); },
 
     /* ---- 채점 동선 ---- */
@@ -2184,19 +2394,33 @@ window.EMA = window.EMA || {};
       const up = store.reuploadInfo(cid, sid, kind);
       const locked = !!(sub && existingPhoto && !up.ok);
 
+      // 도장 보호 — 선생님이 확인한 제출은 아이가 저장해도 도장이 지워지지 않습니다
+      if (sub && (sub.stampAt || sub.status === 'stamped')) {
+        EMA.ui.toast('선생님이 도장을 찍은 제출이에요. 고친 내용은 선생님께 직접 말해 주세요', 3200);
+        EMA.ui.sound('tap');
+        return;
+      }
+
       if (sub && existingPhoto && up.ok && view.pending.photo) {
         // 1시간 안 사진 교체 — 보상은 그대로
-        const r = store.reuploadPhoto(cid, sid, view.pending.photo, kind);
+        const r = await store.reuploadPhoto(cid, sid, view.pending.photo, kind);
         if (r.error) { EMA.ui.toast(r.error); EMA.ui.sound('wrong'); return; }
+        if (r.photoError) EMA.ui.toast('사진 저장에 문제가 있어요. 다시 한 번 시도해 주세요', 3200);
         view.lastResult = { coins: 0, xp: 0, reupload: true };
         view.pending.photo = null;
         saveDraft();
       } else if (!locked) {
         if (!view.pending.photo && !existingPhoto) { EMA.ui.toast('사진을 먼저 올려 주세요 📷'); return; }
-        const r = view.pending.photo
-          ? store.submitPhoto(cid, sid, view.pending.photo, kind)
-          : (store.touchSubmission(cid, sid, kind), store.previewReward(cid, sid, kind));
+        let r;
+        if (view.pending.photo) {
+          r = await store.submitPhoto(cid, sid, view.pending.photo, kind);
+        } else {
+          const saved = store.touchSubmission(cid, sid, kind);
+          r = saved ? store.previewReward(cid, sid, kind) : { coins: 0, xp: 0 };
+          if (!saved) { EMA.ui.toast('저장하지 못했어요. 다시 시도해 주세요'); return; }
+        }
         view.lastResult = r;
+        if (r && r.photoError) EMA.ui.toast('사진 저장에 문제가 있어요. 선생님께 알려 주세요', 3600);
         const items = [];
         if (r && r.titles && r.titles.length) {
           r.titles.forEach(t => items.push({ kind: 'title', em: t.em || '🏅', title: t.name + ' 획득!', sub: '새 칭호가 열렸어요', sfx: 'fanfare' }));
@@ -2306,10 +2530,10 @@ window.EMA = window.EMA || {};
 
     /* ---- 어제분 ---- */
     yesterday() { view.sheet = 'yesterday'; view.pending.yphoto = null; render(); },
-    submitYesterday() {
+    async submitYesterday() {
       const cid = view.classId, sid = view.studentId;
       if (!view.pending.yphoto) { EMA.ui.toast('어제 푼 사진을 먼저 올려 주세요 📷'); return; }
-      store.submitYesterday(cid, sid, view.pending.yphoto, MIN);
+      await store.submitYesterday(cid, sid, view.pending.yphoto, MIN);
       view.pending.yphoto = null; view.sheet = null;
       EMA.ui.sound('fanfare');
       view.resetScroll = true;
@@ -2318,15 +2542,34 @@ window.EMA = window.EMA || {};
       EMA.ui.toast('어제 불꽃을 살렸어요! 🔥');
     },
 
-    /* ---- 밀린문제 해결 ---- */
+    /* ---- 밀린문제: ⭕ 맞았어요 / ❌ 틀렸어요 ---- */
     resolveCarry(d) {
       const r = store.resolveCarried(view.classId, view.studentId, d.id);
       if (!r) return;
-      EMA.ui.sound('crit');
+      view.carryWhy = null;
+      EMA.ui.sound(r.skip ? 'coin' : 'crit');
       render();
-      EMA.ui.fx.celebrate({ kind: 'title', em: '⚔️', title: '해결!', sub: `+5코인 · +10 XP · 🥚→🐾 펫 알 부화!`, ms: 1600 });
-      EMA.ui.toast('밀린문제 하나 해결! ⚔️');
+      const sub = r.skip
+        ? '안 푼 문제라 코인 +1만 들어요'
+        : `+${r.coins}코인 · +${r.xp} XP${r.join && r.join.pet ? ' · 🥚→🐾 펫 알 부화!' : ''}`;
+      EMA.ui.fx.celebrate({ kind: 'title', em: r.skip ? '✅' : '⚔️', title: '해결!', sub, ms: 1700 });
+      if (r.join && r.join.pet) EMA.ui.sound('hatch');
+      EMA.ui.toast(r.capped ? '해결! 오늘 정식 보상 5개를 넘어 코인 1개만 들어요' : r.skip ? '해결! 안 푼 문제는 코인 1개만 들어요' : '밀린문제 하나 해결! ⚔️');
       if (r.killed && r.killed.boss) setTimeout(() => { EMA.ui.fx.celebrate({ kind: 'boss', em: '🏆', title: '보스 처치!', sub: '반 전원 보너스 코인 30개', ms: 2200 }); EMA.ui.sound('bossdown'); }, 1800);
+    },
+    /* ❌ 틀렸어요 → 이유를 골라야 하고, 문제는 목록에 그대로 남습니다 */
+    carryWrong(d) {
+      view.carryWhy = view.carryWhy === d.id ? null : d.id;
+      EMA.ui.sound('tap');
+      render();
+      if (view.carryWhy) EMA.ui.toast('왜 틀렸는지 하나 골라 주세요 (문제는 다시 도전 목록에 남아요)');
+    },
+    carryWhySet(d) {
+      const item = store.retryCarried(view.classId, view.studentId, d.id, d.t);
+      view.carryWhy = null;
+      EMA.ui.sound('tap');
+      render();
+      if (item) EMA.ui.toast('이유를 적어 두고 다시 도전 목록에 남겼어요 · 다음에 또 풀어 봐요 💪');
     },
 
     /* ---- 프로필 ---- */
@@ -2371,11 +2614,12 @@ window.EMA = window.EMA || {};
       render();
     },
     async resetDemo() {
-      if (!confirm('시제품 데이터를 처음 상태로 되돌릴까요? (연습 기록이 지워져요)')) return;
+      if (!confirm('이 기기의 기록을 처음(예시) 상태로 되돌릴까요?\n\n지금 데이터는 이 기기에 백업해 둔 뒤 새로 시작합니다.')) return;
       if (store.reset) await store.reset();
       clearDraft();
       view.role = 'login'; view.step = 'class'; view.sheet = null; view.flow = null; view.resetScroll = true;
       render();
+      EMA.ui.toast('처음 상태로 되돌렸어요 · 지금 데이터는 백업해 두었습니다');
     },
 
     /* ---- 선생님 ---- */
@@ -2523,6 +2767,43 @@ window.EMA = window.EMA || {};
       if (d.k === 'legend' || d.k === 'boss') EMA.ui.fx.confetti(90);
     },
     revealPin(d) { view.pinReveal = view.pinReveal === d.id ? null : d.id; render(); },
+    /** 학생 PIN 초기화 — 한 번에 1234로 */
+    resetStudentPin(d) {
+      const s = store.student(view.classId, d.id);
+      if (!s) return;
+      s.pin = '1234';
+      store.save();
+      view.pinReveal = d.id;
+      EMA.ui.sound('coin');
+      EMA.ui.toast(`${s.name} PIN을 1234로 초기화했어요`);
+      render();
+    },
+    /** 선생님 확인 후 사진 지우기 (제출·채점 기록은 남김) */
+    async deletePhoto(d) {
+      const sid = d.sid || view.bigPhotoSid;
+      const sub = store.submission(view.classId, sid) || store.submission(view.classId, sid, null, 'print');
+      if (!sub || !sub.photoId) { EMA.ui.toast('지울 사진이 없어요'); return; }
+      if (!confirm('이 사진을 앱에서 지울까요? 제출·채점 기록은 그대로 남습니다.')) return;
+      await store.deletePhoto(sub.photoId);
+      sub.photoDeleted = true;
+      sub.photoDeletedAt = store.state.today;
+      store.save();
+      view.sheet = null;
+      EMA.ui.toast('사진을 지웠어요 · 제출 기록은 그대로예요');
+      render();
+    },
+    pmAddPage() {
+      const v = (document.querySelector('#pmNewPage') || {}).value || '';
+      const p = parseInt(v, 10);
+      if (!p || p < 1 || p > 999) { EMA.ui.toast('쪽 번호를 숫자로 넣어 주세요 (예: 56)'); return; }
+      const book = view.pmBook || (store.books(view.classId)[0] || {}).book || store.bookList()[0];
+      view.pmBook = book;
+      view.pmPage = p;
+      const hit = store.pageInfo(book, p);
+      view.pmInput = hit ? hit.문제.join(', ') : '';
+      view.sheet = 'pmpage';
+      render();
+    },
     regenPin(d) {
       const pin = store.regenPin(view.classId, d.id);
       view.pinReveal = d.id;
@@ -2559,35 +2840,47 @@ window.EMA = window.EMA || {};
     },
     lessonBook(d) { view.lessonEditBook = d.b; view.lessonEditPages = null; render(); },
     saveLesson() {
-      const l = store.lesson(view.classId);
       const raw = view.lessonEditPages || '';
-      let pages = [];
-      String(raw).split(',').map(s => s.trim()).filter(Boolean).forEach(part => {
-        const m = part.match(/^(\d+)\s*[~-]\s*(\d+)$/);
-        if (m) { const a = +m[1], b = +m[2]; for (let i = Math.min(a, b); i <= Math.max(a, b); i++) pages.push(i); }
-        else if (/^\d+$/.test(part)) pages.push(+part);
-      });
-      if (!pages.length) { EMA.ui.toast('쪽수를 숫자로 적어 주세요 (예: 8~10)'); return; }
+      const pages = EMA.util.parsePages(raw);
+      if (!pages.length) { EMA.ui.toast('쪽수를 숫자로 적어 주세요 (예: 8-10, 12쪽)'); return; }
       const book = view.lessonEditBook || (store.books(view.classId)[0] || {}).book;
       const tiles = store.tilesOf(book, pages);
+      const missing = pages.filter(p => !store.pageInfo(book, p));
       const books = store.books(view.classId).map(b => b.book === book ? { book, pages } : b);
       if (!books.find(b => b.book === book)) books.push({ book, pages });
       store.saveLesson(view.classId, {
         books,
-        homework: books.map(b => b.book + ' ' + (b.pages.length > 1 ? b.pages[0] + '~' + b.pages[b.pages.length - 1] : b.pages[0]) + '쪽').join(', ')
+        homework: books.map(b => b.book + ' ' + (b.pages.length > 1 ? b.pages[0] + '-' + b.pages[b.pages.length - 1] : b.pages[0]) + '쪽').join(', ')
       });
       view.sheet = null;
-      EMA.ui.toast(`${book} ${pages.join(',')}쪽 → 문제 ${tiles.length}개로 바꿨어요`);
+      EMA.ui.toast(missing.length
+        ? `${book} ${pages.join(', ')}쪽 → 문제 ${tiles.length}개 (${missing.join(', ')}쪽은 쪽수표에 없어 ?로 나와요)`
+        : `${book} ${pages.join(', ')}쪽 → 문제 ${tiles.length}개로 바꿨어요`, 3400);
       render();
     }
   };
 
+  /* 두 번 누르면 두 번 결제되는 사고를 막는 클릭 잠금 — 채점(⭕/❌)은 일부로 제외 */
+  const LOCK_MS = {
+    buy: 600, feed: 600, growCompanion: 600, useClaim: 600,
+    submit: 1000, stamp: 700, stampAll: 1000, resolveCarry: 600,
+    deletePhoto: 800, savePrint: 400, teacherPinOk: 900, confirmTeacherSetup2: 1000
+  };
+  const lockedAt = {};
+
   document.addEventListener('click', e => {
     const el = e.target.closest('[data-act]');
     if (!el) return;
-    const fn = actions[el.dataset.act];
+    const act = el.dataset.act;
+    const fn = actions[act];
     if (!fn) return;
     e.preventDefault();
+    const ms = LOCK_MS[act];
+    if (ms) {
+      const now = Date.now();
+      if (lockedAt[act] && now - lockedAt[act] < ms) return;   // 연타 → 한 번만 처리
+      lockedAt[act] = now;
+    }
     fn(el.dataset, el);
   });
 
@@ -2601,9 +2894,11 @@ window.EMA = window.EMA || {};
   async function boot() {
     try {
       const qs = new URLSearchParams(location.search);
-      window.EMA_CONFIG = Object.assign({ mode: 'local', apiUrl: '' }, window.EMA_CONFIG || {});
+      window.EMA_CONFIG = Object.assign({ mode: 'local', apiUrl: '', demo: false }, window.EMA_CONFIG || {});
       if (qs.get('mode')) window.EMA_CONFIG.mode = qs.get('mode');
       if (qs.get('api')) window.EMA_CONFIG.apiUrl = qs.get('api');
+      // ?mode=demo → 연습용 저장칸(운영 데이터와 완전히 분리)
+      window.EMA_CONFIG.demo = (qs.get('mode') === 'demo') || qs.get('demo') === '1';
     } catch (e) { }
     store = EMA.createStore();
     EMA.store = store;
@@ -2614,14 +2909,22 @@ window.EMA = window.EMA || {};
         <div class="card"><b>기록을 불러오지 못했어요.</b><div class="muted">${esc(err.message)}<br>학생 기록은 기기에 저장돼 있으니, 새로고침하면 이어집니다. (${store.mode === 'api' ? '시트 연결 확인 필요' : '테스트 모드'})</div></div></div>`;
       return;
     }
-    // 예시 제출 사진 만들기 (한 번만)
-    const cid = 'c4m2';
-    const lesson = store.lesson(cid) || {};
-    store.classDay(cid).forEach(r => {
-      if (r.sub && r.sub.photoId && !store.photo(r.sub.photoId)) {
-        store.putPhoto(r.sub.photoId, EMA.ui.fakePhoto(r.student.name, (r.sub.verify && r.sub.verify.book) || lesson.book || '6-1 발전책'), r.student.id);
+    // 예시 제출 사진(문제집 모양 가짜 사진) — '예시 데이터'의 예시 제출에만. 실제 제출 사진을 지어내지 않습니다.
+    try {
+      const cid = 'c4m2';
+      const isDemo = !!(store.state.meta && store.state.meta.demo);
+      if (isDemo && store.getClass(cid)) {
+        const lesson = store.lesson(cid) || {};
+        const jobs = [];
+        store.classDay(cid).forEach(r => {
+          const pid = r.sub && r.sub.photoId;
+          if (pid && /^p_/.test(pid) && !store.photo(pid)) {
+            jobs.push(store.putPhoto(pid, EMA.ui.fakePhoto(r.student.name, (r.sub.verify && r.sub.verify.book) || lesson.book || '6-1 발전책'), r.student.id));
+          }
+        });
+        if (jobs.length) await Promise.all(jobs);
       }
-    });
+    } catch (e) { }
 
     const s = store.session();
     if (s && s.role === 'student' && store.student(s.classId, s.studentId)) {
@@ -2641,6 +2944,16 @@ window.EMA = window.EMA || {};
       view.role = 'login';
     }
     render();
+
+    // 선생님 세션 12시간 — 앱을 켜 둔 채 지나도 다시 PIN을 묻게
+    setInterval(() => {
+      if (view.role === 'teacher' && !store.session()) {
+        view.role = 'login'; view.step = 'class'; view.pin = ''; view.pinTarget = 'student';
+        view.sheet = null; view.flow = null;
+        if (EMA.ui) EMA.ui.toast('보안을 위해 12시간이 지나 다시 로그인해야 해요', 3600);
+        render();
+      }
+    }, 60000);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

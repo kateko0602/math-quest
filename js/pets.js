@@ -38,9 +38,9 @@ window.EMA_GAME = {
     { id: 'infturtle',name: '무한 거북',        rarity: 'legend', em: '🐢', tag: '∞',        line: '끝까지 가면 무한이 나와요' }
   ],
   rarity: {
-    common: { label: '일반', rate: 70, color: '#5B7A99', badge: '#EAF1F8' },
-    rare:   { label: '희귀', rate: 25, color: '#7C5CD6', badge: '#F0EAFF' },
-    legend: { label: '전설', rate: 5,  color: '#C98908', badge: '#FFF3D2' }
+    common: { label: '일반', rate: 78, color: '#5B7A99', badge: '#EAF1F8' },
+    rare:   { label: '희귀', rate: 19, color: '#7C5CD6', badge: '#F0EAFF' },
+    legend: { label: '전설', rate: 3,  color: '#C98908', badge: '#FFF3D2' }
   },
 
   /* ---------- 미니 상점 ----------
@@ -49,14 +49,14 @@ window.EMA_GAME = {
   shop: [
     { id: 'cookie', em: '🍪', name: '미니 쿠키',   price: 10,  kind: 'snack', pct: 10,
       desc: '펫 알 +10%' },
-    { id: 'potion', em: '⚡', name: '응원 포션',   price: 15,  kind: 'potion', dmg: 5,
-      desc: '보스 HP -5%' },
+    { id: 'potion', em: '⚡', name: '응원 포션',   price: 20,  kind: 'potion', dmg: 3,
+      desc: '보스 HP -3%' },
     { id: 'snack',  em: '🍎', name: '펫 간식',     price: 20,  kind: 'snack', pct: 25,
       desc: '펫 알 +25% · 펫 키우기' },
     { id: 'egg',    em: '🥚', name: '펫 알',       price: 60,  kind: 'egg',
       desc: '새 펫이 나와요' },
-    { id: 'bomb',   em: '💣', name: '보스 폭탄',   price: 80,  kind: 'bomb',
-      desc: '보스 HP -15%' },
+    { id: 'bomb',   em: '💣', name: '보스 폭탄',   price: 150, kind: 'bomb',
+      desc: '보스 HP -8%' },
     { id: 'shield', em: '🛡️', name: '불꽃 방어권', price: 120, kind: 'shield',
       desc: '불꽃 1회 보호' },
     /* 현실 보상은 '코인 → 간식·특권'으로만 통일 (칭찬스티커는 없앴어요) */

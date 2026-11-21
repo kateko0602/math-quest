@@ -5,5 +5,6 @@ window.EMA_CONFIG = {
   mode: 'local',
   apiUrl: '',                 // 예: 'https://script.google.com/macros/s/AKfy.../exec'
   classId: 'c4m2',            // 시범 반: 초6 심화반
-  version: '0.5 (시제품 · 숫자 왕국 구출 대작전)'
+  demo: false,                // true(?mode=demo)면 연습용 저장칸(ema.state.demo.v5)을 씁니다
+  version: '0.8'
 };

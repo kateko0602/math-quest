@@ -1,8 +1,10 @@
-/* 시제품 예시 데이터 v0.4 — 관리시트의 반 구조를 따릅니다.
+/* 예시 데이터 v0.8 — 관리시트의 반 구조를 따릅니다.
    (초6 심화반 5명 · 시트 🏫 반·학생 / 📖 진도·숙제 기준 · v0.5 펫 알·펫 도감 모델)
 
-   예시 데이터는 "실제로 아이들이 며칠 써 본 반"처럼 보이도록
-   날짜별 불꽃 기록·오답·밀린문제·동료를 자연스럽게 흩어 놓았습니다.
+   ★ 이 파일은 '연습용 예시 데이터'입니다 (meta.demo = true).
+     · 앱 주소에 ?mode=demo 를 붙이면 실제 운영 칸과 완전히 다른 저장칸에 쌓입니다.
+     · 날짜가 바뀌어도 이 데이터를 다시 만들지 않습니다 (store.js _rollForward).
+     · 선생님 PIN은 여기에 없습니다 — 첫 접속 때 직접 정하고 해시로만 저장합니다(auth.js).
 */
 window.EMA = window.EMA || {};
 (function () {
@@ -124,8 +126,8 @@ window.EMA = window.EMA || {};
     const lessons = {
       c4m2: {
         date: T,
-        lesson: '6-1 발전책 : 분수의 나눗셈 (8~9쪽) · 응용심화 6쪽',
-        homework: '6-1 발전책 8~10쪽, 6-1 응용심화책 6~7쪽',
+        lesson: '6-1 발전책 : 분수의 나눗셈 (8-9쪽) · 응용심화 6쪽',
+        homework: '6-1 발전책 8-10쪽, 6-1 응용심화책 6-7쪽',
         books: [
           { book: '6-1 발전책', pages: [8, 9, 10] },
           { book: '6-1 응용심화책', pages: [6, 7] }
@@ -146,8 +148,8 @@ window.EMA = window.EMA || {};
             { book: '6-1 발전책', pages: [6, 7] },
             { book: '6-1 응용심화책', pages: [4, 5] }
           ],
-          lesson: '6-1 발전책 : 분수의 나눗셈 (6~7쪽) · 응용심화 4~5쪽',
-          homework: '6-1 발전책 6~7쪽, 6-1 응용심화책 4~5쪽'
+          lesson: '6-1 발전책 : 분수의 나눗셈 (6-7쪽) · 응용심화 4-5쪽',
+          homework: '6-1 발전책 6-7쪽, 6-1 응용심화책 4-5쪽'
         }
       }
     };
@@ -300,9 +302,8 @@ window.EMA = window.EMA || {};
     };
 
     return JSON.parse(JSON.stringify({
-      version: 4,
+      version: 5,
       today: T,
-      teacherPin: '2580',
       classes, lessons, dayLessons, exams,
       pageMaps: window.EMA_PAGE_MAPS || {},
       grades, submissions, history, monsters, carried, prints,
@@ -313,7 +314,7 @@ window.EMA = window.EMA || {};
       gallery: { mode: 'auto' },
       bossBoosts: {},
       bossKills: {},
-      meta: { seededAt: new Date().toISOString(), demo: true, model: 'v0.4' }
+      meta: { seededAt: new Date().toISOString(), demo: true, origin: 'seed', model: 'v0.8' }
     }));
   };
 })();
