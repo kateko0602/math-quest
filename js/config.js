@@ -4,6 +4,6 @@ window.EMA_CONFIG = {
   // 'api'   = 관리시트(GApps Script Web App)와 연결
   mode: 'local',
   apiUrl: '',                 // 예: 'https://script.google.com/macros/s/AKfy.../exec'
-  classId: 'c4m2',            // 시범 반: 초4마스터(2)
-  version: '0.2 (시제품 · ⭕/❌ 3단계)'
+  classId: 'c4m2',            // 시범 반: 초6 심화반
+  version: '0.3 (시제품 · 상점·수학 펫·보스전·효과음)'
 };
