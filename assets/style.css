@@ -479,7 +479,7 @@ b,strong{font-weight:800}
 .topbar .tbx .ttl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .icon-btn.sfx{background:#fff}
 .icon-btn.sfx.off{opacity:.55}
-.chip.coin{border:none;cursor:pointer;min-height:34px;padding:6px 11px;font-family:var(--font);font-size:12.5px}
+.chip.coin{border:none;cursor:pointer;min-height:44px;padding:8px 12px;font-family:var(--font);font-size:12.5px}
 .chip.coin i{font-style:normal;font-size:11px;color:#C98A1A;margin-left:2px}
 .chip.coin:active{transform:scale(.96)}
 
