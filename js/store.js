@@ -1,11 +1,14 @@
-/* 저장소 v0.3 — 로컬(브라우저) 모드와 시트 API 모드를 같은 인터페이스로 씁니다.
+/* 저장소 v0.4 — 로컬(브라우저) 모드와 시트 API 모드를 같은 인터페이스로 씁니다.
    로컬 모드: localStorage (지금 바로 테스트)
    API 모드  : Apps Script Web App / 모의 서버 (관리시트 연동)
 
-   v0.3 채점 모델 — 문제마다 ⭕/❌ 를 직접 고릅니다.
-     marks[키]   : 'o'(맞음) | 'x'(틀림) | 없음(미풀이 → 다음 날 밀린문제)
-     cleanup[키] : 'fixed'(⚔️ 고쳤어요) | 'star'(⭐ 또 틀림·질문) | 없음
+   v0.4 채점 모델 — 문제마다 ⭕/❌ 를 직접 고릅니다.
+     marks[키]   : 'o'(맞음) | 'x'(틀림) | 없음(미풀이 → 바로 밀린문제로)
+     cleanup[키] : 'fixed'(⚔️ 해결 → 어둠의 알 정화, 동료 합류) | 'star'(⭐ 또 틀림·질문) | 없음
+     tags[키]    : 'calc' | 'read' | 'concept' (1초 이유 태그 · 선택)
    문제 키는 교재까지 포함합니다: '6-1 발전책|8:0' (8쪽 0번째 문제)
+
+   v0.4 세계관: 틀린 문제 = 어둠의 오답 알(🥚) → 고치면 수학 동료가 합류.
 */
 window.EMA = window.EMA || {};
 (function () {
@@ -85,20 +88,44 @@ window.EMA = window.EMA || {};
       Object.keys(b.단원).forEach(u => { if (b.단원[u].쪽[String(page)]) hit = b.단원[u].쪽[String(page)]; });
       return hit;
     }
-    /** 교재 + 쪽수 → 문제 타일 목록 (키에 교재 포함) */
+    /** 교재 + 쪽수 → 문제 타일 목록 (키에 교재 포함 · 단원명까지 붙임) */
     tilesOf(bookName, pages) {
       const out = [];
+      const b = this.book(bookName);
+      const unitOf = (p) => {
+        if (!b) return '';
+        for (const u of Object.keys(b.단원 || {})) {
+          if (b.단원[u].쪽 && b.단원[u].쪽[String(p)]) return b.단원[u].이름 || '';
+        }
+        return '';
+      };
       (pages || []).forEach(p => {
         const info = this.pageInfo(bookName, p);
         if (!info) {
-          out.push({ key: tileKey(bookName, p, 0), label: '?', page: p, num: null, book: bookName, type: '표없음', missing: true });
+          out.push({ key: tileKey(bookName, p, 0), label: '?', page: p, num: null, book: bookName, type: '표없음', unitName: '', missing: true });
           return;
         }
         info.문제.forEach((num, i) => out.push({
-          key: tileKey(bookName, p, i), label: num, page: p, num, book: bookName, type: info.유형
+          key: tileKey(bookName, p, i), label: num, page: p, num, book: bookName, type: info.유형, unitName: unitOf(p)
         }));
       });
       return out;
+    }
+    /** 문제(교재·쪽)가 속한 단원 이름 — 쪽수표에 없는 쪽은 가장 가까운 단원으로 */
+    unitNameOf(bookName, page) {
+      const b = this.book(bookName);
+      if (!b) return '';
+      const p = parseInt(page, 10);
+      let best = '', bestDist = Infinity;
+      for (const u of Object.keys(b.단원 || {})) {
+        const unit = b.단원[u] || {};
+        const pages = Object.keys(unit.쪽 || {}).map(Number).sort((x, y) => x - y);
+        if (pages.indexOf(p) >= 0) return unit.이름 || '';
+        if (!pages.length) continue;
+        const d = Math.min.apply(null, pages.map(x => Math.abs(x - p)));
+        if (d < bestDist) { bestDist = d; best = unit.이름 || ''; }
+      }
+      return best;
     }
     lesson(classId) { return (this.state.lessons || {})[classId] || null; }
 
@@ -159,17 +186,19 @@ window.EMA = window.EMA || {};
     grade(classId, sid, date) {
       const d = date || this.state.today;
       const g = this.state.grades[K(classId, d, sid)];
-      if (!g) return { marks: {}, cleanup: {}, updatedAt: null };
+      if (!g) return { marks: {}, cleanup: {}, tags: {}, updatedAt: null };
       if (!g.marks) g.marks = {};
       if (!g.cleanup) g.cleanup = {};
+      if (!g.tags) g.tags = {};
       return g;
     }
     gradeOf(classId, sid, kind) {
       const k = kind === 'print' ? K(classId, this.state.today, sid) + '|print' : K(classId, this.state.today, sid);
       const g = this.state.grades[k];
-      if (!g) return { marks: {}, cleanup: {}, updatedAt: null };
+      if (!g) return { marks: {}, cleanup: {}, tags: {}, updatedAt: null };
       if (!g.marks) g.marks = {};
       if (!g.cleanup) g.cleanup = {};
+      if (!g.tags) g.tags = {};
       return g;
     }
     markOf(classId, sid, key, date) { return this.grade(classId, sid, date).marks[key] || ''; }
@@ -291,7 +320,7 @@ window.EMA = window.EMA || {};
         myShare: 0
       };
     }
-    /** 내가 깎은 HP (%) — 반 전체 데미지 중 내 몫 */
+    /** 내가 깎은 HP (%) — 반 전체 데미지 중 내 몫 + 수학 동료 공격력 보너스 */
     myDamage(classId, sid) {
       const total = (this.getClass(classId).students.length) || 1;
       const st = this.stats(classId, sid);
@@ -299,7 +328,8 @@ window.EMA = window.EMA || {};
       const row = this.submission(classId, sid);
       const stampPt = (row && row.stampAt) ? 0.8 / total : 0;
       const fixedPt = Math.min(0.2, ((st.c3 + p.c3) / (total * 3)) * 0.2);
-      return Math.round((stampPt + fixedPt) * 100 * 10) / 10;
+      const compPt = Math.min(0.015, this.companionPower(classId, sid) * 0.001); // 동료 최대 +1.5%p
+      return Math.round((stampPt + fixedPt + compPt) * 100 * 10) / 10;
     }
     myBombShare(classId, sid) {
       const st = this.student(classId, sid);
@@ -493,6 +523,122 @@ window.EMA = window.EMA || {};
       return ((this.state.shop && this.state.shop.claims) || []).filter(c => c.sid === sid && c.cid === classId);
     }
 
+    /* ---------- 수학 동료 (v0.4 세계관) ---------- */
+    /** 동료 공격력 — 동료 수 + 성장(lv) 합계, 최대 15 */
+    companionPower(classId, sid) {
+      const pets = this.myPets(classId, sid);
+      let p = 0;
+      pets.forEach(x => { p += Math.max(1, Math.min(3, x.lv || 1)); });
+      return Math.min(15, p);
+    }
+    /** 보스에게 주는 동료 보너스 (%) — 화면 표시용 */
+    companionPct(classId, sid) {
+      return Math.round(this.companionPower(classId, sid) * 1.5);
+    }
+    /** 지금 화면에 보여 줄 '어둠의 오답 알' — 오늘 안 고친 ❌ + 밀린문제 */
+    darkEggs(classId, sid) {
+      const out = [];
+      const g = this.grade(classId, sid);
+      this.tiles(classId).forEach(t => {
+        if (g.marks[t.key] !== 'x' || g.cleanup[t.key] === 'fixed') return;
+        out.push({
+          id: 'today_' + t.key, key: t.key, book: t.book, page: t.page, num: t.num,
+          label: (t.page + '쪽 ' + t.num + '번'), unitName: t.unitName || this.unitNameOf(t.book, t.page),
+          date: this.state.today, today: true, reason: g.cleanup[t.key] === 'star' ? 'star' : 'x',
+          name: this.monsterOf(t.page + '쪽 ' + t.num + '번').name
+        });
+      });
+      this.carried(classId, sid).forEach(m => {
+        out.push(Object.assign({}, m, { reason: m.reason || 'x' }));
+      });
+      return out;
+    }
+    /** 지금까지 정화한 알 수 (동료가 된 알 + 밀린문제 해결) */
+    purifiedCount(classId, sid) {
+      const mons = (this.state.monsters[sid] || []).filter(m => m.captured).length;
+      return mons + this.solvedCarried(sid).length;
+    }
+
+    /** 📊 약점 단원 & 실수 패턴 리포트 (아이·선생님 공통) */
+    weakReport(classId, sid) {
+      const wrongByUnit = {}, fixByUnit = {};
+      const add = (book, page, fixed) => {
+        const u = this.unitNameOf(book, page) || book || '기타';
+        wrongByUnit[u] = (wrongByUnit[u] || 0) + 1;
+        if (fixed) fixByUnit[u] = (fixByUnit[u] || 0) + 1;
+      };
+      const g = this.grade(classId, sid);
+      this.tiles(classId).forEach(t => {
+        if (g.marks[t.key] !== 'x') return;
+        add(t.book, t.page, g.cleanup[t.key] === 'fixed');
+      });
+      ((this.state.carried || {})[sid] || []).forEach(m => add(m.book, m.page, false));
+      ((this.state.solvedCarried || {})[sid] || []).forEach(m => add(m.book, m.page, true));
+      ((this.state.monsters || {})[sid] || []).forEach(m => { if (m.fromCarry) return; add(m.book, m.page, !!m.captured); });
+
+      const units = Object.keys(wrongByUnit)
+        .map(name => ({ name, wrong: wrongByUnit[name], fixed: fixByUnit[name] || 0 }))
+        .sort((a, b) => (b.wrong - a.wrong) || (b.fixed - a.fixed));
+
+      const counts = { calc: 0, read: 0, concept: 0 };
+      Object.keys(this.state.grades || {}).forEach(k => {
+        const parts = k.split('|');
+        if (parts[0] !== classId || parts[2] !== sid) return;
+        const row = this.state.grades[k];
+        Object.keys((row && row.tags) || {}).forEach(tk => { const v = row.tags[tk]; if (counts[v] != null) counts[v]++; });
+      });
+      const defs = GAME().tags || [];
+      const tagTotal = counts.calc + counts.read + counts.concept;
+      const tags = defs.map(d => ({
+        id: d.id, label: d.label, em: d.em, count: counts[d.id] || 0,
+        pct: tagTotal ? Math.round((counts[d.id] || 0) / tagTotal * 100) : 0
+      })).sort((a, b) => b.count - a.count);
+
+      const totalWrong = units.reduce((a, u) => a + u.wrong, 0);
+      return { units: units.slice(0, 3), allUnits: units, tags, tagTotal, totalWrong };
+    }
+
+    /* ---------- 친구들 풀이 공개 (v0.4 규칙) ----------
+       · 본인도 제출 완료한 학생만
+       · 수업 시작 시각 이후 (또는 선생님이 공개로 열었을 때) 만
+       · 점수·맞은 개수·좋아요는 절대 보여 주지 않는다 */
+    classStartMin(c) {
+      const m = String((c && c.time) || '').match(/(\d{1,2}):(\d{2})/);
+      return m ? (+m[1]) * 60 + (+m[2]) : null;
+    }
+    galleryInfo(classId, sid) {
+      const c = this.getClass(classId);
+      const sub = this.submission(classId, sid);
+      const mine = !!(sub && (sub.status === 'submitted' || sub.status === 'stamped'));
+      const mode = (this.state.gallery && this.state.gallery.mode) || 'auto';
+      const start = this.classStartMin(c);
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const timeOk = start == null ? true : nowMin >= start;
+      const startLabel = start == null ? '수업 시작' : (String(Math.floor(start / 60)).padStart(2, '0') + ':' + String(start % 60).padStart(2, '0'));
+      let open = true, reason = '';
+      if (!mine) { open = false; reason = 'mine'; }
+      else if (mode === 'closed') { open = false; reason = 'closed'; }
+      else if (mode === 'open') { open = true; }
+      else if (!timeOk) { open = false; reason = 'before'; }
+      return { open, reason, mine, mode, start, startLabel, timeOk };
+    }
+    setGalleryMode(mode) {
+      this.state.gallery = Object.assign({ open: null, claims: [] }, this.state.gallery || {}, { mode });
+      this.save();
+    }
+
+    /* ---------- 사진 다시 올리기 (제출 후 1시간) ---------- */
+    reuploadInfo(classId, sid, kind) {
+      const sub = this.submission(classId, sid, null, kind);
+      if (!sub) return { ok: false, mins: 0 };
+      if (sub.stampAt || sub.status === 'stamped') return { ok: false, mins: 0, stamped: true };
+      const ts = sub.ts || 0;
+      const left = ts ? (ts + 3600000 - Date.now()) : 0;
+      if (left <= 0) return { ok: false, mins: 0, expired: true };
+      return { ok: true, mins: Math.max(1, Math.ceil(left / 60000)), left };
+    }
+
     /* ---------- 성취도 리포트 (주간·월간·학기) ---------- */
     achievement(classId, sid, range) {
       const today = this.state.today;
@@ -528,7 +674,7 @@ window.EMA = window.EMA || {};
 ${a.label} 숙제 성실도는 ${a.flameDays}일 불꽃(하루 3문제 이상) · 모두 ${a.totalSolved}문제를 풀었어요.
 ${todayLine}
 단원평가: ${exTxt}
-수학 펫은 ${a.owned}마리 모았어요. 집에서도 "오늘 숙제 먼저" 습관 응원 부탁드려요! 감사합니다.`;
+수학 동료는 ${a.owned}명 모았어요. 집에서도 "오늘 숙제 먼저" 습관 응원 부탁드려요! 감사합니다.`;
     }
   }
 
@@ -565,6 +711,13 @@ ${todayLine}
       if (!st.bossBoosts) st.bossBoosts = {};
       if (!st.bossKills) st.bossKills = {};
       if (!st.shop) st.shop = { rewardsOn: true, claims: [] };
+      if (!st.gallery) st.gallery = { mode: 'auto' };
+      // v0.4 보강 — 기존 기록을 그대로 살리며 새 항목만 채운다
+      Object.keys(st.grades || {}).forEach(k => { const g = st.grades[k]; if (g && !g.tags) g.tags = {}; });
+      (st.classes || []).forEach(c => (c.students || []).forEach(s => {
+        if (!s.purified) s.purified = {};
+        s.pets = (s.pets || []).map(p => Object.assign({ lv: 1 }, p));
+      }));
       this.state = st;
       this.save();
       return this.state;
@@ -588,9 +741,10 @@ ${todayLine}
 
     gradeRow(classId, sid, kind) {
       const k = kind === 'print' ? K(classId, this.state.today, sid) + '|print' : K(classId, this.state.today, sid);
-      const g = this.state.grades[k] || (this.state.grades[k] = { marks: {}, cleanup: {}, updatedAt: null });
+      const g = this.state.grades[k] || (this.state.grades[k] = { marks: {}, cleanup: {}, tags: {}, updatedAt: null });
       if (!g.marks) g.marks = {};
       if (!g.cleanup) g.cleanup = {};
+      if (!g.tags) g.tags = {};
       return g;
     }
 
@@ -601,13 +755,26 @@ ${todayLine}
       if (!mark || g.marks[key] === mark) {
         delete g.marks[key];
         delete g.cleanup[key];
+        delete g.tags[key];
       } else {
         g.marks[key] = mark;
-        if (mark === 'o') delete g.cleanup[key];
+        if (mark === 'o') { delete g.cleanup[key]; delete g.tags[key]; }
       }
+      // 다시 채점한 문제는 '밀린문제'에서 뺀다 (오늘 넘긴 것만)
+      if (mark) this.dropTodayCarry(sid, key);
       g.updatedAt = nowHHMM();
       this.save();
       return g.marks[key] || '';
+    }
+    /** 1초 이유 태그 — 선택 사항(강제 아님) */
+    setTag(classId, sid, key, tag, kind) {
+      const g = this.gradeRow(classId, sid, kind);
+      if (g.marks[key] !== 'x') return '';
+      if (!tag || g.tags[key] === tag) delete g.tags[key];
+      else g.tags[key] = tag;
+      g.updatedAt = nowHHMM();
+      this.save();
+      return g.tags[key] || '';
     }
     markAllCorrect(classId, sid, kind, bookName) {
       const g = this.gradeRow(classId, sid, kind);
@@ -625,6 +792,103 @@ ${todayLine}
       g.updatedAt = nowHHMM();
       this.save();
       return g.cleanup[key] || '';
+    }
+
+    /* ---------- 어둠의 알 정화 → 수학 동료 합류 (v0.4) ---------- */
+    /** 같은 알을 두 번 정화하지 않습니다(seedKey 로 기억). */
+    purifyEgg(classId, sid, seedKey) {
+      const s = this.student(classId, sid);
+      if (!s) return null;
+      s.pets = s.pets || [];
+      s.purified = s.purified || {};
+      if (s.purified[seedKey]) return null;
+      const cat = (GAME().pets || []);
+      if (!cat.length) return null;
+      const owned = new Set(s.pets.map(p => p.id));
+      const h = hash(seedKey);
+      let pool = [];
+      // 알을 정화해 만나는 동료: 일반 78% · 희귀 19% · 전설 3%
+      if (h % 100 < 3) pool = cat.filter(p => p.rarity === 'legend' && !owned.has(p.id));
+      if (!pool.length && h % 100 < 22) pool = cat.filter(p => p.rarity === 'rare' && !owned.has(p.id));
+      if (!pool.length) pool = cat.filter(p => p.rarity === 'common' && !owned.has(p.id));
+      if (!pool.length) pool = cat.filter(p => !owned.has(p.id));
+      if (!pool.length) {
+        // 도감을 다 채웠으면 동료가 힘을 보태 코인을 준다
+        s.purified[seedKey] = { at: this.state.today, bonus: 5 };
+        s.coins = (s.coins || 0) + 5;
+        this.save();
+        return { coins: 5 };
+      }
+      const pick = pool[h % pool.length];
+      s.pets.push({ id: pick.id, name: pick.name, rarity: pick.rarity, em: pick.em, at: this.state.today, lv: 1, from: 'purify' });
+      s.purified[seedKey] = { at: this.state.today, petId: pick.id };
+      const titles = this._awardTitles(classId, sid, { legendary: pick.rarity === 'legend' });
+      this.save();
+      return { pet: pick, titles };
+    }
+
+    /* ---------- 밀린문제(이월) — 제출 즉시 넘기기 ---------- */
+    _addCarry(sid, item) {
+      const list = this.state.carried[sid] = this.state.carried[sid] || [];
+      item.id = item.id || ('c_' + Date.now().toString(36) + Math.floor(Math.random() * 900));
+      list.push(item);
+      return item;
+    }
+    _hasCarry(sid, date, key) {
+      const hit = list => (list || []).some(m => m.origin && m.origin.date === date && m.origin.key === key);
+      return hit(this.state.carried[sid]) || hit(this.state.solvedCarried[sid]);
+    }
+    dropTodayCarry(sid, key) {
+      const list = (this.state.carried || {})[sid] || [];
+      const i = list.findIndex(m => m.origin && m.origin.date === this.state.today && m.origin.key === key);
+      if (i < 0) return false;
+      list.splice(i, 1);
+      this.save();
+      return true;
+    }
+    /** 제출할 때 '안 누른 문제'를 바로 밀린문제로 넘깁니다 (자정 기다리지 않음) */
+    carryOverUnmarked(classId, sid, kind) {
+      if (kind === 'print') return 0;
+      const g = this.grade(classId, sid);
+      let n = 0;
+      this.tiles(classId).forEach(t => {
+        if (g.marks[t.key]) return;
+        if (this._hasCarry(sid, this.state.today, t.key)) return;
+        this._addCarry(sid, {
+          book: t.book, page: t.page, num: t.num, label: (t.page + '쪽 ' + t.num + '번'),
+          date: this.state.today, reason: 'skip', origin: { date: this.state.today, key: t.key }
+        });
+        n++;
+      });
+      if (n) this.save();
+      return n;
+    }
+    /** 테스트용: '다음 날로 넘겨보기' — 반 전원의 오늘 미풀이·안 고친 오답을 밀린문제로 */
+    nextDayPreview(classId) {
+      const c = this.getClass(classId);
+      const rows = [];
+      let total = 0;
+      c.students.forEach(s => {
+        const g = this.grade(classId, s.id);
+        let n = 0;
+        this.tiles(classId).forEach(t => {
+          const mark = g.marks[t.key];
+          if (mark === 'o') return;
+          if (mark === 'x' && g.cleanup[t.key] === 'fixed') return;
+          if (this._hasCarry(s.id, this.state.today, t.key)) return;
+          this._addCarry(s.id, {
+            book: t.book, page: t.page, num: t.num, label: (t.page + '쪽 ' + t.num + '번'),
+            date: this.state.today,
+            reason: mark === 'x' ? (g.cleanup[t.key] === 'star' ? 'star' : 'x') : 'skip',
+            origin: { date: this.state.today, key: t.key }
+          });
+          n++;
+        });
+        total += n;
+        rows.push({ student: s, added: n, total: this.carried(classId, s.id).length });
+      });
+      this.save();
+      return { rows, total };
     }
 
     /* ---------- 제출 ---------- */
@@ -689,7 +953,7 @@ ${todayLine}
       const prev = this.submission(classId, sid, null, kind);
       const already = !!(prev && prev.rewarded);
       const sub = {
-        status: 'submitted', at: nowHHMM(), photoId: pid, stampAt: null,
+        status: 'submitted', at: nowHHMM(), ts: Date.now(), photoId: pid, stampAt: null,
         verify: this.verifyTarget(classId, sid), kind: kind || 'hw',
         early: t.kind === 'early', shield: t.kind === 'shield',
         coins: already ? 0 : rw.coins, xp: already ? 0 : rw.xp, rewarded: true
@@ -697,6 +961,8 @@ ${todayLine}
       this.state.submissions[SK(classId, this.state.today, sid, kind)] = sub;
       const s = this.student(classId, sid);
       if (!already && s) { s.coins = (s.coins || 0) + rw.coins; }
+      // 안 누른 문제는 바로 밀린문제로 (v0.4)
+      const carried = this.carryOverUnmarked(classId, sid, kind);
       const st = kind === 'print' ? this.printStats(classId, sid) : this.stats(classId, sid);
       const titles = this._awardTitles(classId, sid, {
         early: t.kind === 'early',
@@ -705,7 +971,27 @@ ${todayLine}
       });
       const killed = this.checkBossKill(classId);
       this.save();
-      return Object.assign({}, rw, { sub, titles, killed, coins: already ? 0 : rw.coins, photoId: pid });
+      return Object.assign({}, rw, { sub, titles, killed, carried, coins: already ? 0 : rw.coins, photoId: pid });
+    }
+
+    /** 제출 후 1시간 안 · 선생님 도장 전이면 사진만 교체 (보상은 그대로) */
+    reuploadPhoto(classId, sid, dataUrl, kind) {
+      const info = this.reuploadInfo(classId, sid, kind);
+      if (!info.ok) return { error: info.stamped ? '선생님이 이미 도장을 찍었어요. 선생님께 말씀드려 주세요' : '사진을 바꿀 수 있는 1시간이 지났어요' };
+      const sub = this.submission(classId, sid, null, kind);
+      if (!sub) return { error: '먼저 제출해 주세요' };
+      const pid = 'ph_' + Date.now().toString(36) + Math.floor(Math.random() * 99);
+      this.state.photos[pid] = { data: dataUrl, at: nowHHMM(), owner: sid };
+      const old = sub.photoId;
+      sub.photoId = pid;
+      sub.status = 'submitted';
+      sub.stampAt = null;
+      sub.at = nowHHMM();
+      sub.ts = Date.now();
+      sub.reup = (sub.reup || 0) + 1;
+      if (old && old !== pid) { try { delete this.state.photos[old]; } catch (e) { } }
+      this.save();
+      return { ok: true, sub, mins: 60 };
     }
     touchSubmission(classId, sid, kind) {
       const k = SK(classId, this.state.today, sid, kind);
@@ -806,37 +1092,55 @@ ${todayLine}
       const rewardsOn = this.state.shop ? this.state.shop.rewardsOn !== false : true;
       if (item.kind === 'coupon' && !rewardsOn) return { error: '선생님이 현실 보상 쿠폰을 잠시 꺼 두었어요' };
       if ((s.coins || 0) < item.price) return { error: `코인이 ${item.price - s.coins}개 부족해요` };
-      if (item.kind === 'snack' && !s.egg) return { error: '먼저 랜덤 펫 알을 뽑아 주세요 🥚' };
-      if (item.kind === 'egg' && s.egg) return { error: '지금 알을 키우는 중이에요. 부화하면 새 알을 뽑을 수 있어요' };
+      const pets = (s.pets || []);
+      if (item.kind === 'snack' && !s.egg && !pets.length) return { error: '먼저 빛의 알을 뽑아 주세요 🥚' };
+      if (item.kind === 'egg' && s.egg) return { error: '이미 부화 중이에요. 부화하면 새 빛의 알을 뽑을 수 있어요' };
       s.coins -= item.price;
       const out = { item, coins: s.coins };
       if (item.kind === 'egg') {
         s.egg = { pct: 20, gotAt: this.state.today };
         out.egg = s.egg;
-        out.msg = '알을 받았어요! 간식으로 키워 보세요 🥚';
+        out.msg = '빛의 알을 받았어요! 간식으로 키우면 동료가 깨어나요 🥚';
       } else if (item.kind === 'snack') {
-        s.egg.pct = Math.min(100, (s.egg.pct || 0) + 25);
-        out.egg = s.egg;
-        if (s.egg.pct >= 100) {
-          out.hatch = this._hatch(classId, sid);
-          out.msg = out.hatch.pet.rarity === 'legend'
-            ? `전설! ${out.hatch.pet.name} 탄생! 🎉`
-            : `${out.hatch.pet.name} 부화! 도감에 등록됐어요 🎉`;
+        if (s.egg) {
+          const add = item.pct || 25;
+          s.egg.pct = Math.min(100, (s.egg.pct || 0) + add);
+          out.egg = s.egg;
+          if (s.egg.pct >= 100) {
+            out.hatch = this._hatch(classId, sid);
+            out.msg = out.hatch.pet.rarity === 'legend'
+              ? `전설! ${out.hatch.pet.name} 동료가 깨어났어요! 🎉`
+              : `${out.hatch.pet.name} 동료가 깨어났어요! 도감에 등록됐어요 🎉`;
+          } else {
+            out.msg = `냠냠! 알 부화 ${s.egg.pct}%`;
+          }
         } else {
-          out.msg = `냠냠! 부화 ${s.egg.pct}%`;
+          // 알이 없으면 가장 최근 동료를 성장시킨다 (동료 진화)
+          const last = pets[pets.length - 1];
+          const before = last.lv || 1;
+          last.lv = Math.min(3, before + 1);
+          out.pet = last;
+          out.bag = s.bag;
+          out.msg = last.lv === before
+            ? `${last.name}는 이미 최고로 자랐어요! (동료 공격력 최대)`
+            : `${last.name}가 자랐어요! ⭐${last.lv} · 동료 공격력 +1`;
         }
       } else if (item.kind === 'shield') {
         s.bag = s.bag || {}; s.bag.shield = (s.bag.shield || 0) + 1;
         out.bag = s.bag; out.msg = '불꽃 방어권 1장을 샀어요 🛡️';
-      } else if (item.kind === 'bomb') {
-        s.bag = s.bag || {}; s.bag.bomb = (s.bag.bomb || 0) + 1;
+      } else if (item.kind === 'bomb' || item.kind === 'potion') {
+        const dmg = item.dmg || 15;
+        s.bag = s.bag || {}; s.bag[item.kind] = (s.bag[item.kind] || 0) + 1;
         const bk = classId + '|' + this.weekIndex();
-        this.state.bossBoosts[bk] = (this.state.bossBoosts[bk] || 0) + 15;
-        s.bombGiven = (s.bombGiven || 0) + 15;
-        out.bag = s.bag; out.msg = '보스에게 폭탄을 던졌어요! HP 15% 감소 💣';
+        this.state.bossBoosts[bk] = (this.state.bossBoosts[bk] || 0) + dmg;
+        s.bombGiven = (s.bombGiven || 0) + dmg;
+        out.bag = s.bag;
+        out.msg = item.kind === 'potion'
+          ? `동료들이 힘을 냈어요! 어둠의 보스 HP -${dmg}% ⚡`
+          : `보스에게 폭탄을 던졌어요! HP -${dmg}% 💣`;
         out.killed = this.checkBossKill(classId);
       } else if (item.kind === 'coupon') {
-        const claim = { id: 'cl_' + Date.now().toString(36), cid: classId, sid, itemId, name: item.name, em: item.em, at: this.state.today, used: false };
+        const claim = { id: 'cl_' + Date.now().toString(36), cid: classId, sid, itemId, name: item.name, em: item.em, tag: item.tag || '', at: this.state.today, used: false };
         this.state.shop.claims.push(claim);
         out.claim = claim; out.msg = `${item.name} 쿠폰을 받았어요! 선생님께 보여 주세요 🎟️`;
       }
@@ -862,7 +1166,7 @@ ${todayLine}
       }
       const pick = pool[Math.floor(Math.random() * pool.length)] || { id: 'rootcat', name: '아기 루트냥', rarity: 'common', em: '🐱' };
       s.pets = s.pets || [];
-      s.pets.push({ id: pick.id, name: pick.name, rarity: pick.rarity, em: pick.em, at: this.state.today });
+      s.pets.push({ id: pick.id, name: pick.name, rarity: pick.rarity, em: pick.em, at: this.state.today, lv: 1, from: 'lightegg' });
       s.egg = null;
       const titles = this._awardTitles(classId, sid, { legendary: pick.rarity === 'legend' });
       this.save();
@@ -870,9 +1174,26 @@ ${todayLine}
     }
     feed(classId, sid) {
       const s = this.student(classId, sid);
-      if (!s || !s.egg) return { error: '먼저 알을 뽑아 주세요 🥚' };
+      if (!s) return { error: '학생을 찾지 못했어요' };
+      if (!s.egg && !(s.pets || []).length) return { error: '먼저 빛의 알을 뽑아 주세요 🥚' };
       if ((s.coins || 0) < 20) return { error: '코인이 20개 필요해요 (간식 1개)' };
       return this.buy(classId, sid, 'snack');
+    }
+
+    /** 특정 동료를 간식으로 성장 (알을 키우는 중이 아닐 때) */
+    growCompanion(classId, sid, petId) {
+      const s = this.student(classId, sid);
+      if (!s) return { error: '학생을 찾지 못했어요' };
+      if (s.egg) return { error: '지금은 빛의 알을 키우는 중이에요. 부화한 뒤에 동료를 키울 수 있어요' };
+      const pets = s.pets || [];
+      const p = pets.find(x => x.id === petId) || pets[pets.length - 1];
+      if (!p) return { error: '아직 동료가 없어요' };
+      if ((s.coins || 0) < 20) return { error: '코인이 20개 필요해요 (간식 1개)' };
+      if ((p.lv || 1) >= 3) return { error: p.name + '는 이미 최고로 자랐어요 ⭐⭐⭐' };
+      s.coins -= 20;
+      p.lv = (p.lv || 1) + 1;
+      this.save();
+      return { ok: true, pet: p, msg: `${p.name} ⭐${p.lv}로 성장! 동료 공격력 +1` };
     }
 
     /* ---------- 개별 오답프린트 ---------- */
@@ -891,7 +1212,7 @@ ${todayLine}
       return this.state.prints[key];
     }
 
-    /* ---------- 밀린 오답 해결 ---------- */
+    /* ---------- 밀린 오답 해결 → 알 정화 ---------- */
     resolveCarried(classId, sid, id) {
       const list = (this.state.carried || {})[sid] || [];
       const i = list.findIndex(x => x.id === id);
@@ -906,9 +1227,10 @@ ${todayLine}
       });
       const s = this.student(classId, sid);
       if (s) { s.coins = (s.coins || 0) + 5; s.bonusXp = (s.bonusXp || 0) + 10; }
+      const join = this.purifyEgg(classId, sid, 'carry|' + id);
       const killed = this.checkBossKill(classId);
       this.save();
-      return { item, coins: 5, xp: 10, killed };
+      return { item, coins: 5, xp: 10, killed, join };
     }
 
     /* ---------- 선생님 설정 ---------- */

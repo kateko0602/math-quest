@@ -813,3 +813,104 @@ body.sheet-open .screen{overflow:hidden}
 .celebrate-card{box-shadow:0 22px 64px rgba(15,23,42,.4), 0 0 0 3px rgba(255,255,255,.85) inset}
 .chip.coin i{font-style:normal;font-size:9.5px;font-weight:900;color:#B4720A;background:#FFF1D6;border-radius:6px;padding:2px 4px;margin-left:3px}
 .verline{text-align:center;font-size:10.5px;font-weight:800;color:#B0A597;margin-top:10px}
+
+/* ============================================================
+   v0.4 — 숫자 왕국 구출 대작전 · 수학 동료 도감 · 1초 태그 · 사진 미리보기
+   ============================================================ */
+
+/* ---------- 확대(더블탭)·길게 누르기 방지: 모든 누를 수 있는 것 ---------- */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+button,.btn,[data-act],a,input,select,textarea,label,.screen,.sheet,.key,.ox,.clb,.htab,.nav-item,.booktab,.numtile,.petcard,.tag,.tagbar,.toggle,.chip.coin{touch-action:manipulation}
+.screen,.sheet-scroll,.sheet .body{overscroll-behavior:contain}
+/* 사진 선택 input 은 화면에 보이지 않게 (버튼으로만 연다) */
+.photo-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px}
+
+/* ---------- 세계관 카드 ---------- */
+.storyline{font-size:11.5px;font-weight:800;color:#6B4BC4;background:linear-gradient(120deg,#F7F2FF,#FFF6E9);border:1px dashed #D9C9F5;border-radius:12px;padding:9px 11px;line-height:1.5;margin-bottom:10px}
+.storybox{background:linear-gradient(160deg,#2B2450,#443A78);color:#fff;border-radius:18px;padding:16px;text-align:center;position:relative;overflow:hidden}
+.storybox:after{content:"";position:absolute;right:-40px;top:-50px;width:150px;height:150px;background:rgba(255,255,255,.08);border-radius:50%}
+.storybox .s-em{font-size:40px;line-height:1;animation:emPop .9s ease}
+.storybox .s-title{display:block;font-size:16px;font-weight:900;letter-spacing:-.4px;margin:6px 0 8px}
+.storybox .s-line{font-size:12.5px;font-weight:700;line-height:1.6;opacity:.95;margin:5px 0;position:relative}
+.storybox.small{padding:12px;text-align:left;margin-bottom:12px}
+.storybox.small .s-em{font-size:26px}
+.storybox.small .s-title{font-size:14px;margin:2px 0 4px}
+.storybox.small .s-line{font-size:11.5px;margin:0}
+.darkegg{filter:drop-shadow(0 6px 14px rgba(60,40,120,.35))}
+
+/* ---------- 보스 카드: 동료 공격력 ---------- */
+.boss .combat{margin-top:7px;font-size:11px;font-weight:900;color:#FFE7A8;background:rgba(255,255,255,.1);border-radius:10px;padding:6px 9px}
+.boss .combat b{color:#FFD25E;font-size:12.5px}
+
+/* ---------- 1초 이유 태그 ---------- */
+.ox-block{margin-bottom:7px}
+.ox-block .ox-row{margin-bottom:0}
+.tagrow{display:flex;align-items:center;gap:5px;flex-wrap:nowrap;overflow-x:auto;padding:6px 2px 2px;animation:slidein .2s ease;-ms-overflow-style:none;scrollbar-width:none}
+.tagrow::-webkit-scrollbar{display:none}
+.tagrow .tag{flex:0 0 auto}
+.tag-q{font-size:10px;font-weight:900;color:#A08D7B;margin-right:1px}
+.tag-q i{font-style:normal;font-weight:800;color:#C0B4A6}
+.tag{min-height:32px;border-radius:9px;border:1.5px solid #EDE4DA;background:#fff;font-family:var(--font);font-size:11px;font-weight:900;color:#7A6F63;padding:0 9px;cursor:pointer}
+.tag.on{background:#FFF0E5;border-color:#F7B27C;color:#C25A12}
+.tag:active{transform:scale(.96)}
+
+/* ---------- 약점 단원 & 실수 패턴 ---------- */
+.weakcard{background:linear-gradient(160deg,#FBF7FF,#FFF8F1);border:1px solid #EADFFB}
+.weakline{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px dashed #EFE7F8}
+.weakline:last-child{border-bottom:none}
+.weakline .wl-nm{flex:1;font-size:12.5px;font-weight:900;color:#4B3F86;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.weakline .wl-n{font-size:11.5px;font-weight:900;color:#C53030;white-space:nowrap}
+.weakline .wl-n b{font-size:14px}
+.weakline .wl-f{font-size:10.5px;font-weight:800;color:#0F8F68;white-space:nowrap}
+.tagbars{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}
+.tagbar{font-size:10.5px;font-weight:900;border-radius:8px;padding:5px 8px;background:#F4F0F9;color:#5B4B7E}
+.tagbar.calc{background:#EEF4FF;color:#2B5FA8}
+.tagbar.read{background:#FFF6D6;color:#8A6414}
+.tagbar.concept{background:#FDECEC;color:#C53030}
+
+/* ---------- 수학 동료 도감: 어둠의 알 목록 ---------- */
+.eggrow{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px dashed #F0EAE3}
+.eggrow:last-of-type{border-bottom:none}
+.eggrow .er-em{font-size:22px;filter:drop-shadow(0 3px 6px rgba(60,40,120,.25))}
+.eggrow b{display:block;font-size:12.5px;letter-spacing:-.2px}
+.eggrow small{display:block;font-size:10.5px;font-weight:800;color:#A08D7B;margin-top:1px}
+.eggrow .btn{white-space:nowrap}
+.petcard .ptag{letter-spacing:-.2px}
+.eggline{min-height:44px}
+
+/* ---------- 사진 미리보기(확인 시트) ---------- */
+.photo-preview.big img{max-height:52vh;object-fit:contain;background:#111}
+.sheet .photo-preview{border-radius:14px}
+
+/* ---------- 제출 완료: 이월 안내 ---------- */
+.carrynote{margin-top:9px;font-size:11.5px;font-weight:900;color:#1F6FA8;background:#EEF4FF;border-radius:10px;padding:8px 10px;line-height:1.5}
+
+/* ---------- 상점: 소액 아이템 ---------- */
+.shopitem.mini{background:linear-gradient(160deg,#F4FFF9,#FFFFFF);border-color:#D6F1E5}
+.shopitem.mini .si-nm{color:#0F8F68}
+.coupon .pill{font-size:9.5px;padding:2px 6px;margin-left:4px;vertical-align:1px}
+
+/* ---------- 선생님: 다음 날로 넘겨보기 ---------- */
+.previewfx .btn-mint{font-size:13px}
+
+/* ---------- 친구들 풀이: 공개 게이트 + 사진 목록 ---------- */
+.gatebox{background:linear-gradient(160deg,#FFF7F1,#FFF1E4);border:1.5px dashed #F3C79E;border-radius:18px;padding:18px 16px;text-align:center;margin-bottom:12px}
+.gatebox .g-em{font-size:34px;line-height:1}
+.gatebox .g-t{font-size:14.5px;font-weight:900;color:#A8480C;margin-top:6px;line-height:1.45}
+.gatebox .g-s{font-size:12px;font-weight:700;color:#8C6F58;margin-top:5px;line-height:1.55}
+.gitem-row{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #F1EAE2;border-radius:14px;padding:8px}
+.gitem-row.me{background:#FFF6EF;border-color:#FBD9BD}
+.gitem-row .gphoto{width:58px;height:74px;object-fit:cover;border-radius:10px;background:#F4EFE9;flex:0 0 auto}
+.gitem-row .gphoto.none{display:grid;place-items:center;font-size:20px;color:#C3B7A8}
+.gitem-row b{font-size:12.5px;display:block}
+.gitem-row small{font-size:10.5px;color:#8C8175;font-weight:800}
+.glist{gap:8px;display:flex;flex-direction:column}
+
+/* ---------- 사진 인증 배너: 사진 버튼 바로 위에 크게 ---------- */
+.verify.big{margin:0 0 12px;padding:14px;border-width:2px;background:linear-gradient(120deg,#EAF7FF,#F4EEFF);box-shadow:0 6px 18px rgba(31,111,168,.12)}
+.verify.big .v-em{font-size:38px}
+.verify.big .v-k{font-size:10.5px;font-weight:900;color:#7E9BBA;letter-spacing:.4px;margin-bottom:2px}
+.verify.big .v-t{font-size:19px;line-height:1.35;letter-spacing:-.3px}
+.verify.big .v-t b{font-size:23px}
+.verify.big .v-s{font-size:11.5px;margin-top:4px}
+.photo-card{padding-top:12px}

@@ -5,5 +5,5 @@ window.EMA_CONFIG = {
   mode: 'local',
   apiUrl: '',                 // 예: 'https://script.google.com/macros/s/AKfy.../exec'
   classId: 'c4m2',            // 시범 반: 초6 심화반
-  version: '0.3 (시제품 · 상점·수학 펫·보스전·효과음)'
+  version: '0.4 (시제품 · 숫자 왕국 구출 대작전 · 수학 동료 도감)'
 };

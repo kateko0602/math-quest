@@ -1,8 +1,8 @@
-/* 시제품 예시 데이터 v0.3 — 관리시트의 반 구조를 따릅니다.
-   (초6 심화반 5명 · 시트 🏫 반·학생 / 📖 진도·숙제 기준 · v0.3 상점·펫·보스 모델)
+/* 시제품 예시 데이터 v0.4 — 관리시트의 반 구조를 따릅니다.
+   (초6 심화반 5명 · 시트 🏫 반·학생 / 📖 진도·숙제 기준 · v0.4 수학 동료·어둠의 알 모델)
 
    예시 데이터는 "실제로 아이들이 며칠 써 본 반"처럼 보이도록
-   날짜별 불꽃 기록·오답·밀린문제·펫을 자연스럽게 흩어 놓았습니다.
+   날짜별 불꽃 기록·오답·밀린문제·동료를 자연스럽게 흩어 놓았습니다.
 */
 window.EMA = window.EMA || {};
 (function () {
@@ -34,9 +34,9 @@ window.EMA = window.EMA || {};
       titles: [], sick: false
     }, opts || {});
   }
-  function pet(id, when) {
+  function pet(id, when, lv) {
     const def = (window.EMA_GAME.pets || []).find(p => p.id === id) || { id, name: id, rarity: 'common', em: '🐾' };
-    return { id: def.id, name: def.name, rarity: def.rarity, em: def.em, at: when };
+    return { id: def.id, name: def.name, rarity: def.rarity, em: def.em, at: when, lv: lv || 1 };
   }
 
   EMA.buildSeed = function (today) {
@@ -52,12 +52,17 @@ window.EMA = window.EMA || {};
         students: [
           stu('s1', '김하늘', {
             nickname: null, avatar: '🦊', xp: 180, coins: 34, streak: 2,
-            pets: [pet('rootcat', shift(T, -12))],
+            pets: [pet('rootcat', shift(T, -12), 2)],
+            purified: { 'purify|rootcat': { at: shift(T, -12), petId: 'rootcat' } },
             titles: [{ id: 'earlybird', name: '얼리버드', em: '⚡', at: shift(T, -6) }]
           }),
           stu('s2', '박서연', {
             nickname: '서연', avatar: '🐰', xp: 420, coins: 61, streak: 5,
-            pets: [pet('fracho', shift(T, -9)), pet('piowl', shift(T, -2))],
+            pets: [pet('fracho', shift(T, -9), 2), pet('piowl', shift(T, -2), 1)],
+            purified: {
+              'carry|c_s2_1': { at: shift(T, -9), petId: 'fracho' },
+              '6-1 발전책|6:1': { at: shift(T, -2), petId: 'piowl' }
+            },
             egg: { pct: 75, gotAt: shift(T, -4) },
             bag: { snack: 0, shield: 0, bomb: 0 },
             titles: [{ id: 'cleaner', name: '오답 청소부', em: '🧹', at: shift(T, -3) }]
@@ -68,12 +73,17 @@ window.EMA = window.EMA || {};
           }),
           stu('s4', '정하윤', {
             nickname: '하윤', avatar: '🐼', xp: 390, coins: 55, streak: 3,
-            pets: [pet('angryong', shift(T, -6))],
+            pets: [pet('angryong', shift(T, -6), 1)],
+            purified: { '6-1 발전책|8:3': { at: shift(T, -6), petId: 'angryong' } },
             titles: [{ id: 'earlybird', name: '얼리버드', em: '⚡', at: shift(T, -4) }]
           }),
           stu('s5', '하준', {
             nickname: '하준', avatar: '🐶', xp: 520, coins: 80, streak: 6,
-            pets: [pet('zerofox', shift(T, -15)), pet('primepen', shift(T, -5))],
+            pets: [pet('zerofox', shift(T, -15), 3), pet('primepen', shift(T, -5), 1)],
+            purified: {
+              'carry|m_s5_1': { at: shift(T, -16), petId: 'zerofox' },
+              '6-1 발전책|8:2': { at: shift(T, -5), petId: 'primepen' }
+            },
             titles: [{ id: 'flamekeeper', name: '불꽃 지킴이', em: '🔥', at: shift(T, -8) }]
           })
         ]
@@ -197,6 +207,7 @@ window.EMA = window.EMA || {};
         [bk('6-1 응용심화책', 7, 0)]: 'o', [bk('6-1 응용심화책', 7, 1)]: 'o'
       },
       cleanup: { [bk('6-1 발전책', 9, 1)]: 'star', [bk('6-1 발전책', 10, 2)]: 'fixed' },
+      tags: { [bk('6-1 발전책', 9, 1)]: 'read', [bk('6-1 발전책', 10, 2)]: 'calc' },
       updatedAt: '17:40'
     };
     grades[K('c4m2', T, 's3')] = {
@@ -207,8 +218,9 @@ window.EMA = window.EMA || {};
       cleanup: {},
       updatedAt: '16:22'
     };
-    submissions[K('c4m2', T, 's5')] = { status: 'stamped', at: '17:08', photoId: 'p_s5', stampAt: '17:15', verify: { book: '6-1 발전책', page: 9 }, early: true, coins: 34, xp: 78 };
-    submissions[K('c4m2', T, 's2')] = { status: 'submitted', at: '17:40', photoId: 'p_s2', stampAt: null, verify: { book: '6-1 응용심화책', page: 7 }, early: true, coins: 26, xp: 66 };
+    submissions[K('c4m2', T, 's5')] = { status: 'stamped', at: '17:08', ts: Date.now() - 150 * 60000, photoId: 'p_s5', stampAt: '17:15', verify: { book: '6-1 발전책', page: 9 }, early: true, coins: 34, xp: 78 };
+    // 서연: 25분 전 제출 → '사진 다시 올리기 (35분 남음)'을 바로 눌러 볼 수 있게
+    submissions[K('c4m2', T, 's2')] = { status: 'submitted', at: '17:40', ts: Date.now() - 25 * 60000, photoId: 'p_s2', stampAt: null, verify: { book: '6-1 응용심화책', page: 7 }, early: true, coins: 26, xp: 66 };
 
     /* ---------- 지난 날 불꽃 기록 (5주치) ----------
        일·월은 학원 휴무라 대체로 비고, 시험 기간엔 뚝 떨어지는 모습으로 자연스럽게 */
@@ -297,9 +309,10 @@ window.EMA = window.EMA || {};
       lateUploads: { [K('c4m2', y1, 's1')]: { at: '20:12', photoId: 'p_late_s1', solved: 4 } },
       photos: {},
       shop: { rewardsOn: true, claims: [] },
+      gallery: { mode: 'auto' },
       bossBoosts: {},
       bossKills: {},
-      meta: { seededAt: new Date().toISOString(), demo: true, model: 'v0.3' }
+      meta: { seededAt: new Date().toISOString(), demo: true, model: 'v0.4' }
     }));
   };
 })();

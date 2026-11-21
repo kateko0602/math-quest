@@ -9,6 +9,7 @@ window.EMA = window.EMA || {};
 (function () {
   const KEY = 'ema.sound.v1';
   let ctx = null, master = null, unlocked = false;
+  let lastGesture = 0;
   let enabled = true;
   try { enabled = localStorage.getItem(KEY) !== 'off'; } catch (e) { }
 
@@ -25,30 +26,45 @@ window.EMA = window.EMA || {};
     return ctx;
   }
 
-  /** 첫 사용자 제스처에서 호출 — iOS 잠금 해제 */
+  /** 매 사용자 제스처마다 호출 — iOS 잠금 해제 + 잠긴 뒤 다시 살리기(v0.4)
+      · 예전에는 unlocked=true 뒤로는 아무것도 안 해서, 다른 앱에 갔다 오거나
+        전화를 받고 돌아와 ctx.state가 'suspended'가 되면 소리가 영영 안 났습니다.
+      · 이제는 제스처마다 'suspended'면 resume()을 다시 부릅니다. */
   function unlock() {
     const c = ensure();
     if (!c) return;
-    if (unlocked) return;
+    lastGesture = Date.now();
     try {
-      if (c.state === 'suspended') c.resume();
-      const b = c.createBuffer(1, 1, c.sampleRate);
-      const src = c.createBufferSource();
-      src.buffer = b;
-      src.connect(master);
-      src.start(0);
-      unlocked = true;
+      if (c.state === 'suspended' && c.resume) {
+        const p = c.resume();
+        if (p && p.catch) p.catch(() => { });
+      }
+      if (!unlocked) {
+        const b = c.createBuffer(1, 1, c.sampleRate);
+        const src = c.createBufferSource();
+        src.buffer = b;
+        src.connect(master);
+        src.start(0);
+        unlocked = true;
+      }
     } catch (e) { }
   }
   document.addEventListener('pointerdown', unlock, { once: false, passive: true });
   document.addEventListener('touchstart', unlock, { once: false, passive: true });
   document.addEventListener('keydown', unlock, { once: false });
+  /* 백그라운드에서 돌아오면 다시 깨우기 (제스처 없이도 가능한 경우가 있어 시도) */
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'visible') return;
+    const c = ensure();
+    if (!c) return;
+    try { if (c.state === 'suspended' && c.resume) { const p = c.resume(); if (p && p.catch) p.catch(() => { }); } } catch (e) { }
+  });
 
   /** 기본음 */
   function tone(freq, dur, opt) {
     const c = ensure();
     if (!c || !enabled) return;
-    if (c.state === 'suspended') c.resume();
+    try { if (c.state === 'suspended' && c.resume) { const p = c.resume(); if (p && p.catch) p.catch(() => { }); } } catch (e) { }
     const o = c.createOscillator();
     const g = c.createGain();
     const t = c.currentTime + (opt.delay || 0);
@@ -66,6 +82,7 @@ window.EMA = window.EMA || {};
   function noise(dur, gain, filterHz) {
     const c = ensure();
     if (!c || !enabled) return;
+    try { if (c.state === 'suspended' && c.resume) { const p = c.resume(); if (p && p.catch) p.catch(() => { }); } } catch (e) { }
     const len = Math.floor(c.sampleRate * dur);
     const buf = c.createBuffer(1, len, c.sampleRate);
     const d = buf.getChannelData(0);
@@ -119,6 +136,7 @@ window.EMA = window.EMA || {};
       try { unlock(); fn(); } catch (e) { }
     },
     on() { return enabled; },
+    state() { const c = ensure(); return c ? c.state : 'none'; },
     set(v) {
       enabled = !!v;
       try { localStorage.setItem(KEY, enabled ? 'on' : 'off'); } catch (e) { }
