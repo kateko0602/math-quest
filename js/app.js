@@ -1435,8 +1435,8 @@ window.EMA = window.EMA || {};
     `);
   }
 
-  function sheetLessonEdit(c) {
-    const cid = c.id;
+  function sheetLessonEdit() {
+    const cid = view.classId;
     const l = store.lesson(cid);
     const books = store.bookList();
     const book = view.lessonEditBook || (store.books(cid)[0] || {}).book || books[0];
