@@ -538,7 +538,7 @@ window.EMA = window.EMA || {};
     session() { try { return JSON.parse(localStorage.getItem(SESSION) || 'null'); } catch (e) { return null; } }
     setSession(s) { s ? localStorage.setItem(SESSION, JSON.stringify(s)) : localStorage.removeItem(SESSION); }
     async setMark(c, s, key, mark) { await this.call('setMark', { classId: c, studentId: s, key, mark }); return this.markOf(c, s, key); }
-    async markAllCorrect(c, s) { await this.call('markAll', { classId: c, studentId: s }); return true; }
+    async markAllCorrect(c, s) { await this.call('markAll', { classId: c, studentId: s, tiles: this.tiles(c).map(t => t.key) }); return true; }
     async setCleanup(c, s, key, kind) { await this.call('cleanup', { classId: c, studentId: s, key, kind }); return this.cleanupOf(c, s, key); }
     async submitPhoto(c, s, dataUrl) { const r = await this.call('submitPhoto', { classId: c, studentId: s, photo: dataUrl }); return r.photoId; }
     async touchSubmission(c, s) { await this.call('touchSubmission', { classId: c, studentId: s }); return true; }
