@@ -1117,7 +1117,7 @@ window.EMA = window.EMA || {};
           <button class="btn btn-ghost btn-sm" data-act="previewFx" data-k="legend">🐈 전설 펫</button>
           <button class="btn btn-ghost btn-sm" data-act="previewFx" data-k="boss">🏆 보스 처치</button>
         </div>
-        <div class="hint" style="margin-top:10px">테스트 모드 — 이 브라우저에만 쌓여요 · 11/25 시트 연동</div>`) : ''}
+        <div class="hint" style="margin-top:10px">테스트 모드 — 이 브라우저에만 쌓여요 · 연습은 주소에 ?mode=demo</div>`) : ''}
 
       ${tg('pages', '📖', '쪽수표', teacherPages(c))}
 
