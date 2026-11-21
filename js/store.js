@@ -167,8 +167,30 @@ window.EMA = window.EMA || {};
       bs.forEach(b => { this.tilesOf(b.book, b.pages).forEach(t => out.push(t)); });
       return out;
     }
-    /** 개별 오답프린트 타일 1~N번 */
-    printInfo(classId, sid) { return (this.state.prints || {})[K(classId, this.state.today, sid)] || null; }
+    /** 개별 오답프린트 타일 1~N번 — 제출 완료 전에는 자정이 지나도 이어집니다 */
+    printInfo(classId, sid) {
+      const P = this.state.prints || {};
+      const key = K(classId, this.state.today, sid);
+      if (P[key] && P[key].count) return P[key];
+      const past = Object.keys(P)
+        .map(k => { const p = String(k).split('|'); return { p, v: P[k] }; })
+        .filter(x => x.p[0] === classId && x.p[2] === sid && x.v && x.v.count && !x.v.cleared && x.p[1] < this.state.today)
+        .sort((a, b) => (a.p[1] < b.p[1] ? 1 : -1));
+      for (const x of past) {
+        if (!this.printSubmittedSince(classId, sid, x.p[1])) return x.v;
+      }
+      return null;
+    }
+    /** 그 날짜 이후로 이 학생의 오답프린트 제출(도장 포함)이 있었는지 */
+    printSubmittedSince(classId, sid, fromDate) {
+      const S = this.state.submissions || {};
+      return Object.keys(S).some(k => {
+        const p = String(k).split('|');
+        if (p[0] !== classId || p[2] !== sid || p[3] !== 'print' || !(p[1] >= fromDate)) return false;
+        const st = S[k] || {};
+        return st.status === 'submitted' || st.status === 'stamped' || !!st.stampAt;
+      });
+    }
     printTiles(classId, sid) {
       const p = this.printInfo(classId, sid);
       if (!p || !p.count) return [];
@@ -1431,7 +1453,17 @@ window.EMA = window.EMA || {};
     /* ---------- 개별 오답프린트 ---------- */
     setPrint(classId, sid, count) {
       const n = Math.max(0, Math.min(60, parseInt(count, 10) || 0));
-      if (!n) { delete this.state.prints[K(classId, this.state.today, sid)]; this.save(); return null; }
+      if (!n) {
+        delete this.state.prints[K(classId, this.state.today, sid)];
+        // 어제에서 넘어온 미제출 프린트도 같이 없앱니다
+        Object.keys(this.state.prints || {}).forEach(k => {
+          const p = String(k).split('|');
+          if (p[0] === classId && p[2] === sid && p[1] < this.state.today && !this.printSubmittedSince(classId, sid, p[1])) {
+            this.state.prints[k].cleared = true;
+          }
+        });
+        this.save(); return null;
+      }
       this.state.prints[K(classId, this.state.today, sid)] = { count: n, lastNo: null, setBy: 'teacher', at: this.state.today };
       this.save();
       return this.state.prints[K(classId, this.state.today, sid)];

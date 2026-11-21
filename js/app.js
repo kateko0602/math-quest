@@ -1715,15 +1715,19 @@ window.EMA = window.EMA || {};
     const sid = view.printSid;
     const s = store.student(cid, sid);
     const info = store.printInfo(cid, sid);
+    // 방금 누른 값(view.printInput)을 먼저 보고, 없으면 저장된 값
+    const typed = view.printInput;
+    const cur = (typed !== '' && typed != null && !isNaN(Number(typed))) ? Number(typed) : (info ? info.count : 0);
     return sheetWrap('📝 오답프린트 설정', `
       <div class="sub">${esc(s.name)} 학생에게 오늘 낼 <b>오답프린트 문제 수</b>를 넣어 주세요. 1~N번 타일이 바로 생겨요.</div>
       <div class="printpick">
-        ${[10, 15, 18, 20, 25, 30].map(n => `<button class="numtile ${info && info.count === n ? 'on' : ''}" data-act="printNum" data-n="${n}">${n}문제</button>`).join('')}
+        ${[10, 15, 18, 20, 25, 30].map(n => `<button class="numtile ${cur === n ? 'on' : ''}" data-act="printNum" data-n="${n}">${n}문제</button>`).join('')}
       </div>
-      <input id="printInput" class="tinput" inputmode="numeric" placeholder="직접 입력 (예: 18)" value="${info ? info.count : ''}">
+      <input id="printInput" class="tinput" inputmode="numeric" placeholder="직접 입력 (예: 18)" value="${cur || ''}">
+      <div class="hint" style="margin-top:8px">제출 완료 전에는 날이 바뀌어도 그대로 이어져요.</div>
       <div class="row" style="margin-top:12px">
         <button class="btn btn-primary grow" data-act="savePrint">저장</button>
-        ${info ? `<button class="btn btn-danger" data-act="clearPrint">없애기</button>` : ''}
+        ${(info || cur) ? `<button class="btn btn-danger" data-act="clearPrint">없애기</button>` : ''}
       </div>
     `);
   }
@@ -1853,6 +1857,7 @@ window.EMA = window.EMA || {};
         if (inp.id === 'nickInput') view.pending.nickname = inp.value;
         if (inp.id === 'pmInput') view.pmInput = inp.value;
         if (inp.id === 'pageInput') view.lessonEditPages = inp.value;
+        if (inp.id === 'printInput') view.printInput = inp.value;
       });
     });
     app.querySelectorAll('.photo-input').forEach(fi => {
@@ -2433,7 +2438,7 @@ window.EMA = window.EMA || {};
     },
     clearPrint() {
       store.setPrint(view.classId, view.printSid, 0);
-      view.printSid = null; view.sheet = null;
+      view.printSid = null; view.printInput = ''; view.sheet = null;
       EMA.ui.toast('오답프린트를 없앴어요');
       render();
     },
