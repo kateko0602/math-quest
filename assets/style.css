@@ -53,8 +53,7 @@ body{
 .pad{padding:0 16px}
 .topbar{
   position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;
-  padding:14px 16px 10px;background:linear-gradient(#FFF7EF 70%, rgba(255,247,239,.86));
-  backdrop-filter:blur(6px);
+  padding:14px 16px 10px;background:linear-gradient(#FFF7EF 86%, rgba(255,247,239,.94));
 }
 .topbar .ttl{font-size:17px;font-weight:800;letter-spacing:-.3px}
 .topbar .sub{font-size:11.5px;color:var(--muted);font-weight:600}
@@ -146,7 +145,7 @@ b,strong{font-weight:800}
 /* ---------- 하단 탭 ---------- */
 .nav{
   position:absolute;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(4,1fr);
-  background:rgba(255,255,255,.96);backdrop-filter:blur(8px);border-top:1px solid var(--line);
+  background:rgba(255,255,255,.98);border-top:1px solid var(--line);
   padding:8px 6px calc(8px + env(safe-area-inset-bottom));
 }
 .nav.nav5{grid-template-columns:repeat(5,1fr)}
@@ -370,12 +369,12 @@ b,strong{font-weight:800}
 .cta-sub{font-size:11.5px;font-weight:800;color:#A08D7B;text-align:center;margin-top:8px;line-height:1.5}
 .sumcard{margin-top:0}
 .sumline{display:flex;flex-wrap:wrap;gap:5px}
-.sm{font-size:11.5px;font-weight:900;border-radius:999px;padding:6px 10px;background:#F7F3EE;color:#7A6F63}
-.sm.o{background:#EAF9F2;color:#0F8F68}
-.sm.x{background:#FDECEC;color:#C53030}
-.sm.f{background:#EEF7FF;color:#1F6FA8}
-.sm.q{background:#FFF6D6;color:#8A6414}
-.sm.c{background:#F1ECE6;color:#8A8077}
+.sumc{font-size:11.5px;font-weight:900;border-radius:999px;padding:6px 10px;background:#F7F3EE;color:#7A6F63}
+.sumc.o{background:#EAF9F2;color:#0F8F68}
+.sumc.x{background:#FDECEC;color:#C53030}
+.sumc.f{background:#EEF7FF;color:#1F6FA8}
+.sumc.q{background:#FFF6D6;color:#8A6414}
+.sumc.c{background:#F1ECE6;color:#8A8077}
 .boss .hpn{font-size:26px;font-weight:900;letter-spacing:-1px;line-height:1}
 .boss .hpn span{font-size:13px;font-weight:900;opacity:.8}
 
@@ -392,7 +391,7 @@ b,strong{font-weight:800}
 /* 채점 화면 */
 .screen.flow{padding-bottom:200px}
 .hintbar{margin:0 16px 10px;background:#FFF6DF;border:1px dashed #F0C766;color:#8A6414;border-radius:12px;padding:10px 12px;font-size:12px;font-weight:700;line-height:1.55}
-.oxsum{position:sticky;top:62px;z-index:15;margin:0 16px 10px;background:rgba(255,247,239,.96);backdrop-filter:blur(6px);padding:6px 0 2px}
+.oxsum{position:sticky;top:62px;z-index:15;margin:0 16px 10px;background:#FFF7EF;padding:6px 0 2px}
 .oxsum .pbar{height:8px;border-radius:99px;background:#EFE7DE;overflow:hidden}
 .oxsum .pbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#43E5BB,#FFB03A);transition:width .25s ease}
 .oxsum .nums{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap}

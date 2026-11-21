@@ -257,11 +257,11 @@ window.EMA = window.EMA || {};
 
       ${st.marked ? `<div class="card tight sumcard">
         <div class="sumline">
-          <span class="sm o">⭕ 맞음 ${st.c1}</span>
-          <span class="sm x">❌ 틀림 ${st.c2 + st.c4}</span>
-          <span class="sm f">⚔️ 고침 ${st.c3}</span>
-          <span class="sm q">⭐ 질문 ${st.c4}</span>
-          <span class="sm c">⏭️ 이월 ${st.c5}</span>
+          <span class="sumc o">⭕ 맞음 ${st.c1}</span>
+          <span class="sumc x">❌ 틀림 ${st.c2 + st.c4}</span>
+          <span class="sumc f">⚔️ 고침 ${st.c3}</span>
+          <span class="sumc q">⭐ 질문 ${st.c4}</span>
+          <span class="sumc c">⏭️ 이월 ${st.c5}</span>
         </div>
         ${st.c5 ? `<div class="muted" style="margin-top:8px">안 누른 ${st.c5}문제는 <b>내일 숙제</b>로 넘어가요. 감점 없어요.</div>` : ''}
       </div>` : ''}
@@ -435,11 +435,11 @@ window.EMA = window.EMA || {};
       </div>
       <div class="card">
         <div class="sumline">
-          <span class="sm o">⭕ 맞음 ${st.c1}</span>
-          <span class="sm x">❌ 틀림 ${st.c2 + st.c4}</span>
-          <span class="sm f">⚔️ 고침 ${st.c3}</span>
-          <span class="sm q">⭐ 질문 ${st.c4}</span>
-          <span class="sm c">⏭️ 이월 ${st.c5}</span>
+          <span class="sumc o">⭕ 맞음 ${st.c1}</span>
+          <span class="sumc x">❌ 틀림 ${st.c2 + st.c4}</span>
+          <span class="sumc f">⚔️ 고침 ${st.c3}</span>
+          <span class="sumc q">⭐ 질문 ${st.c4}</span>
+          <span class="sumc c">⏭️ 이월 ${st.c5}</span>
         </div>
         <div class="divider"></div>
         <div class="kv"><span class="k">👾 보스</span><span>${boss.hp}% 남음 ${boss.left === 0 ? '· 클리어! 🎉' : '· 우리 반 화이팅!'}</span></div>
