@@ -455,3 +455,6 @@ b,strong{font-weight:800}
 .tbl.compact th{font-size:9.5px;font-weight:900;color:#8A8077}
 .stampbtn{padding:6px 8px;font-size:11.5px;border-radius:9px}
 .fx-hit.good{background:linear-gradient(180deg,#43E5BB,#12A57F);box-shadow:0 6px 16px rgba(18,165,127,.45)}
+
+.linkbtn{display:block;width:100%;background:none;border:none;font-family:var(--font);font-size:13px;font-weight:800;color:#8A7E72;padding:9px 0 0;cursor:pointer;text-align:center}
+.linkbtn:active{opacity:.6}

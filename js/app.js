@@ -398,8 +398,7 @@ window.EMA = window.EMA || {};
       <div class="card tight carry-card">
         ${rest.length
           ? `<div class="carry-list">${rest.map(t => `<span class="cchip">${t.page}쪽 ${esc(t.label)}번</span>`).join('')}</div>
-             <div class="muted" style="margin-top:9px">이 문제들은 감점 없이 <b>내일 숙제</b>로 넘어가요.</div>
-             <button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="flowBack">채점 화면에서 다시 누르기</button>`
+             <div class="muted" style="margin-top:9px">감점 없이 <b>내일 숙제</b>로 넘어가요. 푼 문제라면 위 <b>← 뒤로</b> 로 돌아가 누르면 돼요.</div>`
           : `<div class="muted">모든 문제를 ⭕/❌로 표시했어요. 완벽해요! 🎉</div>`}
       </div>
 
@@ -410,7 +409,7 @@ window.EMA = window.EMA || {};
 
       <div class="flowfoot">
         <button class="btn btn-primary btn-block btn-lg" data-act="submit">${locked ? '✅ 고친 채점 저장하기' : '📸 사진 올리고 제출 완료'}</button>
-        <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="flowBack">← 뒤로 (채점 고치기)</button>
+        <button class="linkbtn" data-act="flowBack">← 뒤로 (채점 고치기)</button>
       </div>
       <input type="file" id="photoInput" accept="image/*" capture="environment" class="hidden">
     </div>`;
