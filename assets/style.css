@@ -1051,3 +1051,7 @@ button.gitem-row{width:100%;font-family:var(--font);text-align:left}
 .pillbtn{border:none;cursor:pointer;font-family:var(--font);min-height:30px}
 .pillbtn:active{transform:scale(.96)}
 .fullphoto .fp-meta{font-size:12px;font-weight:900;color:#5B5145;text-align:center;background:#FFF6DF;border-radius:10px;padding:6px 10px}
+
+/* 폼 요소도 앱 기본 글꼴로 통일 (설정 ⚙️ 등) */
+button,input,select,textarea{font-family:var(--font)}
+.icon-btn{font-family:var(--font)}
