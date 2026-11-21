@@ -815,7 +815,7 @@ body.sheet-open .screen{overflow:hidden}
 .verline{text-align:center;font-size:10.5px;font-weight:800;color:#B0A597;margin-top:10px}
 
 /* ============================================================
-   v0.4 — 숫자 왕국 구출 대작전 · 수학 동료 도감 · 1초 태그 · 사진 미리보기
+   v0.4 — 숫자 왕국 구출 대작전 · 펫 도감 · 1초 태그 · 사진 미리보기
    ============================================================ */
 
 /* ---------- 확대(더블탭)·길게 누르기 방지: 모든 누를 수 있는 것 ---------- */
@@ -914,3 +914,135 @@ button,.btn,[data-act],a,input,select,textarea,label,.screen,.sheet,.key,.ox,.cl
 .verify.big .v-t b{font-size:23px}
 .verify.big .v-s{font-size:11.5px;margin-top:4px}
 .photo-card{padding-top:12px}
+
+/* ============================================================
+   v0.5 — 미니멀 대청소: 3탭 · ⚙️ 설정 · 여백 · 글자 통일 · 사진 확대
+   ============================================================ */
+
+/* ---------- 글자 통일: 모든 작은 글씨가 같은 폰트·같은 크기 ---------- */
+.hint,.card-hd .hint,.sect-t .hint,.sub,.muted,.small,.pill,.chip,.tag,.cchip,.verifyline,.hlb{
+  font-family:inherit;
+}
+h1,h2,h3,h4,b,strong,span,div,p,small,label,pre,code{
+  font-family:inherit;
+}
+.hint{font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:-.1px;white-space:nowrap}
+.card-hd .hint{font-size:11.5px;font-weight:700;color:var(--muted)}
+
+/* ---------- 여백: 카드·섹션을 넉넉하게 ---------- */
+.card{padding:18px;margin:0 16px 14px}
+.card.tight{padding:15px 16px}
+.card-hd{margin-bottom:12px}
+.sect-t{padding:10px 16px 10px;font-size:14px}
+.screen{padding-bottom:104px}
+.cta-wrap{padding:4px 16px 18px}
+.pad{padding:0 16px}
+.topbar{padding:14px 16px 12px}
+
+/* ---------- 하단 3탭 ---------- */
+.nav{padding:10px 10px calc(10px + env(safe-area-inset-bottom))}
+.nav-item{font-size:11px;gap:3px;color:#98A1B0}
+.nav-item .i{font-size:23px}
+.nav-item.on{color:var(--coral-d)}
+.nav-item.on .i{transform:translateY(-2px) scale(1.06)}
+
+/* ---------- 상단 ⚙️ ---------- */
+.icon-btn.gear{font-size:18px}
+
+/* ---------- 설명 잔소리 제거 자리 ---------- */
+.cta-sub,.foot-note,.demo-note{display:none !important}
+.hintbar{display:none !important}
+
+/* ---------- 상점: 현실 보상 쿠폰 (1줄 제목 + 가격 버튼) ---------- */
+.coupon{display:flex;align-items:center;gap:10px;padding:12px 12px}
+.coupon .c-body{flex:1;min-width:0;display:flex;align-items:center;gap:6px}
+.coupon .c-body b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.coupon .c-body .pill{flex:0 0 auto;font-size:10px;padding:3px 7px}
+.coupon .btn{flex:0 0 auto;width:auto !important;white-space:nowrap;font-size:12.5px;padding:0 14px;min-height:42px;border-radius:12px}
+.shopitem .si-d{display:none}
+.shopitem{gap:4px}
+.shopitem .btn{margin-top:6px;white-space:nowrap;min-height:42px}
+.couponlist{gap:9px}
+.coupon .c-em{font-size:22px;flex:0 0 auto}
+
+/* ---------- 친구들 풀이: 사진 터치 확대 ---------- */
+.gitem-row{gap:11px;padding:9px;cursor:pointer;transition:transform .1s ease}
+.gitem-row:active{transform:scale(.985)}
+.gitem-row .gphoto-wrap{position:relative;flex:0 0 auto;width:62px;height:78px;border-radius:11px;overflow:hidden;background:#F4EFE9}
+.gitem-row .gphoto-wrap .gphoto{width:100%;height:100%;object-fit:cover;display:block}
+.gitem-row .gphoto-wrap .zoom{position:absolute;right:3px;bottom:3px;background:rgba(30,41,59,.72);color:#fff;font-size:10px;font-weight:900;border-radius:7px;padding:2px 5px}
+.gitem-row .grow{min-width:0}
+.gitem-row b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gitem-row small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.gitem-row .go-zoom{margin-left:auto;flex:0 0 auto;font-size:11px;font-weight:900;color:#C98A1A;white-space:nowrap}
+
+/* 큰 사진 시트 */
+.sheet .body.full{max-height:96%;height:96%}
+.fullphoto{display:flex;flex-direction:column;gap:10px;min-height:0}
+.fullphoto .fp-img{width:100%;flex:1;min-height:0;border-radius:16px;background:#0F172A;object-fit:contain;display:block;max-height:70vh}
+.fullphoto .fp-nm{font-size:13px;font-weight:900;text-align:center;color:var(--ink)}
+
+/* ---------- ⚙️ 설정 시트 ---------- */
+.setrow{display:flex;align-items:center;gap:10px;width:100%;background:#fff;border:none;border-radius:14px;padding:14px 14px;min-height:54px;font-family:var(--font);font-size:14px;font-weight:800;color:var(--ink);text-align:left;box-shadow:var(--shadow-s);margin-bottom:9px;cursor:pointer}
+.setrow .se{font-size:20px;flex:0 0 auto}
+.setrow .st{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.setrow .sv{font-size:12px;font-weight:800;color:var(--muted);white-space:nowrap}
+.setrow.danger{color:#C53030}
+.setrow .chev{font-size:17px;color:#C9BFB3}
+.sethd{font-size:11.5px;font-weight:900;color:#A08D7B;letter-spacing:.3px;margin:14px 4px 8px}
+.setrow .toggle{min-height:32px;padding:3px 9px 3px 4px}
+.setrow .toggle i{width:22px;height:22px}
+
+/* ---------- 도감/홈: 펫 알 스트립 ---------- */
+.eggstrip b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eggstrip .grow{min-width:0}
+
+/* ---------- 선생님: 큰 도장 버튼 + 접히는 관리 ---------- */
+.bigstamp{display:flex;align-items:center;justify-content:center;gap:8px;width:calc(100% - 32px);margin:0 16px 14px;min-height:64px;border:none;border-radius:18px;font-family:var(--font);font-size:16.5px;font-weight:900;letter-spacing:-.3px;color:#fff;background:linear-gradient(180deg,#43E5BB,#1FC79A);box-shadow:0 10px 22px rgba(31,199,154,.32);cursor:pointer}
+.bigstamp:active{transform:scale(.985)}
+.bigstamp small{font-size:11.5px;font-weight:800;opacity:.9;background:rgba(255,255,255,.22);border-radius:9px;padding:3px 7px}
+.tgroup{margin:0 16px 10px;background:#fff;border-radius:16px;box-shadow:var(--shadow-s);overflow:hidden}
+.tgroup>button{display:flex;align-items:center;gap:10px;width:100%;border:none;background:none;font-family:var(--font);font-size:14px;font-weight:900;color:var(--navy);padding:15px 16px;min-height:54px;text-align:left;cursor:pointer}
+.tgroup>button .em{font-size:18px}
+.tgroup>button .ar{margin-left:auto;font-size:12px;color:#B9AFA4;font-weight:900;transition:transform .15s}
+.tgroup.open>button .ar{transform:rotate(90deg)}
+.tgroup .tg-body{padding:0 16px 16px;border-top:1px solid #F4EEE7}
+.tgroup .tg-body .card{margin:12px 0 0;box-shadow:none;padding:0}
+.tgroup .tg-body .card.tight{padding:0}
+.sturow .tbtns{display:none}
+.sturow.open .tbtns{display:flex}
+.sturow .tbtns .tbtn{flex:1 1 30%;white-space:nowrap}
+.sturow .more{min-height:38px;border-radius:10px;border:1px solid #E7E0D8;background:#FBF9F6;font-family:var(--font);font-size:11px;font-weight:900;color:#7A6F63;padding:0 9px;cursor:pointer;white-space:nowrap}
+
+/* ---------- v0.5 보강: 사진 크게 보기 · 선생님 학생 줄 ---------- */
+.photo-open{position:relative;display:block;width:100%;padding:0;border:none;background:#000;border-radius:14px;overflow:hidden;cursor:pointer;font-family:var(--font)}
+.photo-open img{width:100%;display:block;max-height:300px;object-fit:cover}
+.photo-open .zoom{position:absolute;right:8px;bottom:8px;background:rgba(30,41,59,.72);color:#fff;font-size:11px;font-weight:900;padding:4px 8px;border-radius:9px}
+button.gitem-row{width:100%;font-family:var(--font);text-align:left}
+.gphoto-wrap .gphoto.none{display:grid;place-items:center;width:100%;height:100%;font-size:20px;color:#C3B7A8}
+.avatar-big{font-family:var(--font);padding:0;border:none;cursor:pointer}
+.sturow .stuhd{display:flex;align-items:center;gap:8px}
+.stuhb{display:flex;align-items:center;gap:9px;flex:1;min-width:0;background:none;border:none;padding:0;font-family:var(--font);text-align:left;cursor:pointer}
+.stuhb>.grow{min-width:0;display:block}
+.stuhb .nm{font-size:13px;font-weight:900;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.stuhb .cnts{display:flex;gap:6px;margin-top:3px;font-size:10.5px;font-weight:900}
+.stuhb .cnts .o{color:#0F8F68}.stuhb .cnts .x{color:#C53030}.stuhb .cnts .f{color:#1F6FA8}.stuhb .cnts .q{color:#B4720A}.stuhb .cnts .c{color:#8C8175}
+.sturow .stright{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex:0 0 auto}
+.tgroup .tg-body .card{background:transparent}
+.tgroup .tg-body .pinrow{padding:9px 0}
+.tgroup .tg-body .kv:first-child{margin-top:10px}
+
+/* ---------- v0.5 마무리 보정 ---------- */
+.tagrow .tag-q{flex:0 0 auto;white-space:nowrap}
+.fullphoto{justify-content:center;align-items:center}
+.fullphoto .fp-img{flex:0 1 auto;max-height:72vh;width:100%}
+.petcard{min-height:88px;padding:10px 5px 7px}
+.petcard .pem{font-size:26px}
+.petcard .ptag{min-height:11px}
+.photo-open .zoom,.gphoto-wrap .zoom{background:rgba(30,41,59,.8)}
+
+/* 태그 줄: 라벨 1줄 + 태그 3개가 폭에 맞게 */
+.tagrow{flex-direction:column;align-items:stretch;gap:5px;overflow:visible;padding:7px 2px 3px}
+.tagrow .tag-q{font-size:10.5px}
+.tagrow .tag-list{display:flex;gap:5px;width:100%}
+.tagrow .tag-list .tag{flex:1 1 0;min-width:0;font-size:10.5px;padding:0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

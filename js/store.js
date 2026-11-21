@@ -4,11 +4,11 @@
 
    v0.4 채점 모델 — 문제마다 ⭕/❌ 를 직접 고릅니다.
      marks[키]   : 'o'(맞음) | 'x'(틀림) | 없음(미풀이 → 바로 밀린문제로)
-     cleanup[키] : 'fixed'(⚔️ 해결 → 어둠의 알 정화, 동료 합류) | 'star'(⭐ 또 틀림·질문) | 없음
+     cleanup[키] : 'fixed'(⚔️ 해결 → 펫 알 부화, 펫 합류) | 'star'(⭐ 질문) | 없음
      tags[키]    : 'calc' | 'read' | 'concept' (1초 이유 태그 · 선택)
    문제 키는 교재까지 포함합니다: '6-1 발전책|8:0' (8쪽 0번째 문제)
 
-   v0.4 세계관: 틀린 문제 = 어둠의 오답 알(🥚) → 고치면 수학 동료가 합류.
+   v0.5 세계관: 못 고친 오답을 고치면 펫 알이 부화해 펫이 합류.
 */
 window.EMA = window.EMA || {};
 (function () {
@@ -674,7 +674,7 @@ window.EMA = window.EMA || {};
 ${a.label} 숙제 성실도는 ${a.flameDays}일 불꽃(하루 3문제 이상) · 모두 ${a.totalSolved}문제를 풀었어요.
 ${todayLine}
 단원평가: ${exTxt}
-수학 동료는 ${a.owned}명 모았어요. 집에서도 "오늘 숙제 먼저" 습관 응원 부탁드려요! 감사합니다.`;
+펫은 ${a.owned}마리 모았어요. 집에서도 "오늘 숙제 먼저" 습관 응원 부탁드려요! 감사합니다.`;
     }
   }
 
@@ -807,7 +807,7 @@ ${todayLine}
       const owned = new Set(s.pets.map(p => p.id));
       const h = hash(seedKey);
       let pool = [];
-      // 알을 정화해 만나는 동료: 일반 78% · 희귀 19% · 전설 3%
+      // 오답을 고쳐 만나는 펫: 일반 78% · 희귀 19% · 전설 3%
       if (h % 100 < 3) pool = cat.filter(p => p.rarity === 'legend' && !owned.has(p.id));
       if (!pool.length && h % 100 < 22) pool = cat.filter(p => p.rarity === 'rare' && !owned.has(p.id));
       if (!pool.length) pool = cat.filter(p => p.rarity === 'common' && !owned.has(p.id));
@@ -1093,14 +1093,14 @@ ${todayLine}
       if (item.kind === 'coupon' && !rewardsOn) return { error: '선생님이 현실 보상 쿠폰을 잠시 꺼 두었어요' };
       if ((s.coins || 0) < item.price) return { error: `코인이 ${item.price - s.coins}개 부족해요` };
       const pets = (s.pets || []);
-      if (item.kind === 'snack' && !s.egg && !pets.length) return { error: '먼저 빛의 알을 뽑아 주세요 🥚' };
-      if (item.kind === 'egg' && s.egg) return { error: '이미 부화 중이에요. 부화하면 새 빛의 알을 뽑을 수 있어요' };
+      if (item.kind === 'snack' && !s.egg && !pets.length) return { error: '먼저 펫 알을 사 주세요 🥚' };
+      if (item.kind === 'egg' && s.egg) return { error: '이미 펫 알을 키우는 중이에요' };
       s.coins -= item.price;
       const out = { item, coins: s.coins };
       if (item.kind === 'egg') {
         s.egg = { pct: 20, gotAt: this.state.today };
         out.egg = s.egg;
-        out.msg = '빛의 알을 받았어요! 간식으로 키우면 동료가 깨어나요 🥚';
+        out.msg = '펫 알을 받았어요! 간식으로 키우면 부화해요 🥚';
       } else if (item.kind === 'snack') {
         if (s.egg) {
           const add = item.pct || 25;
@@ -1109,8 +1109,8 @@ ${todayLine}
           if (s.egg.pct >= 100) {
             out.hatch = this._hatch(classId, sid);
             out.msg = out.hatch.pet.rarity === 'legend'
-              ? `전설! ${out.hatch.pet.name} 동료가 깨어났어요! 🎉`
-              : `${out.hatch.pet.name} 동료가 깨어났어요! 도감에 등록됐어요 🎉`;
+              ? `전설! ${out.hatch.pet.name} 나왔어요! 🎉`
+              : `${out.hatch.pet.name} 나왔어요! 도감에 담았어요 🎉`;
           } else {
             out.msg = `냠냠! 알 부화 ${s.egg.pct}%`;
           }
@@ -1122,8 +1122,8 @@ ${todayLine}
           out.pet = last;
           out.bag = s.bag;
           out.msg = last.lv === before
-            ? `${last.name}는 이미 최고로 자랐어요! (동료 공격력 최대)`
-            : `${last.name}가 자랐어요! ⭐${last.lv} · 동료 공격력 +1`;
+            ? `${last.name}는 이미 최고로 자랐어요!`
+            : `${last.name}가 자랐어요! ⭐${last.lv} · 공격력 +1`;
         }
       } else if (item.kind === 'shield') {
         s.bag = s.bag || {}; s.bag.shield = (s.bag.shield || 0) + 1;
@@ -1136,7 +1136,7 @@ ${todayLine}
         s.bombGiven = (s.bombGiven || 0) + dmg;
         out.bag = s.bag;
         out.msg = item.kind === 'potion'
-          ? `동료들이 힘을 냈어요! 어둠의 보스 HP -${dmg}% ⚡`
+          ? `펫들이 힘을 냈어요! 보스 HP -${dmg}% ⚡`
           : `보스에게 폭탄을 던졌어요! HP -${dmg}% 💣`;
         out.killed = this.checkBossKill(classId);
       } else if (item.kind === 'coupon') {
@@ -1175,7 +1175,7 @@ ${todayLine}
     feed(classId, sid) {
       const s = this.student(classId, sid);
       if (!s) return { error: '학생을 찾지 못했어요' };
-      if (!s.egg && !(s.pets || []).length) return { error: '먼저 빛의 알을 뽑아 주세요 🥚' };
+      if (!s.egg && !(s.pets || []).length) return { error: '먼저 펫 알을 사 주세요 🥚' };
       if ((s.coins || 0) < 20) return { error: '코인이 20개 필요해요 (간식 1개)' };
       return this.buy(classId, sid, 'snack');
     }
@@ -1184,16 +1184,16 @@ ${todayLine}
     growCompanion(classId, sid, petId) {
       const s = this.student(classId, sid);
       if (!s) return { error: '학생을 찾지 못했어요' };
-      if (s.egg) return { error: '지금은 빛의 알을 키우는 중이에요. 부화한 뒤에 동료를 키울 수 있어요' };
+      if (s.egg) return { error: '지금은 펫 알을 키우는 중이에요. 부화한 뒤에 펫을 키울 수 있어요' };
       const pets = s.pets || [];
       const p = pets.find(x => x.id === petId) || pets[pets.length - 1];
-      if (!p) return { error: '아직 동료가 없어요' };
+      if (!p) return { error: '아직 펫이 없어요' };
       if ((s.coins || 0) < 20) return { error: '코인이 20개 필요해요 (간식 1개)' };
       if ((p.lv || 1) >= 3) return { error: p.name + '는 이미 최고로 자랐어요 ⭐⭐⭐' };
       s.coins -= 20;
       p.lv = (p.lv || 1) + 1;
       this.save();
-      return { ok: true, pet: p, msg: `${p.name} ⭐${p.lv}로 성장! 동료 공격력 +1` };
+      return { ok: true, pet: p, msg: `${p.name} ⭐${p.lv}로 성장! 공격력 +1` };
     }
 
     /* ---------- 개별 오답프린트 ---------- */
