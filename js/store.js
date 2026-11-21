@@ -44,6 +44,25 @@ window.EMA = window.EMA || {};
     for (const ch of String(str)) h = (h * 31 + ch.charCodeAt(0)) % 100003;
     return h;
   }
+  /** [6,7,8] → '6~8' · [8] → '8' (연속이 아니면 쉼표) */
+  function pageSpan(pages) {
+    const ps = (pages || []).map(Number).filter(n => !isNaN(n)).sort((a, b) => a - b);
+    if (!ps.length) return '';
+    if (ps.length === 1) return String(ps[0]);
+    let run = true;
+    for (let i = 1; i < ps.length; i++) if (ps[i] !== ps[i - 1] + 1) run = false;
+    return run ? ps[0] + '~' + ps[ps.length - 1] : ps.join(', ');
+  }
+  /** '2026-11-19' → '목' */
+  function dowName(iso) {
+    const d = new Date(iso + 'T12:00:00');
+    return isNaN(d.getTime()) ? '' : DOW[d.getDay()];
+  }
+  /** '2026-11-19' → '11.19(목)' */
+  function shortLabel(iso) {
+    const m = String(iso || '').match(/^\d{4}-(\d{2})-(\d{2})$/);
+    return m ? (+m[1] + '.' + m[2] + '(' + dowName(iso) + ')') : String(iso || '');
+  }
 
   class BaseStore {
     constructor() { this.state = null; this.mode = 'local'; }
@@ -236,6 +255,11 @@ window.EMA = window.EMA || {};
     }
     printCounts(classId, sid) {
       return this._count(this.printTiles(classId, sid), this.gradeOf(classId, sid, 'print'));
+    }
+    /** 오늘 숙제(또는 프린트)에서 '⭐ 질문'으로 고른 문제 수 — 최대 7개 */
+    starCount(classId, sid, kind) {
+      const g = this.gradeOf(classId, sid, kind);
+      return Object.keys(g.cleanup || {}).filter(k => g.cleanup[k] === 'star').length;
     }
     /** 숙제 + 프린트 합친 오늘 푼 문제 수 */
     solvedToday(classId, sid) {
@@ -786,6 +810,35 @@ window.EMA = window.EMA || {};
       const exams = this.exam(classId, sid).filter(e => e.score != null && e.date >= from);
       const avgExam = exams.length ? Math.round(exams.reduce((a, e) => a + (e.score || 0), 0) / exams.length) : null;
 
+      /* ⑦ 이번 주 일자별 진도·숙제 + 개별 오답프린트 */
+      const dayMap = Object.assign({}, ((this.state.dayLessons || {})[classId] || {}));
+      const todayLesson = this.lesson(classId);
+      if (todayLesson && todayLesson.date) {
+        dayMap[todayLesson.date] = Object.assign({}, dayMap[todayLesson.date], todayLesson);
+      }
+      const cleanLine = t => String(t || '').replace(/\s+/g, ' ').trim();
+      const dayList = Object.keys(dayMap)
+        .filter(d => inRange(d))
+        .sort()
+        .reverse()
+        .slice(0, range === 'week' ? 7 : 5)
+        .map(d => {
+          const L = dayMap[d] || {};
+          const books = (L.books || []).map(b => (b.book || '') + (b.pages && b.pages.length ? ' ' + pageSpan(b.pages) + '쪽' : '')).filter(Boolean);
+          return {
+            date: d, dow: dowName(d), label: shortLabel(d),
+            lesson: cleanLine(L.lesson) || '',
+            homework: cleanLine(L.homework) || (books.length ? books.join(', ') : '')
+          };
+        })
+        .filter(d => d.lesson || d.homework);
+      const printList = Object.keys(this.state.prints || {})
+        .map(k => { const p = String(k).split('|'); return { p, v: (this.state.prints || {})[k] || {} }; })
+        .filter(x => x.p[0] === classId && x.p[2] === sid && inRange(x.p[1]) && (x.v.count || 0) > 0)
+        .map(x => ({ date: x.p[1], label: shortLabel(x.p[1]), md: (+x.p[1].slice(5, 7)) + '.' + x.p[1].slice(8, 10), count: x.v.count }))
+        .sort((a, b) => (a.date < b.date ? 1 : -1))
+        .slice(0, range === 'week' ? 7 : 3);
+
       return {
         range,
         label: range === 'week' ? '이번 주' : range === 'month' ? '이번 달' : '이번 학기',
@@ -795,6 +848,7 @@ window.EMA = window.EMA || {};
         fixRate: wrong ? Math.round(fixed / wrong * 100) : 0,
         units, tags, tagTotal,
         exams, avgExam,
+        dayList, printList,
         activeDays: histActive + Object.keys(gradedDates).length
       };
     }
@@ -808,15 +862,32 @@ window.EMA = window.EMA || {};
       lines.push(`안녕하세요 어머님, ${c.name || ''} 담임입니다.`);
       lines.push(`${s.name} 학생의 ${r.label} 학습 리포트를 보내 드립니다. (${kd(r.from)} ~ ${kd(r.to)})`);
       lines.push('');
+      if (r.dayList.length || r.printList.length) {
+        lines.push(`■ ${r.label} 진도 및 숙제`);
+        r.dayList.forEach(d => {
+          const parts = [];
+          if (d.lesson) parts.push(`진도: ${d.lesson}`);
+          if (d.homework) parts.push(`숙제: ${d.homework}`);
+          lines.push(`· ${d.label} ${parts.join(' / ')}`);
+        });
+        r.printList.forEach(p => lines.push(`· 추가 과제: 개별 오답프린트 ${p.count}문항 배부 (${p.md})`));
+        lines.push('');
+      }
       lines.push('■ 학습 성실도');
-      lines.push(`· 연속 ${r.streak}일 학습 · 숙제 완료율 ${r.hwRate}%`);
+      lines.push(`· 연속 ${r.streak}일 학습${r.classDays ? ` · 숙제 ${r.classDays}회 중 ${r.doneClassDays}회 완료 (${r.hwRate}%)` : ''}`);
       lines.push('');
       lines.push('■ 풀이 및 오답 해결');
       lines.push(`· 총 ${r.solved}문항 풀이 · 오답 ${r.wrong}개 중 ${r.fixed}개 재풀이 완료 (${r.fixRate}%)`);
       lines.push('');
-      lines.push('■ 오답 원인 분석');
-      lines.push(`· 계산 실수 ${pct('calc')}% · 문제 잘못 읽음 ${pct('read')}% · 개념 보완 필요 ${pct('concept')}%`);
-      lines.push('');
+      if (r.wrong === 0) {
+        lines.push('■ 오답 원인 분석');
+        lines.push('· 이번 기간 오답 없음');
+        lines.push('');
+      } else if (r.tagTotal > 0) {
+        lines.push('■ 오답 원인 분석');
+        lines.push(`· 계산 실수 ${pct('calc')}% · 문제 잘못 읽음 ${pct('read')}% · 개념 보완 필요 ${pct('concept')}%`);
+        lines.push('');
+      }
       lines.push('■ 취약 단원');
       if (r.units.length) {
         r.units.forEach(u => lines.push(`· ${u.name} — 오답 ${u.wrong}개${u.fixed ? ` (재풀이 ${u.fixed}개)` : ''}`));
@@ -1437,6 +1508,13 @@ window.EMA = window.EMA || {};
     saveLesson(classId, patch) {
       const l = this.state.lessons[classId] || (this.state.lessons[classId] = {});
       Object.assign(l, patch);
+      // 날짜별 진도 기록 — 어머님 리포트의 '일자별 진도·숙제'에 쓰입니다
+      const date = l.date || this.state.today;
+      if (!this.state.dayLessons) this.state.dayLessons = {};
+      const dl = this.state.dayLessons[classId] || (this.state.dayLessons[classId] = {});
+      dl[date] = Object.assign({}, dl[date], {
+        date, lesson: l.lesson || '', homework: l.homework || '', books: l.books || []
+      });
       this.save();
     }
   }

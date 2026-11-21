@@ -536,6 +536,8 @@ window.EMA = window.EMA || {};
       }).join('')}
     </div>` : '';
 
+    const untagged = tiles.filter(t => g.marks[t.key] === 'x' && !(g.tags || {})[t.key]).length;
+
     return `<div class="screen flow">
       ${topbar({
         title: isPrint ? '① 프린트 채점' : '① 채점',
@@ -551,6 +553,7 @@ window.EMA = window.EMA || {};
         <div class="rows ${isPrint ? 'gridrows' : ''}">${rows}</div>
       </div>
       <div class="flowfoot">
+        ${untagged ? `<div class="tag-need">왜 틀렸는지 <b>${untagged}개</b> 더 골라야 해요</div>` : ''}
         <button class="btn btn-primary btn-block btn-lg" data-act="toClean">다음 → 정리 · 사진</button>
       </div>
       ${sheetHtml()}
@@ -574,6 +577,8 @@ window.EMA = window.EMA || {};
 
     const wrong = tiles.filter(t => g.marks[t.key] === 'x');
     const rest = tiles.filter(t => !g.marks[t.key]);
+    const kindNow = isPrint ? 'print' : 'hw';
+    const starCnt = store.starCount(cid, sid, kindNow);
 
     const wrongHtml = wrong.length ? wrong.map(t => {
       const cl = g.cleanup[t.key] || '';
@@ -581,7 +586,7 @@ window.EMA = window.EMA || {};
         <div class="cl-label">${isPrint ? '' : t.page + '쪽 '}<b>${esc(t.label)}</b>번</div>
         <div class="cl-btns">
           <button class="clb fix ${cl === 'fixed' ? 'on' : ''}" data-act="cleanup" data-key="${t.key}" data-k="fixed">⚔️ 해결!</button>
-          <button class="clb star ${cl === 'star' ? 'on' : ''}" data-act="cleanup" data-key="${t.key}" data-k="star">⭐ 질문</button>
+          <button class="clb star ${cl === 'star' ? 'on' : ''} ${starCnt >= 7 && cl !== 'star' ? 'is-full' : ''}" data-act="cleanup" data-key="${t.key}" data-k="star">⭐ 질문</button>
         </div>
       </div>`;
     }).join('') : `<div class="empty-note">🎉 틀린 문제가 없어요!</div>`;
@@ -614,7 +619,7 @@ window.EMA = window.EMA || {};
       ${topbar({ title: '② 정리 · 사진', sub: isPrint ? '오답프린트' : '틀린 문제 정리', back: true, backAct: 'flowBack' })}
       ${stepper(2)}
 
-      <div class="sect-t"><span>❌ 틀린 문제 ${wrong.length}</span></div>
+      <div class="sect-t"><span>❌ 틀린 문제 ${wrong.length}</span><span class="grow"></span><span class="hint">⭐ 질문 ${starCnt}/7</span></div>
       <div class="card clean-card">${wrongHtml}</div>
 
       <div class="sect-t"><span>⏭️ 안 누른 문제 ${rest.length}</span></div>
@@ -1073,10 +1078,6 @@ window.EMA = window.EMA || {};
           <div class="ns">${p.problems.map(n => `<span class="n">${esc(n)}</span>`).join('')}</div>
         </button>`).join('')}
       </div>
-      <div class="row" style="margin-top:4px">
-        <button class="btn btn-ghost grow btn-sm" data-act="pmDownload">📥 JSON</button>
-        <button class="btn btn-ghost grow btn-sm" data-act="pmCopy">📋 복사</button>
-      </div>
       <div class="kv" style="margin-top:10px"><span class="k">지금 숙제</span><span>${esc(l.homework)}</span></div>
       <button class="btn btn-primary btn-block" style="margin-top:10px" data-act="lessonEdit">쪽수 바꾸기</button>`;
   }
@@ -1105,6 +1106,7 @@ window.EMA = window.EMA || {};
       gallery: sheetGallery, carry: sheetCarry, onboard: sheetOnboard, pinchange: sheetPinChange,
       profile: sheetProfile, shop: sheetShop, pet: sheetPet, monster: sheetMonster,
       top5big: sheetTop5Big, report: sheetReport, reportimg: sheetReportImg, printset: sheetPrintSet,
+      reportcopy: sheetReportCopy,
       lessonEdit: sheetLessonEdit, pmpage: sheetPmPage, yesterday: sheetYesterday,
       photocopy: sheetPhotoCopy, printpick: sheetPrintPick,
       story: storySheet, photoconfirm: sheetPhotoConfirm, nextday: sheetNextDay,
@@ -1400,6 +1402,20 @@ window.EMA = window.EMA || {};
           <span class="rc-unit-v">오답 <b>${u.wrong}</b>${u.fixed ? ` · 재풀이 <b>${u.fixed}</b>` : ''}</span>
         </div>`).join('')
       : '<div class="rc-empty">이 기간에 오답 기록이 없습니다.</div>';
+    const dayList = (r.dayList || []).map(d => `<div class="rc-day">
+        <div class="rc-day-d">${esc(d.label)}</div>
+        <div class="rc-day-b">
+          ${d.lesson ? `<div class="rc-day-l"><b>진도</b><span>${esc(d.lesson)}</span></div>` : ''}
+          ${d.homework ? `<div class="rc-day-l"><b>숙제</b><span>${esc(d.homework)}</span></div>` : ''}
+        </div>
+      </div>`).join('');
+    const printList = (r.printList || []).map(p =>
+      `<div class="rc-extra">추가 과제 · 개별 오답프린트 <b>${p.count}문항</b> 배부 <small>${esc(p.label)}</small></div>`).join('');
+    const tagBlock = r.wrong === 0
+      ? '<div class="rc-empty">이번 기간 오답 없음</div>'
+      : r.tagTotal
+        ? tags
+        : `<div class="rc-empty">오답 ${r.wrong}개 · 이유 미선택</div>`;
     const exams = r.exams.length
       ? r.exams.slice(-3).map(e => `<div class="rc-unit exam">
           <span class="rc-unit-nm">${esc(e.unit.replace(' 평가', ''))} <small>${esc(shortDot(e.date))}</small></span>
@@ -1423,8 +1439,13 @@ window.EMA = window.EMA || {};
           <div class="rc-stat"><div class="v">${r.hwRate}%</div><div class="l">숙제 완료율</div></div>
         </div>
         ${rcBar(r.hwRate)}
-        <div class="rc-sub">수업일 ${r.doneClassDays}일 / ${r.classDays}일 완료</div>
+        <div class="rc-sub">${r.classDays ? `숙제 ${r.classDays}회 중 ${r.doneClassDays}회 완료` : '이번 기간 숙제 기록 없음'}</div>
       </div>
+      ${(dayList || printList) ? `<div class="rc-sec">
+        <div class="rc-t">${r.range === 'week' ? '이번 주' : '최근'} 진도 · 숙제</div>
+        ${dayList}
+        ${printList}
+      </div>` : ''}
       <div class="rc-sec">
         <div class="rc-t">풀이 및 오답 해결</div>
         <div class="rc-line">총 <b>${r.solved}</b>문항 풀이 · 오답 <b>${r.wrong}</b>개 중 <b>${r.fixed}</b>개 재풀이 완료</div>
@@ -1433,8 +1454,7 @@ window.EMA = window.EMA || {};
       </div>
       <div class="rc-sec">
         <div class="rc-t">오답 원인 분석</div>
-        ${tags}
-        ${r.tagTotal ? '' : '<div class="rc-empty">이 기간에 선택된 오답 원인이 없습니다.</div>'}
+        ${tagBlock}
       </div>
       <div class="rc-sec">
         <div class="rc-t">취약 단원</div>
@@ -1458,7 +1478,7 @@ window.EMA = window.EMA || {};
     function draw(ctx) {
       ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
       ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, W, 2400);
+      ctx.fillRect(0, 0, W, 4000);
       let y = 32;
       const setF = (size, weight) => { ctx.font = `${weight || 400} ${size}px ${FONT}`; };
       const txt = (str, x, yy, size, weight, color, align) => {
@@ -1495,6 +1515,18 @@ window.EMA = window.EMA || {};
         txt(label, PAD + 9, y, 10, 700, NAVY);
         y += 14;
       };
+      const wrap = (str, x, yy, size, weight, color, maxW, lh) => {
+        setF(size, weight); ctx.fillStyle = color || INK; ctx.textAlign = 'left';
+        const words = String(str).split(' ');
+        let line = '', outY = yy;
+        words.forEach(w => {
+          const test = line ? line + ' ' + w : w;
+          if (ctx.measureText(test).width > maxW && line) { ctx.fillText(line, x, outY); outY += lh; line = w; }
+          else line = test;
+        });
+        if (line) { ctx.fillText(line, x, outY); outY += lh; }
+        return outY;
+      };
 
       /* 머리 */
       txt('학습 성취도 리포트', PAD, y, 13, 700, NAVY);
@@ -1521,7 +1553,29 @@ window.EMA = window.EMA || {};
       y += 54;
       bar(r.hwRate, y, '#1E293B', 5);
       y += 16;
-      txt(`수업일 ${r.doneClassDays}일 / ${r.classDays}일 완료`, PAD, y, 8, 500, MUTED);
+      txt(r.classDays ? `숙제 ${r.classDays}회 중 ${r.doneClassDays}회 완료` : '이번 기간 숙제 기록 없음', PAD, y, 8, 500, MUTED);
+
+      /* 이번 주 진도·숙제 */
+      if ((r.dayList && r.dayList.length) || (r.printList && r.printList.length)) {
+        section(r.range === 'week' ? '이번 주 진도 · 숙제' : '최근 진도 · 숙제');
+        (r.dayList || []).forEach(d => {
+          txt(d.label, PAD, y, 9, 700, NAVY);
+          y += 12;
+          if (d.lesson) {
+            txt('진도', PAD, y, 8, 800, '#8A94A6');
+            y = wrap(d.lesson, PAD + 24, y, 8.5, 500, INK, W - PAD * 2 - 24, 11);
+          }
+          if (d.homework) {
+            txt('숙제', PAD, y, 8, 800, '#8A94A6');
+            y = wrap(d.homework, PAD + 24, y, 8.5, 500, INK, W - PAD * 2 - 24, 11);
+          }
+          y += 5;
+        });
+        (r.printList || []).forEach(p => {
+          y = wrap(`추가 과제 · 개별 오답프린트 ${p.count}문항 배부 (${p.md})`, PAD, y, 8.5, 600, '#B4562B', W - PAD * 2, 11);
+        });
+        y -= 2;
+      }
 
       /* 풀이 및 오답 해결 */
       section('풀이 및 오답 해결');
@@ -1533,15 +1587,22 @@ window.EMA = window.EMA || {};
 
       /* 오답 원인 분석 */
       section('오답 원인 분석');
-      r.tags.forEach(t => {
-        txt(t.label, PAD, y, 9.5, 600, INK);
-        txt(t.pct + '%', W - PAD, y, 9.5, 700, TAG_COLOR[t.id] || INK, 'right');
-        y += 6;
-        bar(t.pct, y, TAG_COLOR[t.id] || '#334155', 4);
-        y += 16;
-      });
-      if (!r.tagTotal) txt('이 기간에 선택된 오답 원인이 없습니다.', PAD, y - 4, 8.5, 500, MUTED);
-      y -= 4;
+      if (r.wrong === 0) {
+        txt('이번 기간 오답 없음', PAD, y, 9, 600, MUTED);
+        y += 14;
+      } else if (!r.tagTotal) {
+        txt(`오답 ${r.wrong}개 · 이유 미선택`, PAD, y, 9, 600, MUTED);
+        y += 14;
+      } else {
+        r.tags.forEach(t => {
+          txt(t.label, PAD, y, 9.5, 600, INK);
+          txt(t.pct + '%', W - PAD, y, 9.5, 700, TAG_COLOR[t.id] || INK, 'right');
+          y += 6;
+          bar(t.pct, y, TAG_COLOR[t.id] || '#334155', 4);
+          y += 16;
+        });
+        y -= 4;
+      }
 
       /* 취약 단원 */
       section('취약 단원');
@@ -1586,7 +1647,7 @@ window.EMA = window.EMA || {};
     }
 
     const tmp = document.createElement('canvas');
-    tmp.width = W * SCALE; tmp.height = 2400;
+    tmp.width = W * SCALE; tmp.height = 4000;
     const endY = draw(tmp.getContext('2d'));
     const cv = document.createElement('canvas');
     cv.width = W * SCALE; cv.height = Math.ceil(endY) * SCALE;
@@ -1617,6 +1678,7 @@ window.EMA = window.EMA || {};
           <button class="btn btn-primary grow" data-act="copyReport">📋 카톡 복사</button>
           <button class="btn btn-ghost grow" data-act="saveReportImage">📸 이미지로 저장</button>
         </div>
+        <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="openCopyText">👀 복사할 글 직접 보기 · 전체 선택</button>
       </div>
 
     `, { wide: true });
@@ -1630,6 +1692,20 @@ window.EMA = window.EMA || {};
       <img class="report-img" src="${view.reportImg}" alt="성취도 리포트 이미지">
       <a class="btn btn-primary btn-block" style="margin-top:12px" href="${view.reportImg}" download="${esc(nm)}">⬇️ 이미지 저장</a>
       <div class="hint center" style="margin-top:8px">아이폰은 이미지를 길게 눌러 <b>사진에 저장</b>을 눌러 주세요.</div>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="backReport">← 리포트로 돌아가기</button>
+    `, { wide: true });
+  }
+
+  function sheetReportCopy() {
+    const cid = view.classId, sid = view.reportSid;
+    const s = store.student(cid, sid);
+    if (!s) return '';
+    const text = store.kakaoSummary(cid, sid, view.reportRange || 'week');
+    return sheetWrap('📋 카톡 글 직접 복사', `
+      <div class="sub">아래 글을 <b>길게 눌러 전체 선택 → 복사</b>한 뒤 카톡에 붙여넣어 주세요.</div>
+      <textarea class="copy-area" id="copyArea" readonly rows="12">${esc(text)}</textarea>
+      <button class="btn btn-primary btn-block" style="margin-top:10px" data-act="copyAgain">📋 복사 다시 시도</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="copySelectAll">전체 선택</button>
       <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="backReport">← 리포트로 돌아가기</button>
     `, { wide: true });
   }
@@ -1977,6 +2053,22 @@ window.EMA = window.EMA || {};
       const g = sourceGrade();
       const cnt = countTiles(tiles, g);
       if (!cnt.marked) { EMA.ui.toast('먼저 맞은 문제 ⭕, 틀린 문제 ❌를 눌러 주세요'); return; }
+      // ❌ 틀림(·⭐ 질문) 문제는 이유 태그를 꼭 골라야 다음으로
+      const missing = tiles.filter(t => g.marks[t.key] === 'x' && !(g.tags || {})[t.key]);
+      if (missing.length) {
+        EMA.ui.toast('왜 틀렸는지 골라야 다음으로 갈 수 있어요!', 3200);
+        EMA.ui.sound('wrong');
+        EMA.ui.haptic();
+        const key = String(missing[0].key).replace(/"/g, '\\"');
+        const hit = document.querySelector('.ox-block [data-key="' + key + '"]');
+        const box = hit ? hit.closest('.ox-block') : null;
+        if (box) {
+          try { box.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { box.scrollIntoView(); }
+          box.classList.add('need-tag');
+          setTimeout(() => box.classList.remove('need-tag'), 2600);
+        }
+        return;
+      }
       view.resetScroll = true;
       EMA.ui.sound('tap');
       setFlow('clean');
@@ -1984,6 +2076,13 @@ window.EMA = window.EMA || {};
     cleanup(d, el) {
       const kind = view.gradeSource === 'print' ? 'print' : 'hw';
       const before = store.gradeOf(view.classId, view.studentId, kind).cleanup[d.key] || '';
+      // ⭐ 질문은 숙제 1건당 7개까지
+      if (d.k === 'star' && before !== 'star' && store.starCount(view.classId, view.studentId, kind) >= 7) {
+        EMA.ui.toast('질문은 7개까지! 나머지 ❌ 틀림 문제는 수업 전후에 선생님께 직접 물어봐 😊', 3400);
+        EMA.ui.sound('wrong');
+        EMA.ui.haptic();
+        return;
+      }
       store.setCleanup(view.classId, view.studentId, d.key, d.k, kind);
       EMA.ui.haptic();
       const on = store.gradeOf(view.classId, view.studentId, kind).cleanup[d.key] === d.k;
@@ -2372,12 +2471,27 @@ window.EMA = window.EMA || {};
       }
     },
     backReport() { view.sheet = 'report'; render(); },
-    async copyReport() {
+    openCopyText() { view.sheet = 'reportcopy'; EMA.ui.sound('tap'); render(); },
+    copySelectAll() {
+      const ta = document.querySelector('#copyArea');
+      if (!ta) return;
+      try { ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length); } catch (e) { }
+      EMA.ui.toast('전체 선택했어요. 길게 눌러 복사해 주세요 📋', 2600);
+    },
+    copyAgain() { actions.copyReport(); },
+    copyReport() {
       const cid = view.classId;
       const text = store.kakaoSummary(cid, view.reportSid, view.reportRange);
-      const ok = await EMA.ui.copy(text);
-      EMA.ui.toast(ok ? '복사 완료! 카톡에 붙여넣기 하세요 📋' : '복사가 안 되면 글자를 길게 눌러 복사해 주세요');
-      EMA.ui.sound(ok ? 'coin' : 'wrong');
+      const ok = EMA.ui.copy(text);          // 클릭 안에서 동기로 복사 (iOS 사파리 대응)
+      if (ok) {
+        EMA.ui.toast('복사 완료! 카톡에 붙여넣기 하세요 📋', 3000);
+        EMA.ui.sound('coin');
+      } else {
+        view.sheet = 'reportcopy';
+        render();
+        EMA.ui.toast('글자를 길게 눌러 직접 복사해 주세요 📋', 3200);
+        EMA.ui.sound('wrong');
+      }
     },
     useClaim(d) {
       store.useClaim(d.id);
@@ -2430,12 +2544,6 @@ window.EMA = window.EMA || {};
       store.setPageProblem(book, view.pmPage, list);
       view.sheet = null; EMA.ui.toast(view.pmPage + '쪽 문제번호를 저장했어요');
       render();
-    },
-    pmDownload() { EMA.ui.download('page-maps.json', JSON.stringify(store.pageMaps(), null, 1)); },
-    async pmCopy() {
-      const txt = JSON.stringify(store.pageMaps(), null, 1);
-      const ok = await EMA.ui.copy(txt);
-      EMA.ui.toast(ok ? '쪽수표 JSON을 복사했어요' : '복사가 안 되면 내려받기를 써 주세요');
     },
     lessonEdit() {
       const l = store.lesson(view.classId);

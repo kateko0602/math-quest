@@ -117,27 +117,35 @@ window.EMA = window.EMA || {};
     document.body.appendChild(a); a.click(); a.remove();
   };
 
-  /** 1초 복사 — 아이폰 사파리에서도 되도록 textarea 방식 폴백 */
-  ui.copy = async function (text) {
+  /** 복사 — 아이폰 사파리에서도 되도록 '클릭 안에서' textarea+execCommand 를 먼저 실행 */
+  ui.copySync = function (text) {
+    let ok = false;
+    let ta = null;
     try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-        return true;
-      }
-    } catch (e) { }
-    try {
-      const ta = document.createElement('textarea');
+      ta = document.createElement('textarea');
       ta.value = text;
       ta.setAttribute('readonly', '');
-      ta.style.position = 'fixed';
-      ta.style.top = '-1000px';
+      ta.setAttribute('aria-hidden', 'true');
+      ta.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;padding:0;border:0;opacity:0.01;font-size:16px;-webkit-user-select:text;user-select:text;z-index:-1;';
       document.body.appendChild(ta);
+      ta.focus({ preventScroll: true });
       ta.select();
-      ta.setSelectionRange(0, ta.value.length);
-      const ok = document.execCommand('copy');
-      ta.remove();
-      return ok;
-    } catch (e) { return false; }
+      try { ta.setSelectionRange(0, 999999); } catch (e) { }
+      ok = document.execCommand('copy');
+    } catch (e) { ok = false; }
+    if (ta && ta.parentNode) ta.parentNode.removeChild(ta);
+    return !!ok;
+  };
+  ui.copy = function (text) {
+    // ① 동기 방식이 먼저 — iOS 사파리는 await 뒤에서 execCommand 를 막습니다
+    if (ui.copySync(text)) return true;
+    // ② 최신 사파리·안드로이드의 비동기 클립보드 (결과는 기다리지 않음)
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+        navigator.clipboard.writeText(text).catch(function () { });
+      }
+    } catch (e) { }
+    return false;
   };
 
   /* ---------- 게임 감성 효과 ---------- */
