@@ -2616,3 +2616,5 @@ body{
 .cex-n{color:var(--cobalt-d);font-weight:900}
 .cexfold{color:#64748B}
 .cexfold b{color:var(--cobalt-d)}
+.chipx-item{background:#F1F5F9;color:#475569}
+.booktab{border-bottom-width:3px}
