@@ -1325,15 +1325,15 @@ button,input,select,textarea{font-family:var(--font)}
    v1.1 4단계 — UI/UX 마감 · 실사용 피드백
 ===================================================================== */
 
-/* ① 채점 화면 쪽수 가독성 — 8쪽 / 1-1을 크고 진하게 */
-.pgroup{font-size:13px;font-weight:900;color:#4B5563;letter-spacing:-.1px;padding:13px 2px 7px}
+/* ① 채점 화면 쪽수·문제번호 글씨 비율 — 쪽수(4쪽 · 개념)는 크고 진하게, 문제번호(확인1)는 그보다 작게 */
+.pgroup{font-size:16px;font-weight:900;color:#1E293B;letter-spacing:-.1px;padding:13px 2px 7px}
 .pgroup:first-child{padding-top:4px}
 .ox-row{grid-template-columns:64px 1fr 1fr}
-.ox-label{font-size:21px;font-weight:900;color:#0F172A;background:#F5EFE7;padding:13px 2px;letter-spacing:-.6px}
+.ox-label{font-size:16px;font-weight:900;color:#0F172A;background:#F5EFE7;padding:13px 2px;letter-spacing:-.6px}
 .ox-label span{font-size:11px;font-weight:900;color:#7C6F60;margin-left:1px}
-.ox-row.has-star .ox-label{font-size:21px;padding:13px 1px}
+.ox-row.has-star .ox-label{font-size:16px;padding:13px 1px}
 .ox-row.has-star .ox-label span{font-size:10px}
-.ox-row.gridrows .ox-label{font-size:19px}
+.ox-row.gridrows .ox-label{font-size:16px}
 
 /* ② 하단 고정 바 — 나머지 전부 ⭕ + 다음이 스크롤해도 항상 보임 */
 .screen.flow{padding-bottom:232px}
@@ -1499,11 +1499,14 @@ body.sheet-open .undobar{display:none}
 .sect-t{padding:12px 16px 6px}
 .hint{line-height:1.5}
 @media (max-width:380px){
-  .ox-label{font-size:19px}
+  .ox-label{font-size:16px}
   .ffrow .btn{font-size:14px}
   .bc-t{font-size:22px}
 }
 .weakcard{margin:13px 16px 10px}
+/* v1.2 — 내 도감 📊 자주 하는 실수 카드: 위 스탯 카드와 붙지 않게, 아래 📈 최근 7일 성장 카드와 같은 여백으로 */
+.card.weakcard{margin-top:15px;margin-bottom:15px}
+.card.weakempty{margin-top:15px;margin-bottom:15px}
 /* v1.1 — 하단 탭을 완전 불투명하게 (뒤 내용이 비쳐 두 줄로 보이던 문제) */
 .nav{background:#FFFFFF;box-shadow:0 -8px 22px rgba(30,41,59,.08)}
 .screen{padding-bottom:112px}

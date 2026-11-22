@@ -571,6 +571,31 @@ window.EMA = window.EMA || {};
     </div>`;
   }
 
+  /** 홈 카드 `진도`·`숙제` 줄 — 바로 아래 책 아이콘 줄에 이미 책 이름이 있어서,
+      맨 앞에 똑같이 반복되는 책 이름만 화면 표시에서 떼어 냅니다.
+      (저장된 lesson/homework 원본은 건드리지 않고, 한 줄에 책이 2권 이상 섞여
+       어느 책 쪽수인지 구분이 필요한 숙제는 그대로 둡니다.) */
+  function stripBookLead(text, books) {
+    let t = String(text == null ? '' : text).trim();
+    if (!t) return t;
+    const names = (books || [])
+      .map(b => String((b && b.book) || '').trim())
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length);
+    if (!names.length) return t;
+    if (names.filter(n => t.indexOf(n) >= 0).length > 1) return t;   // 책 2권 이상 — 구분 유지
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const n of names) {
+        if (t.indexOf(n) !== 0) continue;
+        const rest = t.slice(n.length).replace(/^\s*(?:[:：·\-–—|,]\s*)?/, '').trim();
+        if (rest) { t = rest; changed = true; break; }
+      }
+    }
+    return t;
+  }
+
   function homeToday(cid, sid, c, lv, st, streak, sub) {
     const l = store.lesson(cid);
     const bs = store.books(cid);
@@ -585,8 +610,8 @@ window.EMA = window.EMA || {};
 
     const lessonHtml = l ? `
       <div class="card lesson-card">
-        <div class="ln"><div class="k">진도</div><div class="v">${esc(l.lesson)}</div></div>
-        <div class="ln"><div class="k">숙제</div><div class="v">${esc(l.homework)}</div></div>
+        <div class="ln"><div class="k">진도</div><div class="v">${esc(stripBookLead(l.lesson, bs))}</div></div>
+        <div class="ln"><div class="k">숙제</div><div class="v">${esc(stripBookLead(l.homework, bs))}</div></div>
         <div class="booklist">
           ${bs.map(b => {
             const t = store.tiles(cid, b.book);
@@ -1138,7 +1163,7 @@ window.EMA = window.EMA || {};
     const w = store.weakReport(cid, sid);
     const title = who ? who + '의 자주 하는 실수' : '자주 하는 실수';
     if (!w.totalWrong && !w.tagTotal) {
-      return `<div class="card tight"><div class="card-hd"><span class="t">📊 ${title}</span></div><div class="muted">아직 오답이 없어요</div></div>`;
+      return `<div class="card tight weakempty"><div class="card-hd"><span class="t">📊 ${title}</span></div><div class="muted">아직 오답이 없어요</div></div>`;
     }
     const tags = w.tags.filter(t => t.count > 0);
     return `<div class="card weakcard">
