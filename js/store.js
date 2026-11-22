@@ -1193,7 +1193,7 @@ window.EMA = window.EMA || {};
       try { localStorage.setItem(this.key + '.backup', JSON.stringify({ at: new Date().toISOString(), state: this.state })); } catch (e) { }
       try {
         localStorage.removeItem(this.key);
-        LEGACY_KEYS.forEach(k => { try { localStorage.removeItem(k); } catch (e) { } });
+        if (!this.demo) LEGACY_KEYS.forEach(k => { try { localStorage.removeItem(k); } catch (e) { } });   // 연습 칸은 운영 기록을 건드리지 않음
         localStorage.removeItem(SESSION);
       } catch (e) { }
       return this.init();
@@ -1551,6 +1551,14 @@ window.EMA = window.EMA || {};
       if (!window.EMA.photos) return [];
       let gone = [];
       try { gone = await EMA.photos.purge(EMA.photos.KEEP_DAYS || 7); } catch (e) { gone = []; }
+      // IndexedDB를 못 쓰는 브라우저(폴백 저장)에서는 localStorage 쪽도 같이 정리
+      if (EMA.photos.failed) {
+        const limit = shiftISO(todayISO(), -((EMA.photos.KEEP_DAYS || 7) - 1));
+        Object.keys(this.state.photos || {}).forEach(id => {
+          const d = (this.state.photos[id] || {}).date || '';
+          if (d && d < limit) { delete this.state.photos[id]; gone.push(id); }
+        });
+      }
       if (gone.length) console.info('7일 지난 사진 자동 삭제:', gone.length, '장');
       return gone;
     }
