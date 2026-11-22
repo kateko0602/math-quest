@@ -1,5 +1,9 @@
-/* 저장소 v0.8 — 로컬(브라우저) 모드와 시트 API 모드를 같은 인터페이스로 씁니다.
+/* 저장소 v0.9 — 로컬(브라우저) 모드와 시트 API 모드를 같은 인터페이스로 씁니다.
 
+   ★ v0.9 2단계에서 더한 것 ★
+     ① 숙제 제출 기한(lesson.dueAt) — 기한 전은 '📘 진행 중', 기한이 지나야 미푼 문제만 '⚔️ 밀린문제'로
+     ② 오답 3단 구분(전체 틀린 문제 / 아직 고치지 않은 / 다시 풀어 고친) + 선생님 반 대시보드
+     ③ 학생 반 이동(기록 유지) · 퇴원(보관) · 숙제/프린트 설정 복사
    ★ v0.8 안정화의 핵심 세 가지 ★
      ① 날짜가 바뀌어도 데이터가 사라지지 않습니다 (예전엔 자정이 지나면 seed로 통째 재생성).
         · state.today만 오늘로 넘기고(roll_forward), 그날의 학습 기록·XP를 확정해 쌓습니다.
@@ -33,10 +37,10 @@ window.EMA = window.EMA || {};
     dt.setDate(dt.getDate() + d);
     return dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate());
   };
-  const KEY = 'ema.state.v5';
+  const KEY = 'ema.state.v5';           // 저장 칸 이름은 v0.8 그대로 — 기록을 옮기지 않아도 됩니다
   const DEMO_KEY = 'ema.state.demo.v5';       // 연습(?mode=demo)은 실제 운영 데이터와 다른 칸에 쌓입니다
   const LEGACY_KEYS = ['ema.state.v4', 'ema.state.v3'];
-  const SCHEMA = 5;
+  const SCHEMA = 6;                     // 구조 버전 6 — 숙제 기한·반 이동·퇴원·오답 3단이 더해졌습니다
   const SESSION = 'ema.session.v2';
   const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -95,6 +99,29 @@ window.EMA = window.EMA || {};
     const m = String(iso || '').match(/^\d{4}-(\d{2})-(\d{2})$/);
     return m ? (+m[1] + '.' + m[2] + '(' + dowName(iso) + ')') : String(iso || '');
   }
+  /** '2026-11-25 16:00' → Date (시간이 없으면 그날 23:59까지) */
+  function parseDueAt(v) {
+    const m = String(v || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2}))?$/);
+    if (!m) return null;
+    const d = new Date(+m[1], +m[2] - 1, +m[3], m[4] == null ? 23 : +m[4], m[5] == null ? 59 : +m[5], 0, 0);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  /** 남은/지난 시간을 사람 말로 — '2일', '3시간', '25분' */
+  function spanText(ms) {
+    const min = Math.max(0, Math.abs(ms)) / 60000;
+    if (min >= 1440) return Math.floor(min / 1440) + '일';
+    if (min >= 60) return Math.floor(min / 60) + '시간';
+    return Math.max(1, Math.floor(min)) + '분';
+  }
+  /** '2026-11-25 16:00' → '11월 25일(화) 16:00' */
+  function dueLabelOf(v) {
+    const d = parseDueAt(v);
+    if (!d) return '';
+    return (d.getMonth() + 1) + '월 ' + d.getDate() + '일(' + DOW[d.getDay()] + ') ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+  EMA.util.parseDueAt = parseDueAt;
+  EMA.util.dueLabelOf = dueLabelOf;
+  EMA.util.spanText = spanText;
 
   class BaseStore {
     constructor() { this.state = null; this.mode = 'local'; }
@@ -188,6 +215,108 @@ window.EMA = window.EMA || {};
       if (l.book) return [{ book: l.book, pages: l.pages || [] }];
       return [];
     }
+    /* ---------- 반·학생 (v0.9: 퇴원 보관 · 반 이동) ---------- */
+    /** 재원 학생만 — 숙제·보스·랭킹·대시보드는 퇴원생을 빼고 셉니다 */
+    activeStudents(classId) {
+      const c = this.getClass(classId);
+      return c ? c.students.filter(s => s.status !== 'left') : [];
+    }
+    leftStudents(classId) {
+      const c = this.getClass(classId);
+      return c ? c.students.filter(s => s.status === 'left') : [];
+    }
+    /** 숙제 채점·제출이 묶이는 날짜 — 숙제가 나간 날(lesson.date). 기한 전에는 날이 바뀌어도 같은 숙제로 이어집니다 */
+    hwDate(classId) {
+      const l = this.lesson(classId);
+      return (l && l.date) || this.state.today;
+    }
+    /** 반 수업 시작 시각 '18:00' (없으면 16:00) */
+    classStart(cls) {
+      const m = String((cls && cls.time) || '').match(/(\d{1,2}):(\d{2})/);
+      return m ? pad(+m[1]) + ':' + m[2] : '16:00';
+    }
+    /** fromISO 다음 수업일 (반 요일 기준) */
+    nextClassDate(classId, fromISO) {
+      const c = this.getClass(classId);
+      const from = fromISO || this.state.today;
+      const dowMap = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6 };
+      const ds = [];
+      String((c && c.days) || '').split(/[^가-힣]+/).forEach(tok => String(tok).split('').forEach(ch => { if (dowMap[ch] != null && ds.indexOf(dowMap[ch]) < 0) ds.push(dowMap[ch]); }));
+      if (!ds.length) return shiftISO(from, 1);
+      for (let i = 1; i <= 14; i++) {
+        const d = shiftISO(from, i);
+        if (ds.indexOf(new Date(d + 'T12:00:00').getDay()) >= 0) return d;
+      }
+      return shiftISO(from, 1);
+    }
+    /** 기본 마감 = 다음 수업일 그 반 수업 시작 시각 */
+    defaultDueAt(classId) {
+      const l = this.lesson(classId);
+      const base = (l && l.date) || this.state.today;
+      return this.nextClassDate(classId, base) + ' ' + this.classStart(this.getClass(classId));
+    }
+    /** 이 숙제의 마감 시각 — 선생님이 넣은 dueAt → 시트 dueDate → 기본값 */
+    dueAtOf(classId) {
+      const l = this.lesson(classId);
+      if (!l) return '';
+      if (l.noDue) return '';
+      if (l.dueAt) return l.dueAt;
+      if (l.dueDate) return /^\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}$/.test(l.dueDate) ? l.dueDate : l.dueDate + ' ' + this.classStart(this.getClass(classId));
+      return this.defaultDueAt(classId);
+    }
+    /** 숙제 기한 상태 — open(진행 중) / late(기한 지남) / closed(선생님 마감) / none */
+    dueInfo(classId, nowMs) {
+      const l = this.lesson(classId);
+      if (!l) return { has: false, state: 'none', dueAt: '', label: '', leftText: '', lateText: '', ms: 0, passed: false };
+      const dueAt = this.dueAtOf(classId);
+      const dt = parseDueAt(dueAt);
+      const now = nowMs == null ? Date.now() : nowMs;
+      const closed = !!l.dueClosed;
+      const passed = closed || (dt ? now > dt.getTime() : false);
+      const ms = dt ? dt.getTime() - now : 0;
+      return {
+        has: true, dueAt, label: dueLabelOf(dueAt) || '기한 없음', closed, passed, ms,
+        state: closed ? 'closed' : passed ? 'late' : 'open',
+        leftText: !passed && dt ? '제출 기한까지 ' + spanText(ms) + ' 남았어요' : (!passed && !dt ? '기한 없이 진행 중이에요' : ''),
+        lateText: passed ? (closed ? '선생님이 오늘 숙제를 마감했어요' : '제출 기한이 ' + spanText(ms) + ' 지났어요') : ''
+      };
+    }
+    /** 학생 1명의 오늘 숙제 진행 상황 (기한 전 '진행 중' 표시용) */
+    progressInfo(classId, sid) {
+      const st = this.stats(classId, sid);
+      const ps = this.printStats(classId, sid);
+      const sub = this.submission(classId, sid);
+      const due = this.dueInfo(classId);
+      const marked = st.marked + ps.marked;
+      const total = st.total + ps.total;
+      return {
+        due, marked, total, pct: total ? Math.round(marked / total * 100) : 0,
+        hwMarked: st.marked, hwTotal: st.total, printMarked: ps.marked, printTotal: ps.total,
+        sub, stamped: !!(sub && (sub.stampAt || sub.status === 'stamped')),
+        state: !st.total && !ps.total ? 'none' : sub && sub.stampAt ? 'stamped' : sub ? 'submitted' : due.passed ? 'late' : 'open',
+        line: due.has ? due.label + '까지' : ''
+      };
+    }
+    /** 선생님이 마감일·시간을 바꿉니다 */
+    setDue(classId, dueAt) {
+      const l = this.state.lessons[classId] || (this.state.lessons[classId] = {});
+      if (dueAt) { l.dueAt = String(dueAt).trim(); l.dueDate = l.dueAt.slice(0, 10); delete l.noDue; }
+      else { delete l.dueAt; delete l.dueDate; l.noDue = true; }
+      delete l.dueClosed;
+      delete l.carriedFor;
+      this.save();
+      return this.dueInfo(classId);
+    }
+    /** 지금 바로 마감 — 기한 전이라도 미푼 문제를 밀린문제로 넘깁니다 */
+    closeDue(classId) {
+      const l = this.state.lessons[classId];
+      if (!l) return 0;
+      l.dueClosed = true;
+      const r = this.sweepDueOne(classId);
+      this.save();
+      return r;
+    }
+
     /** 숙제 타일 (bookName 생략 시 모든 교재) */
     tiles(classId, bookName) {
       const bs = this.books(classId);
@@ -280,8 +409,9 @@ window.EMA = window.EMA || {};
     }
 
     /* ---------- 채점 ---------- */
+    /** 채점 행 날짜 — 숙제는 '숙제 나간 날'(hwDate), 프린트는 오늘 */
     grade(classId, sid, date) {
-      const d = date || this.state.today;
+      const d = date || this.hwDate(classId);
       const g = this.state.grades[K(classId, d, sid)];
       if (!g) return { marks: {}, cleanup: {}, tags: {}, updatedAt: null };
       if (!g.marks) g.marks = {};
@@ -290,7 +420,7 @@ window.EMA = window.EMA || {};
       return g;
     }
     gradeOf(classId, sid, kind) {
-      const k = kind === 'print' ? K(classId, this.state.today, sid) + '|print' : K(classId, this.state.today, sid);
+      const k = SK(classId, kind === 'print' ? this.state.today : this.hwDate(classId), sid, kind);
       const g = this.state.grades[k];
       if (!g) return { marks: {}, cleanup: {}, tags: {}, updatedAt: null };
       if (!g.marks) g.marks = {};
@@ -374,7 +504,7 @@ window.EMA = window.EMA || {};
     todayBankedXp(classId, sid) {
       const S = this.state.submissions || {};
       let n = 0;
-      [K(classId, this.state.today, sid), K(classId, this.state.today, sid) + '|print'].forEach(k => {
+      [K(classId, this.hwDate(classId), sid), K(classId, this.state.today, sid) + '|print'].forEach(k => {
         const sub = S[k];
         if (sub && sub.xp) n += Number(sub.xp) || 0;
       });
@@ -395,11 +525,12 @@ window.EMA = window.EMA || {};
 
     /* ---------- 제출·도장 ---------- */
     submission(classId, sid, date, kind) {
-      const d = date || this.state.today;
+      let d = date;
+      if (!d) d = kind === 'print' ? this.state.today : this.hwDate(classId);
       return this.state.submissions[SK(classId, d, sid, kind)] || null;
     }
     stampOrder(classId, date) {
-      const d = date || this.state.today;
+      const d = date || this.hwDate(classId);
       const c = this.getClass(classId);
       return c.students.map(s => ({ s, sub: this.submission(classId, s.id, d) }))
         .filter(r => r.sub && r.sub.stampAt)
@@ -442,7 +573,7 @@ window.EMA = window.EMA || {};
     }
     /** 내가 깎은 HP (%) — 반 전체 데미지 중 내 몫 (도장 + 오답 수정 + 내 동료 공격력) */
     myDamage(classId, sid) {
-      const total = (this.getClass(classId).students.length) || 1;
+      const total = (this.activeStudents(classId).length) || 1;
       const st = this.stats(classId, sid);
       const p = this.printStats(classId, sid);
       const row = this.submission(classId, sid);
@@ -500,12 +631,13 @@ window.EMA = window.EMA || {};
     classDay(classId, date) {
       const d = date || this.state.today;
       const c = this.getClass(classId);
-      return c.students.map(s => {
+      const list = c ? c.students.filter(s => s.status !== 'left') : [];
+      return list.map(s => {
         const st = this.stats(classId, s.id);
         const ps = this.printStats(classId, s.id);
         return Object.assign({
           student: s,
-          sub: this.submission(classId, s.id, d),
+          sub: this.submission(classId, s.id),
           printSub: this.submission(classId, s.id, d, 'print'),
           p3: ps.c3
         }, st);
@@ -537,7 +669,7 @@ window.EMA = window.EMA || {};
 
     gradeRanking(mode) {
       const all = [];
-      this.state.classes.forEach(c => c.students.forEach(s => {
+      this.state.classes.forEach(c => c.students.filter(s => s.status !== 'left').forEach(s => {
         all.push({ student: s, cls: c, xp: this.totalXP(c.id, s.id), solved: this.solvedToday(c.id, s.id) });
       }));
       all.sort((a, b) => mode === 'king' ? (b.solved - a.solved) || (b.xp - a.xp) : b.xp - a.xp);
@@ -549,18 +681,17 @@ window.EMA = window.EMA || {};
 
     top5(classId, date) {
       const d = date || this.state.today;
-      const c = this.getClass(classId);
       const tiles = this.tiles(classId);
       const map = {};
       const add = (s, k) => { map[k] = map[k] || { key: k, students: [] }; if (!map[k].students.find(x => x.id === s.id)) map[k].students.push(s); };
-      c.students.forEach(s => {
+      this.activeStudents(classId).forEach(s => {
         const g = this.grade(classId, s.id, d);
         Object.keys(g.marks).forEach(k => {
           if (g.marks[k] === 'x' && g.cleanup[k] === 'star') add(s, k);
         });
       });
       if (Object.keys(map).length === 0) {
-        c.students.forEach(s => {
+        this.activeStudents(classId).forEach(s => {
           const g = this.grade(classId, s.id, d);
           Object.keys(g.marks).forEach(k => { if (g.marks[k] === 'x') add(s, k); });
         });
@@ -577,6 +708,164 @@ window.EMA = window.EMA || {};
         if (t.length) out.push({ cls: c, rows: t });
       });
       return out;
+    }
+
+    /* ---------- 오답 3단 구분 · 반 대시보드 (v0.9) ---------- */
+    /** 기간 안 오답을 문제 하나 단위로 모음니다 — 고쳐서 맞힌 문제가 '미해결'로 잡히지 않게 */
+    wrongSets(classId, sid, from, to) {
+      const map = {};
+      const add = (id, fixed) => { const r = map[id] || (map[id] = { fixed: false }); if (fixed) r.fixed = true; };
+      Object.keys(this.state.grades || {}).forEach(k => {
+        const p = String(k).split('|');
+        if (p[0] !== classId || p[2] !== sid || p[3] === 'print') return;
+        if (from && p[1] < from) return;
+        if (to && p[1] > to) return;
+        const row = this.state.grades[k] || {};
+        Object.keys(row.marks || {}).forEach(mk => {
+          if (row.marks[mk] !== 'x') return;
+          add(p[1] + '|' + mk, (row.cleanup || {})[mk] === 'fixed');
+        });
+      });
+      const tagOf = m => m.origin ? (m.origin.date + '|' + m.origin.key) : ('c|' + m.date + '|' + m.book + '|' + m.page + '|' + m.num);
+      const inR = d => (!from || !d || d >= from) && (!to || !d || d <= to);
+      ((this.state.carried || {})[sid] || []).forEach(m => {
+        if ((m.reason || 'x') === 'skip') return;
+        const d = m.origin ? m.origin.date : m.date;
+        if (!inR(d)) return;
+        add(tagOf(m), false);
+      });
+      ((this.state.solvedCarried || {})[sid] || []).forEach(m => {
+        if ((m.reason || 'x') === 'skip' || m.skip) return;
+        const d = m.origin ? m.origin.date : m.date;
+        if (!inR(d)) return;
+        add(tagOf(m), true);
+      });
+      ((this.state.monsters || {})[sid] || []).forEach(m => {
+        if (m.fromCarry || m.skip) return;
+        if (!inR(m.date)) return;
+        add('m|' + m.date + '|' + m.book + '|' + m.page + '|' + m.num, !!m.captured);
+      });
+      const ids = Object.keys(map);
+      let fixed = 0;
+      ids.forEach(id => { if (map[id].fixed) fixed++; });
+      return { total: ids.length, fixed, open: ids.length - fixed };
+    }
+    /** 오늘 숙제만의 오답 3단 — 전체 틀린 / 아직 안 고친 / 고쳐서 맞힌 */
+    wrongStats(classId, sid) {
+      const c = this.counts(classId, sid);
+      const fixed = c.c3;
+      return { total: c.c2 + c.c3 + c.c4, open: c.c2 + c.c4, fixed };
+    }
+    /** 선생님 반 대시보드 — 제출률·미제출·오답 수정률·학습량·학생별 비교 */
+    dashboard(classId, range) {
+      range = range || 'month';
+      const days = range === 'week' ? 7 : range === 'month' ? 30 : 120;
+      const to = this.state.today;
+      const from = shiftISO(to, -(days - 1));
+      const rows = this.activeStudents(classId).map(s => {
+        const ws = this.wrongSets(classId, s.id, from, to);
+        const r = this.parentReport(classId, s.id, range);
+        const sub = this.submission(classId, s.id);
+        const ps = this.submission(classId, s.id, null, 'print');
+        const st = this.stats(classId, s.id);
+        return {
+          student: s,
+          submitted: !!sub, stamped: !!(sub && sub.stampAt), printSubmitted: !!ps,
+          market: st.marked, marked: st.marked, total: st.total,
+          wrongTotal: ws.total, wrongOpen: ws.open, wrongFixed: ws.fixed,
+          fixRate: ws.total ? Math.round(ws.fixed / ws.total * 100) : 0,
+          hwRate: r.hwRate, classDays: r.classDays, doneClassDays: r.doneClassDays,
+          solved: r.solved, streak: r.streak,
+          lastAt: sub ? sub.at : ps ? ps.at : ''
+        };
+      });
+      const total = rows.length || 1;
+      const submitted = rows.filter(r => r.submitted || r.printSubmitted).length;
+      const missing = rows.filter(r => !r.submitted && !r.printSubmitted);
+      const wt = rows.reduce((a, r) => a + r.wrongTotal, 0);
+      const wf = rows.reduce((a, r) => a + r.wrongFixed, 0);
+      const wo = rows.reduce((a, r) => a + r.wrongOpen, 0);
+      const solved = rows.reduce((a, r) => a + r.solved, 0);
+      return {
+        range, from, to, rows, total, submitted, stamped: rows.filter(r => r.stamped).length,
+        submitRate: Math.round(submitted / total * 100),
+        missing, wrongTotal: wt, wrongOpen: wo, wrongFixed: wf,
+        fixRate: wt ? Math.round(wf / wt * 100) : 0,
+        solved, avgHw: Math.round(rows.reduce((a, r) => a + r.hwRate, 0) / total),
+        due: this.dueInfo(classId), lesson: this.lesson(classId) || {}
+      };
+    }
+
+    /* ---------- 반 이동 · 퇴원(보관) (v0.9) ---------- */
+    moveStudent(classId, sid, toClassId) {
+      const from = this.getClass(classId), to = this.getClass(toClassId);
+      if (!from || !to || classId === toClassId) return null;
+      const i = from.students.findIndex(s => s.id === sid);
+      if (i < 0) return null;
+      if (to.students.some(x => x.id === sid)) return null;
+      const s = from.students.splice(i, 1)[0];
+      s.status = 'active'; s.leftAt = null;
+      s.movedFrom = (s.movedFrom || []).concat([{ from: classId, to: toClassId, at: this.state.today }]);
+      to.students.push(s);
+      // 채점·제출·프린트 기록의 반 이름을 새 반으로 옮겨 붙입니다 (펫·코인·XP는 학생 객체 그대로)
+      const rekey = obj => {
+        Object.keys(obj || {}).forEach(k => {
+          const p = String(k).split('|');
+          if (p[0] !== classId || p[2] !== sid) return;
+          const nk = [toClassId].concat(p.slice(1)).join('|');
+          if (!obj[nk]) obj[nk] = obj[k];
+          delete obj[k];
+        });
+      };
+      rekey(this.state.grades); rekey(this.state.submissions); rekey(this.state.prints); rekey(this.state.lateUploads);
+      this.save();
+      return s;
+    }
+    retireStudent(classId, sid) {
+      const s = this.student(classId, sid);
+      if (!s) return null;
+      s.status = 'left'; s.leftAt = this.state.today;
+      this.save();
+      return s;
+    }
+    restoreStudent(classId, sid) {
+      const s = this.student(classId, sid);
+      if (!s) return null;
+      s.status = 'active'; s.leftAt = null;
+      this.save();
+      return s;
+    }
+
+    /* ---------- 숙제·쪽수 설정 복사 (v0.9) ---------- */
+    copyLesson(fromClassId, toClassId, opts) {
+      const src = this.lesson(fromClassId);
+      const dst = this.getClass(toClassId);
+      if (!src || !dst || fromClassId === toClassId) return null;
+      const books = (src.books || []).map(b => ({ book: b.book, pages: (b.pages || []).slice() }));
+      const dueAt = (opts && opts.dueAt) || this.defaultDueAt(toClassId);
+      this.saveLesson(toClassId, {
+        date: this.state.today,
+        lesson: (opts && opts.lesson != null) ? opts.lesson : (src.lesson || ''),
+        homework: (opts && opts.homework) || books.map(b => b.book + ' ' + pageSpan(b.pages) + '쪽').join(', '),
+        books, assignedAt: this.state.today, dueAt, dueDate: dueAt.slice(0, 10),
+        due: '다음 수업(' + dueAt.slice(5) + ') 전까지'
+      });
+      delete this.state.lessons[toClassId].dueClosed;
+      delete this.state.lessons[toClassId].carriedFor;
+      this.save();
+      return this.lesson(toClassId);
+    }
+    /** 오답프린트 문제 수를 다른 학생(들)에게도 복사 */
+    copyPrint(classId, fromSid, toSids) {
+      const info = this.printInfo(classId, fromSid);
+      if (!info || !info.count) return 0;
+      let n = 0;
+      (toSids || []).filter(sid => sid && sid !== fromSid).forEach(sid => {
+        this.state.prints[K(classId, this.state.today, sid)] = { count: info.count, lastNo: null, setBy: 'teacher', at: this.state.today };
+        n++;
+      });
+      if (n) this.save();
+      return n;
     }
 
     /* ---------- 단원평가 ---------- */
@@ -955,6 +1244,9 @@ window.EMA = window.EMA || {};
         activeDays: histActive + Object.keys(gradedDates).length
       };
     }
+    /** 학부모 카카오톡 안내 — 숙제 수행 · 오답 수정 · 취약 단원 · 추가 안내만 짧게.
+        자세한 문제별 기록·일자별 진도는 PNG 성적표 이미지/상세 화면에서만 보여 줍니다.
+        카톡은 한 줄의 '~' 사이를 취소선으로 그어서 범위는 '-'로 씁니다. */
     kakaoSummary(classId, sid, range) {
       const s = this.student(classId, sid) || {};
       const c = this.getClass(classId) || {};
@@ -963,51 +1255,40 @@ window.EMA = window.EMA || {};
       const kd = iso => iso.slice(5).replace('-', '.');
       const lines = [];
       lines.push(`안녕하세요 어머님, ${c.name || ''} 담임입니다.`);
-      lines.push(`${s.name} 학생의 ${r.label} 학습 리포트를 보내 드립니다. (${kd(r.from)} - ${kd(r.to)})`);
+      lines.push(`${s.name} 학생의 ${r.label} 학습 현황을 보내 드립니다. (${kd(r.from)} - ${kd(r.to)})`);
       lines.push('');
-      if (r.dayList.length || r.printList.length) {
-        lines.push(`■ ${r.label} 진도 및 숙제`);
-        r.dayList.forEach(d => {
-          const parts = [];
-          if (d.lesson) parts.push(`진도: ${d.lesson}`);
-          if (d.homework) parts.push(`숙제: ${d.homework}`);
-          lines.push(`· ${d.label} ${parts.join(' / ')}`);
-        });
-        r.printList.forEach(p => lines.push(`· 추가 과제: 개별 오답프린트 ${p.count}문항 배부 (${p.md})`));
-        lines.push('');
+      lines.push('■ 숙제 수행');
+      if (r.classDays) lines.push(`· 숙제 ${r.classDays}회 중 ${r.doneClassDays}회 완료 (${r.hwRate}%)`);
+      else lines.push('· 이번 기간 숙제 기록이 없습니다.');
+      lines.push(`· 총 ${r.solved}문항 풀이 · 연속 ${r.streak}일 학습`);
+      lines.push('');
+      lines.push('■ 오답 수정');
+      if (r.wrong) {
+        lines.push(`· 틀린 문제 ${r.wrong}개 중 ${r.fixed}개 다시 풀어 해결 (${r.fixRate}%)`);
+        if (r.wrong - r.fixed > 0) lines.push(`· 아직 남은 오답 ${r.wrong - r.fixed}개`);
+      } else {
+        lines.push('· 이번 기간 오답이 없습니다.');
       }
-      lines.push('■ 학습 성실도');
-      lines.push(`· 연속 ${r.streak}일 학습${r.classDays ? ` · 숙제 ${r.classDays}회 중 ${r.doneClassDays}회 완료 (${r.hwRate}%)` : ''}`);
       lines.push('');
-      lines.push('■ 풀이 및 오답 해결');
-      lines.push(`· 총 ${r.solved}문항 풀이 · 오답 ${r.wrong}개 중 ${r.fixed}개 재풀이 완료 (${r.fixRate}%)`);
-      lines.push('');
-      if (r.wrong === 0) {
-        lines.push('■ 오답 원인 분석');
-        lines.push('· 이번 기간 오답 없음');
-        lines.push('');
-      } else if (r.tagTotal > 0) {
-        lines.push('■ 오답 원인 분석');
-        lines.push(`· 계산 실수 ${pct('calc')}% · 문제 잘못 읽음 ${pct('read')}% · 개념 보완 필요 ${pct('concept')}%`);
-        lines.push('');
-      }
       lines.push('■ 취약 단원');
       if (r.units.length) {
-        r.units.forEach(u => lines.push(`· ${u.name} — 오답 ${u.wrong}개${u.fixed ? ` (재풀이 ${u.fixed}개)` : ''}`));
+        r.units.slice(0, 2).forEach(u => lines.push(`· ${u.name} - 오답 ${u.wrong}개${u.fixed ? ` (${u.fixed}개 해결)` : ''}`));
       } else {
-        lines.push('· 이 기간에 오답 기록이 없습니다.');
+        lines.push('· 이번 기간에 오답 기록이 없습니다.');
       }
       lines.push('');
-      lines.push('■ 학원 단원평가');
-      if (r.exams.length) {
-        r.exams.slice(-3).forEach(e => {
-          lines.push(`· ${e.unit.replace(' 평가', '')} ${e.score}점${e.retest != null ? ` (재시험 ${e.retest}점)` : ''}`);
-        });
-        if (r.avgExam != null) lines.push(`· 평균 ${r.avgExam}점`);
+      lines.push('■ 추가 안내');
+      if (r.exams.length && r.avgExam != null) {
+        lines.push(`· 단원평가 평균 ${r.avgExam}점 (${r.exams.length}회 응시)`);
+        const low = r.exams.filter(e => e.score != null && e.score < 80).slice(-1)[0];
+        if (low) lines.push(`· ${low.unit.replace(' 평가', '')} ${low.score}점 - 해당 단원 복습을 부탁드려요`);
+      } else if (r.wrong > 0 && r.tagTotal > 0) {
+        lines.push(`· 오답 원인은 계산 실수 ${pct('calc')}% · 문제 잘못 읽음 ${pct('read')}% · 개념 보완 ${pct('concept')}% 순이에요`);
       } else {
-        lines.push('· 이 기간에 응시한 단원평가가 없습니다.');
+        lines.push('· 특별히 전할 내용이 없습니다.');
       }
       lines.push('');
+      lines.push('자세한 문제별 기록은 보내 드린 성적표 이미지에서 확인하실 수 있어요.');
       lines.push('가정에서도 꾸준한 복습을 응원해 주시면 좋겠습니다. 감사합니다.');
       return lines.join('\n');
     }
@@ -1051,6 +1332,7 @@ window.EMA = window.EMA || {};
       st.lateUploads = st.lateUploads || {};
       st.photos = st.photos || {};
       st.carryResolve = st.carryResolve || {};
+      st.activity = st.activity || {};          // v0.9 — 날짜별 실제로 누른 문제 수
       if (!st.shop) st.shop = { rewardsOn: true, claims: [] };
       if (!st.gallery) st.gallery = { mode: 'auto' };
       if (!st.bossBoosts) st.bossBoosts = {};
@@ -1069,7 +1351,25 @@ window.EMA = window.EMA || {};
           if (typeof s.bonusXp !== 'number') s.bonusXp = 0;
           if (typeof s.coins !== 'number') s.coins = 0;
           if (!s.pin) s.pin = '1234';
+          if (!s.status) s.status = 'active';        // v0.9 — 재원 / left(퇴원·보관)
         });
+        const l = st.lessons[c.id];
+        if (l && !l.dueAt) {
+          // v0.8까지는 dueDate(날짜)만 있었습니다 — 그 반 수업 시작 시각을 붙여 마감 시각으로
+          let d = l.dueDate || '';
+          if (!d) {
+            const dowMap = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6 };
+            const ds = [];
+            String(c.days || '').split(/[^가-힣]+/).forEach(tok => String(tok).split('').forEach(ch => { if (dowMap[ch] != null && ds.indexOf(dowMap[ch]) < 0) ds.push(dowMap[ch]); }));
+            d = shiftISO(st.today, 1);
+            for (let i = 1; i <= 14 && ds.length; i++) {
+              const cand = shiftISO(st.today, i);
+              if (ds.indexOf(new Date(cand + 'T12:00:00').getDay()) >= 0) { d = cand; break; }
+            }
+          }
+          l.dueAt = /^\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}$/.test(d) ? d : d + ' ' + this.classStart(c);
+          l.dueDate = l.dueAt.slice(0, 10);
+        }
       });
       Object.keys(st.grades).forEach(k => {
         const g = st.grades[k];
@@ -1171,6 +1471,24 @@ window.EMA = window.EMA || {};
         if (row) row.solved = Math.max(row.solved || 0, marks);
         else hist.push({ date, solved: marks });
       });
+      // v0.9 — 숙제가 여러 날에 걸쳐 이어질 때 '그날 실제로 누른 문제 수'를 따로 기록
+      const A = st.activity || {};
+      Object.keys(A).forEach(sid => {
+        const n = Number((A[sid] || {})[date] || 0);
+        if (!n) return;
+        const hist = st.history[sid] = st.history[sid] || [];
+        const row = hist.find(h => h.date === date);
+        if (row) row.solved = Math.max(row.solved || 0, n);
+        else hist.push({ date, solved: n });
+      });
+    }
+    /** 오늘 실제로 누른 문제 수를 기록 (여러 날 숙제의 날짜별 학습량) */
+    _touchActivity(classId, sid, n) {
+      const cnt = Number(n) || 0;
+      if (!cnt) return;
+      const A = this.state.activity || (this.state.activity = {});
+      const row = A[sid] || (A[sid] = {});
+      row[this.state.today] = (Number(row[this.state.today] || 0)) + cnt;
     }
 
     save() {
@@ -1213,7 +1531,7 @@ window.EMA = window.EMA || {};
     }
 
     gradeRow(classId, sid, kind) {
-      const k = kind === 'print' ? K(classId, this.state.today, sid) + '|print' : K(classId, this.state.today, sid);
+      const k = SK(classId, kind === 'print' ? this.state.today : this.hwDate(classId), sid, kind);
       const g = this.state.grades[k] || (this.state.grades[k] = { marks: {}, cleanup: {}, tags: {}, updatedAt: null });
       if (!g.marks) g.marks = {};
       if (!g.cleanup) g.cleanup = {};
@@ -1225,6 +1543,7 @@ window.EMA = window.EMA || {};
     /** mark: 'o' | 'x' | '' (같은 것을 다시 누르면 해제 → 미풀이) */
     setMark(classId, sid, key, mark, kind) {
       const g = this.gradeRow(classId, sid, kind);
+      const had = g.marks[key] || '';
       if (!mark || g.marks[key] === mark) {
         delete g.marks[key];
         delete g.cleanup[key];
@@ -1232,6 +1551,7 @@ window.EMA = window.EMA || {};
       } else {
         g.marks[key] = mark;
         if (mark === 'o') { delete g.cleanup[key]; delete g.tags[key]; }
+        if (!had) this._touchActivity(classId, sid, 1);     // 오늘 새로 누른 문제
       }
       // 다시 채점한 문제는 '밀린문제'에서 뺀다 (오늘 넘긴 것만)
       if (mark) this.dropTodayCarry(sid, key);
@@ -1252,7 +1572,9 @@ window.EMA = window.EMA || {};
     markAllCorrect(classId, sid, kind, bookName) {
       const g = this.gradeRow(classId, sid, kind);
       const tiles = kind === 'print' ? this.printTiles(classId, sid) : this.tiles(classId, bookName || viewBook(this, classId));
-      tiles.forEach(t => { if (!t.missing) { g.marks[t.key] = 'o'; delete g.cleanup[t.key]; } });
+      let n = 0;
+      tiles.forEach(t => { if (!t.missing) { if (!g.marks[t.key]) n++; g.marks[t.key] = 'o'; delete g.cleanup[t.key]; } });
+      if (n) this._touchActivity(classId, sid, n);
       g.updatedAt = nowHHMM();
       this.save();
       return true;
@@ -1323,29 +1645,63 @@ window.EMA = window.EMA || {};
       this.save();
       return true;
     }
-    /** 제출할 때 '안 누른 문제'를 바로 밀린문제로 넘깁니다 (자정 기다리지 않음) */
+    /** 제출할 때 '안 누른 문제'를 밀린문제로 넘깁니다 — ★ 기한이 지난 뒤에만!
+        기한 전(진행 중)에는 넘기지 않고 그대로 오늘 숙제에 남겨 두었습니다. */
     carryOverUnmarked(classId, sid, kind) {
       if (kind === 'print') return 0;
+      const due = this.dueInfo(classId);
+      if (!due.passed) return 0;                     // ★ 기한 전 부분 제출·임시 저장은 밀린문제가 아님
       const g = this.grade(classId, sid);
       let n = 0;
       this.tiles(classId).forEach(t => {
         if (g.marks[t.key]) return;
-        if (this._hasCarry(sid, this.state.today, t.key)) return;
+        if (this._hasCarry(sid, this.hwDate(classId), t.key)) return;
         this._addCarry(sid, {
           book: t.book, page: t.page, num: t.num, label: (t.page + '쪽 ' + t.num + '번'),
-          date: this.state.today, reason: 'skip', origin: { date: this.state.today, key: t.key }
+          date: this.hwDate(classId), reason: 'skip', overdue: true, dueAt: due.dueAt,
+          origin: { date: this.hwDate(classId), key: t.key }
         });
         n++;
       });
       if (n) this.save();
       return n;
     }
+    /** 임시 저장 — 지금까지 누른 채점을 그대로 저장만 합니다 (기한 전이면 이월 없음) */
+    saveProgress(classId, sid) {
+      this.save();
+      return true;
+    }
+    /** 기한이 지난 숙제 하나를 훑어 미푼 문제를 이월합니다 */
+    sweepDueOne(classId) {
+      const l = this.lesson(classId);
+      if (!l) return 0;
+      const due = this.dueInfo(classId);
+      if (!due.passed) return 0;
+      let n = 0;
+      this.activeStudents(classId).forEach(s => { n += this.carryOverUnmarked(classId, s.id, 'hw'); });
+      l.carriedFor = due.dueAt;
+      return n;
+    }
+    /** 앱을 열 때마다: 기한이 지난 숙제의 미푼 문제를 한 번만 이월 */
+    sweepDue() {
+      const out = [];
+      Object.keys(this.state.lessons || {}).forEach(cid => {
+        const l = this.state.lessons[cid];
+        if (!l || !this.getClass(cid)) return;
+        const due = this.dueInfo(cid);
+        if (!due.passed) return;
+        if (l.carriedFor === due.dueAt) return;
+        out.push({ classId: cid, added: this.sweepDueOne(cid), dueAt: due.dueAt });
+      });
+      if (out.length) this.save();
+      return out;
+    }
     /** 테스트용: '다음 날로 넘겨보기' — 반 전원의 오늘 미풀이·안 고친 오답을 밀린문제로 */
     nextDayPreview(classId) {
       const c = this.getClass(classId);
       const rows = [];
       let total = 0;
-      c.students.forEach(s => {
+      this.activeStudents(classId).forEach(s => {
         const g = this.grade(classId, s.id);
         let n = 0;
         this.tiles(classId).forEach(t => {
@@ -1355,8 +1711,9 @@ window.EMA = window.EMA || {};
           if (this._hasCarry(s.id, this.state.today, t.key)) return;
           this._addCarry(s.id, {
             book: t.book, page: t.page, num: t.num, label: (t.page + '쪽 ' + t.num + '번'),
-            date: this.state.today,
+            date: this.hwDate(classId),
             reason: mark === 'x' ? (g.cleanup[t.key] === 'star' ? 'star' : 'x') : 'skip',
+            overdue: true, dueAt: this.dueAtOf(classId),
             origin: { date: this.state.today, key: t.key }
           });
           n++;
@@ -1410,8 +1767,7 @@ window.EMA = window.EMA || {};
       const prev = this.state.bossKills[classId];
       if (b.hp > 0 || (prev && prev.week === wk)) return null;
       this.state.bossKills[classId] = { week: wk, bossId: b.def.id, at: nowHHMM() };
-      const c = this.getClass(classId);
-      c.students.forEach(s => {
+      this.activeStudents(classId).forEach(s => {
         s.coins = (s.coins || 0) + 30;
         if (!s.titles) s.titles = [];
         if (!s.titles.find(t => t.id === 'boss_' + b.def.id)) {
@@ -1443,7 +1799,7 @@ window.EMA = window.EMA || {};
         xpBanked: false
       };
       const prevPhoto = prev && prev.photoId;
-      this.state.submissions[SK(classId, this.state.today, sid, kind)] = sub;
+      this.state.submissions[SK(classId, kind === 'print' ? this.state.today : this.hwDate(classId), sid, kind)] = sub;
       const s = this.student(classId, sid);
       if (!already && s) {
         s.coins = (s.coins || 0) + rw.coins;
@@ -1494,7 +1850,7 @@ window.EMA = window.EMA || {};
     }
     /** ② 화면 '고친 내용 저장' — 도장이 찍힌 제출은 절대 건드리지 않습니다 (도장 보호) */
     touchSubmission(classId, sid, kind) {
-      const k = SK(classId, this.state.today, sid, kind);
+      const k = SK(classId, kind === 'print' ? this.state.today : this.hwDate(classId), sid, kind);
       const sub = this.state.submissions[k];
       if (!sub) return false;
       if (sub.stampAt || sub.status === 'stamped') return false;   // ⛔ 도장 보호
@@ -1564,7 +1920,7 @@ window.EMA = window.EMA || {};
     }
 
     stamp(classId, sid, kind) {
-      const k = SK(classId, this.state.today, sid, kind);
+      const k = SK(classId, kind === 'print' ? this.state.today : this.hwDate(classId), sid, kind);
       const sub = this.state.submissions[k];
       if (!sub) return false;
       sub.status = 'stamped'; sub.stampAt = nowHHMM();
@@ -1573,9 +1929,8 @@ window.EMA = window.EMA || {};
       return killed || true;
     }
     stampAllPending(classId) {
-      const c = this.getClass(classId);
       let n = 0;
-      c.students.forEach(s => {
+      this.activeStudents(classId).forEach(s => {
         ['hw', 'print'].forEach(kind => {
           const sub = this.submission(classId, s.id, null, kind);
           if (sub && sub.status === 'submitted') {
@@ -1588,14 +1943,14 @@ window.EMA = window.EMA || {};
       return { count: n, killed };
     }
     requestResubmit(classId, sid, kind) {
-      const k = SK(classId, this.state.today, sid, kind);
+      const k = SK(classId, kind === 'print' ? this.state.today : this.hwDate(classId), sid, kind);
       const sub = this.state.submissions[k];
       if (!sub) return false;
       sub.status = 'resubmit'; sub.note = '사진 다시 찍어 주세요'; sub.stampAt = null;
       this.save(); return true;
     }
     unlockSubmission(classId, sid, kind) {
-      const k = SK(classId, this.state.today, sid, kind);
+      const k = SK(classId, kind === 'print' ? this.state.today : this.hwDate(classId), sid, kind);
       const sub = this.state.submissions[k];
       if (!sub) return false;
       sub.status = 'unlocked'; sub.stampAt = null;
@@ -1892,6 +2247,13 @@ window.EMA = window.EMA || {};
   }
 
   /* ================= API(시트 연동) 저장소 ================= */
+  /*  Code.gs 의 action 이름과 1:1로 맞춥니다 (아래 표가 곧 계약).
+      bootstrap · seed · setMark · markAll · cleanup · setTag · submitPhoto · touchSubmission
+      stamp · stampAll · resubmit · unlock · sick · profile · regenPin · pageProblem · lesson
+      setDue · closeDue · print · printLastNo · saveProgress · resolveCarried · retryCarried
+      buy · feed · growCompanion · rewardsOn · useClaim · galleryMode · lateUpload · submitYesterday
+      moveStudent · retireStudent · restoreStudent · copyLesson · copyPrint · teacherStatus
+      teacherSetup · teacherVerify · reset                                                  */
   class ApiStore extends BaseStore {
     constructor(url) { super(); this.url = url; this.mode = 'api'; this.lastSync = null; }
     async call(action, payload) {
@@ -1914,34 +2276,73 @@ window.EMA = window.EMA || {};
       }
       return this.state;
     }
-    /* 연동 모드에서도 화면이 그대로 돌도록 로컬 계산은 Base/로컬 로직을 재사용하고,
-       서버가 아는 동작은 서버에 먼저 보냅니다. */
+    save() { /* 서버가 진짜 저장소입니다 */ }
     session() { try { return JSON.parse(localStorage.getItem(SESSION) || 'null'); } catch (e) { return null; } }
     setSession(s) { s ? localStorage.setItem(SESSION, JSON.stringify(s)) : localStorage.removeItem(SESSION); }
+
+    /* 채점 */
     async setMark(c, s, key, mark, kind) { await this.call('setMark', { classId: c, studentId: s, key, mark, kind }); return this.markOf(c, s, key); }
     async markAllCorrect(c, s, kind) { await this.call('markAll', { classId: c, studentId: s, kind }); return true; }
-    async setCleanup(c, s, key, kind2, kind) { await this.call('cleanup', { classId: c, studentId: s, key, kind: kind2 }); return this.cleanupOf(c, s, key); }
-    async submitPhoto(c, s, dataUrl, kind) { const r = await this.call('submitPhoto', { classId: c, studentId: s, photo: dataUrl, kind }); return r.photoId; }
+    async setCleanup(c, s, key, kind2, kind) { await this.call('cleanup', { classId: c, studentId: s, key, kind: kind2, source: kind }); return this.cleanupOf(c, s, key, kind); }
+    async setTag(c, s, key, tag, kind) { await this.call('setTag', { classId: c, studentId: s, key, tag, kind }); return tag; }
+
+    /* 제출·도장·사진 */
+    async submitPhoto(c, s, dataUrl, kind) {
+      const rw = this.previewReward(c, s, kind);          // 보상은 그 기기에서 계산해 서버에 같이 보냅니다
+      const stu = this.student(c, s) || {};
+      const patch = { coins: (stu.coins || 0) + rw.coins, xp: (stu.xp || 0) + rw.xp };
+      const r = await this.call('submitPhoto', {
+        classId: c, studentId: s, photo: dataUrl, kind, reward: rw, patch,
+        verify: kind === 'print' ? { book: '오답프린트', page: '프린트' } : this.verifyTarget(c, s)
+      });
+      return Object.assign({}, r.result || {}, { photoId: r.photoId || null, sub: (r.result || {}).sub });
+    }
     async touchSubmission(c, s, kind) { await this.call('touchSubmission', { classId: c, studentId: s, kind }); return true; }
+    /** 임시 저장 — 사진 없이 채점만 남겨 둡니다(기한 전 진행 중) */
+    async saveProgress(c, s, kind) { await this.call('saveProgress', { classId: c, studentId: s, kind }); return true; }
     photo(id) { return this.state.photos[id] || null; }
     putPhoto() { /* 운영 모드에서는 서버(드라이브)에 저장 */ }
+    async deletePhoto(id) { await this.call('deletePhoto', { photoId: id }); return true; }
     async stamp(c, s, kind) { await this.call('stamp', { classId: c, studentId: s, kind }); return true; }
     async stampAllPending(c) { const r = await this.call('stampAll', { classId: c }); return { count: r.count || 0, killed: null }; }
     async requestResubmit(c, s, kind) { await this.call('resubmit', { classId: c, studentId: s, kind }); return true; }
     async unlockSubmission(c, s, kind) { await this.call('unlock', { classId: c, studentId: s, kind }); return true; }
+    async submitYesterday(c, s, dataUrl, solved) { await this.call('submitYesterday', { classId: c, studentId: s, photo: dataUrl, solved }); return true; }
+
+    /* 학생·반 */
     async toggleSick(c, s) { const r = await this.call('sick', { classId: c, studentId: s }); return r.sick; }
     async saveProfile(c, s, patch) { await this.call('profile', { classId: c, studentId: s, patch }); }
     async regenPin(c, s) { const r = await this.call('regenPin', { classId: c, studentId: s }); return r.pin; }
+    async moveStudent(c, s, to) { await this.call('moveStudent', { classId: c, studentId: s, toClassId: to }); return true; }
+    async retireStudent(c, s) { await this.call('retireStudent', { classId: c, studentId: s }); return true; }
+    async restoreStudent(c, s) { await this.call('restoreStudent', { classId: c, studentId: s }); return true; }
+
+    /* 숙제·쪽수표·프린트 */
     async setPageProblem(book, page, list) { await this.call('pageProblem', { book, page, problems: list }); }
     async saveLesson(c, patch) { await this.call('lesson', { classId: c, patch }); }
-    buy() { return { error: '시트 연동 모드에서는 상점 기능을 준비 중이에요' }; }
-    feed() { return { error: '시트 연동 모드에서는 상점 기능을 준비 중이에요' }; }
-    setPrint() { return null; }
-    setPrintLastNo() { return null; }
-    resolveCarried() { return null; }
-    setRewardsOn() { }
-    useClaim() { return false; }
-    submitYesterday() { return false; }
+    async setDue(c, dueAt) { const r = await this.call('setDue', { classId: c, dueAt }); return r.due || null; }
+    async closeDue(c) { const r = await this.call('closeDue', { classId: c }); return r.carried || 0; }
+    async copyLesson(from, to, opts) { await this.call('copyLesson', { classId: from, toClassId: to, patch: opts || {} }); return true; }
+    async copyPrint(c, fromSid, toSids) { const r = await this.call('copyPrint', { classId: c, studentId: fromSid, toSids }); return r.count || 0; }
+    async setPrint(c, s, count) { await this.call('print', { classId: c, studentId: s, count }); return count; }
+    async setPrintLastNo(c, s, n) { await this.call('printLastNo', { classId: c, studentId: s, lastNo: n }); return n; }
+
+    /* 밀린문제·상점 */
+    async resolveCarried(c, s, id, why) { return await this.call('resolveCarried', { classId: c, studentId: s, id, why }); }
+    async retryCarried(c, s, id, tag) { return await this.call('retryCarried', { classId: c, studentId: s, id, tag }); }
+    buy(c, s, itemId) { return this.call('buy', { classId: c, studentId: s, itemId }); }
+    feed(c, s) { return this.call('feed', { classId: c, studentId: s }); }
+    growCompanion(c, s, petId) { return this.call('growCompanion', { classId: c, studentId: s, petId }); }
+    async setRewardsOn(on) { await this.call('rewardsOn', { on: !!on }); }
+    async useClaim(id) { await this.call('useClaim', { id }); return true; }
+    async setGalleryMode(mode) { await this.call('galleryMode', { mode }); }
+    async lateUpload(c, s) { await this.call('lateUpload', { classId: c, studentId: s }); return true; }
+
+    /* 선생님 PIN 서버 검증 (선택) */
+    async teacherStatus() { const r = await this.call('teacherStatus'); return r; }
+    async teacherSetup(pin) { return await this.call('teacherSetup', { pin }); }
+    async teacherVerify(pin) { return await this.call('teacherVerify', { pin }); }
+
     async reset() { await this.call('reset'); return this.init(); }
   }
 

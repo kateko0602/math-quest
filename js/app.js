@@ -1,4 +1,4 @@
-/* 숙제 대소동 v0.8 — 화면과 동선 (1단계 안정화)
+/* 숙제 대소동 v0.9 — 화면과 동선 (2단계: 숙제 기한 · 선생님 대시보드 · 시트 연동)
    ─────────────────────────────────────────────────────────────
    세계관: 〈숫자 왕국 구출 대작전〉 — 알은 하나, '펫 알'뿐
      · 못 고친 오답 → 다시 풀어 ⚔️ 해결하면 '펫 알 부화!' → 펫 합류
@@ -31,9 +31,11 @@ window.EMA = window.EMA || {};
     gradeSource: 'homework',  // homework | print
     gradeBook: null,
     pending: { photo: null, avatar: null, nickname: '', yphoto: null, tempPhoto: null, tempTarget: null, reupload: false },
-    pmBook: null, pmPage: null, pmInput: '', pmNewPage: '',
+    pmBook: null, pmPage: null, pmInput: '', pmNewPage: '', pmList: null,
     carryWhy: null,
-    lessonEditBook: null, lessonEditPages: null,
+    lessonEditBook: null, lessonEditPages: null, lessonEditInput: '', lessonEditDue: '',
+    dashRange: 'month', dashOpen: {},
+    moveSid: null, moveTo: null, copyTo: null, copyFrom: null, copyPrintSid: null,
     pinReveal: null,
     reportSid: null, reportRange: 'week', reportImg: null, reportImgName: '',
     petDetail: null, monsterDetail: null, printSid: null, printInput: '',
@@ -145,6 +147,41 @@ window.EMA = window.EMA || {};
       </div>
     </div>`;
   }
+  /** [8,9,10,12] → '8-10, 12' (칸 입력창에 되돌려 보여 줄 때) */
+  function pagesText(list) {
+    const ps = (list || []).map(Number).filter(n => n > 0).sort((a, b) => a - b);
+    if (!ps.length) return '';
+    const out = [];
+    let a = ps[0], b = ps[0];
+    for (let i = 1; i < ps.length; i++) {
+      if (ps[i] === b + 1) { b = ps[i]; continue; }
+      out.push(a === b ? String(a) : a + '-' + b);
+      a = b = ps[i];
+    }
+    out.push(a === b ? String(a) : a + '-' + b);
+    return out.join(', ');
+  }
+  /** '1~14번, 15~28번' → ['1','2',…,'28'] · '2-1' 같은 하위 번호는 그대로 */
+  function rangeList(text) {
+    const out = [];
+    const push = v => { const s = String(v).trim(); if (s && out.indexOf(s) < 0) out.push(s); };
+    String(text || '').replace(/번/g, ' ').split(/[,\s]+/).filter(Boolean).forEach(part => {
+      const m = part.match(/^(\d+)\s*[~∼〜]\s*(\d+)$/);
+      if (m) {
+        const a = +m[1], b = +m[2];
+        for (let i = Math.min(a, b); i <= Math.max(a, b); i++) push(String(i));
+      } else if (/^\d+(-\d+)*$/.test(part)) push(part);
+    });
+    return out;
+  }
+  /** 기한이 지나 이월된 문제 — '제출 기한이 1일 지났어요' */
+  function overdueText(m) {
+    if (!m || !m.overdue || !m.dueAt) return '';
+    const dt = EMA.util.parseDueAt(m.dueAt);
+    if (!dt) return '';
+    const ms = Date.now() - dt.getTime();
+    return ms > 0 ? ' · 제출 기한이 ' + EMA.util.spanText(ms) + ' 지났어요' : '';
+  }
   function todayTitle(cid, sid) {
     const st = store.stats(cid, sid);
     if (st.c3 >= 2) return '오답 사냥꾼 ⚔️';
@@ -214,7 +251,7 @@ window.EMA = window.EMA || {};
       <button class="setrow" data-act="logout"><span class="se">↩️</span><span class="st">로그아웃</span><span class="chev">›</span></button>
       <button class="setrow danger" data-act="resetDemo"><span class="se">🧹</span><span class="st">연습 데이터 초기화</span></button>
       <div class="hint wrap" style="margin:6px 6px 0">초기화하면 지금 데이터를 먼저 이 기기에 백업해 두고, 이 화면에서만 새로 시작해요.</div>
-      <div class="hint center" style="margin-top:12px">숙제 대소동 v0.8 · 숫자 왕국 구출 대작전 ${demoChip()}</div>
+      <div class="hint center" style="margin-top:12px">숙제 대소동 v0.9 · 숫자 왕국 구출 대작전 ${demoChip()}</div>
     `);
   }
 
@@ -314,7 +351,7 @@ window.EMA = window.EMA || {};
         <button class="btn btn-ghost btn-block" data-act="openStory">📖 이야기 보기</button>
         <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="teacherEntry">👩‍🏫 선생님이세요? 선생님 모드</button>
         <div class="pin-hint">학생 PIN은 선생님께 물어보세요 · 내 PIN은 ⚙️ 설정에서 바꿀 수 있어요</div>
-        <div class="verline">v0.8 ${demoChip()}</div>
+        <div class="verline">v0.9 ${demoChip()}</div>
       </div>
       ${sheetHtml()}`;
     }
@@ -412,6 +449,8 @@ window.EMA = window.EMA || {};
     const carried = store.carried(cid, sid);
     const missingY = store.yesterdayFlameMissing(cid, sid);
     const timing = store.timing(cid);
+    const due = store.dueInfo(cid);
+    const prog = store.progressInfo(cid, sid);
 
     const lessonHtml = l ? `
       <div class="card lesson-card">
@@ -428,6 +467,17 @@ window.EMA = window.EMA || {};
         ${timing.kind === 'early' ? '<div class="timing early">⚡ 얼리버드 · 코인 2배</div>'
           : timing.kind === 'shield' ? '<div class="timing shield">🛡️ 수업 당일 · 보스·코인 50%</div>' : ''}
       </div>` : `<div class="card"><div class="empty">📭 오늘은 숙제가 없어요</div></div>`;
+
+    /** 📘 진행 중 / ⏰ 기한 지남 — 남은 시간·지난 시간과 푼 문제 수 */
+    const dueCard = (l && due.has) ? `
+      <div class="card tight duecard ${due.passed ? 'late' : 'open'}">
+        <div class="card-hd"><span class="t">${due.passed ? '⏰ 기한 지난 숙제' : '📘 진행 중인 숙제'}</span><span class="grow"></span>
+          <span class="hint">${prog.hwMarked}/${prog.hwTotal}문제</span></div>
+        <div class="dueline">${esc(due.label)}까지</div>
+        <div class="duesub ${due.passed ? 'late' : 'left'}">${due.passed ? esc(due.lateText) : esc(due.leftText)}</div>
+        <div class="pbar"><i style="width:${prog.pct}%"></i></div>
+        <div class="hint" style="margin-top:6px">${due.passed ? '기한 전에 못 푼 문제는 ⚔️ 밀린문제로 넘어갔어요' : '기한 전에는 못 푼 문제가 밀린문제로 넘어가지 않아요'}</div>
+      </div>` : '';
 
     const hasHw = tiles.length > 0;
     const up = store.reuploadInfo(cid, sid, 'hw');
@@ -452,9 +502,11 @@ window.EMA = window.EMA || {};
         <span class="go">올리기</span></button>` : ''}
 
       ${lessonHtml}
+      ${dueCard}
 
       <div class="cta-wrap">
         <button class="btn btn-primary btn-block btn-xl" data-act="${ctaAct}" ${!hasHw ? 'style="filter:grayscale(.25);opacity:.8"' : ''}>${cta}</button>
+        ${(due.has && !due.passed && st.marked && !sub) ? '<button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="saveTemp">💾 오늘 한 만큼 임시 저장 (기한까지 이어서)</button>' : ''}
         <div class="quickrow">
           <button class="btn btn-ghost btn-sm" data-act="gallery">👀 친구들 풀이</button>
           <button class="btn btn-ghost btn-sm" data-act="openShop">🛍️ 상점</button>
@@ -503,7 +555,7 @@ window.EMA = window.EMA || {};
       ${carried.length ? `<div class="card tight">
         <div class="card-hd"><span class="t">⚔️ 밀린문제 ${carried.length}개</span><span class="grow"></span>
           <button class="linkbtn" style="width:auto;padding:0" data-act="homeTab" data-t="carry">고치기 →</button></div>
-        <div class="muted" style="font-size:12px">${carried.slice(0, 2).map(m => esc(m.label)).join(' · ')}${carried.length > 2 ? ' 외 ' + (carried.length - 2) + '개' : ''}</div>
+        <div class="muted" style="font-size:12px">${carried.slice(0, 2).map(m => esc(m.label) + (m.overdue && m.dueAt ? ' · 기한 지남' : '')).join(' · ')}${carried.length > 2 ? ' 외 ' + (carried.length - 2) + '개' : ''}</div>
       </div>` : ''}`;
   }
 
@@ -555,7 +607,7 @@ window.EMA = window.EMA || {};
             <div class="cc-em">${m.em || '👾'}</div>
             <div class="grow">
               <div class="cc-nm">${esc(m.name || '못 고친 오답')}</div>
-              <div class="cc-lb">${esc(m.book === '프린트' ? '' : m.book + ' ')}${m.page}쪽 ${esc(m.num)}번 <span class="dot">·</span> ${esc(m.date.slice(5))} <span class="dot">·</span> ${reasonTxt[m.reason] || '❌'}${tries}</div>
+              <div class="cc-lb">${esc(m.book === '프린트' ? '' : m.book + ' ')}${m.page}쪽 ${esc(m.num)}번 <span class="dot">·</span> ${esc(m.date.slice(5))} <span class="dot">·</span> ${reasonTxt[m.reason] || '❌'}${tries}${overdueText(m) ? `<br><span class="late-note">⏰ ${esc(overdueText(m).replace(' · ', ''))}</span>` : ''}</div>
             </div>
             <div class="cc-do">
               <button class="btn btn-mint btn-sm" data-act="resolveCarry" data-id="${m.id}">⭕ 맞았어요</button>
@@ -628,6 +680,7 @@ window.EMA = window.EMA || {};
 
     const untagged = tiles.filter(t => g.marks[t.key] === 'x' && !(g.tags || {})[t.key]).length;
     const missingN = tiles.filter(t => t.missing).length;
+    const dueG = isPrint ? null : store.dueInfo(cid);
 
     return `<div class="screen flow">
       ${topbar({
@@ -647,6 +700,7 @@ window.EMA = window.EMA || {};
       <div class="flowfoot">
         ${untagged ? `<div class="tag-need">왜 틀렸는지 <b>${untagged}개</b> 더 골라야 해요</div>` : ''}
         <button class="btn btn-primary btn-block btn-lg" data-act="toClean">다음 → 정리 · 사진</button>
+        ${(dueG && dueG.has && !dueG.passed && cnt.marked) ? `<button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="saveTemp">💾 여기까지만 임시 저장 (${cnt.marked}/${cnt.total})</button>` : ''}
       </div>
       ${sheetHtml()}
     </div>`;
@@ -744,6 +798,7 @@ window.EMA = window.EMA || {};
       <div class="flowfoot">
         <button class="btn btn-primary btn-block btn-lg" data-act="submit" ${stamped ? 'disabled' : ''}>${btnLabel}</button>
         ${stamped ? '<div class="hint center" style="margin-top:8px">선생님이 도장을 찍은 제출은 저장해도 도장이 유지돼요.</div>' : ''}
+        ${(!isPrint && store.dueInfo(cid).has && !store.dueInfo(cid).passed && !stamped) ? `<button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="saveTemp">💾 사진 없이 임시 저장 (기한까지 이어서)</button>` : ''}
       </div>
       <input type="file" class="photo-input" data-target="clean" accept="image/*" aria-hidden="true">
       ${sheetHtml()}
@@ -987,13 +1042,15 @@ window.EMA = window.EMA || {};
     const boss = store.boss(cid);
     const tabs = [
       { id: 'today', em: '📋', label: '오늘' },
+      { id: 'dash', em: '📊', label: '반 대시보드' },
       { id: 'top5', em: '⭐', label: '질문' },
-      { id: 'report', em: '📊', label: '성취도' },
+      { id: 'report', em: '🧾', label: '성취도' },
       { id: 'admin', em: '⚙️', label: '관리' }
     ];
     if (!tabs.find(t => t.id === view.teacherTab)) view.teacherTab = 'today';
     let body = '';
     if (view.teacherTab === 'top5') body = teacherTop5(c);
+    else if (view.teacherTab === 'dash') body = teacherDashboard(c);
     else if (view.teacherTab === 'report') body = teacherReport(c);
     else if (view.teacherTab === 'admin') body = teacherAdmin(c);
     else body = teacherToday(c);
@@ -1029,18 +1086,23 @@ window.EMA = window.EMA || {};
   function teacherToday(c) {
     const cid = c.id;
     const rows = store.classDay(cid);
-    const pending = rows.filter(r => r.sub && r.sub.status === 'submitted').length;
+    const pending = rows.filter(r => (r.sub && r.sub.status === 'submitted') || (r.printSub && r.printSub.status === 'submitted')).length;
+    const handedIn = rows.filter(r => r.sub || r.printSub).length;
     return `
       <button class="bigstamp" data-act="stampAll">✅ 오늘 제출 확인 & 한꺼번에 도장${pending ? ` <small>${pending}장</small>` : ''}</button>
-      <div class="sect-t"><span>학생 ${rows.length}</span><span class="grow"></span><span class="hint">제출 ${rows.filter(r => r.sub).length}</span></div>
+      <div class="sect-t"><span>학생 ${rows.length}</span><span class="grow"></span><span class="hint">제출 ${handedIn}</span></div>
       <div class="pad">
         ${rows.map(r => {
-          const sub = r.sub;
-          const hasPh = sub && store.photo(sub.photoId);
-          const cls = sub && sub.stampAt ? 'ok' : sub && sub.status === 'submitted' ? 'warn' : sub && sub.status === 'resubmit' ? 'bad' : sub && sub.status === 'unlocked' ? 'info' : '';
-          const label = sub && sub.stampAt ? '도장 ' + esc(sub.stampAt) : sub && sub.status === 'submitted' ? '제출' : sub && sub.status === 'resubmit' ? '재제출' : sub && sub.status === 'unlocked' ? '풀림' : '미제출';
+          const sub = r.sub, psub = r.printSub;
+          // 오답프린트만 낸 학생도 '미제출'이 아닙니다 (v0.9 잔버그 수정)
+          const shown = sub || psub;
+          const onlyPrint = !sub && !!psub;
+          const hasPh = shown && store.photo(shown.photoId);
+          const cls = shown && shown.stampAt ? 'ok' : shown && shown.status === 'submitted' ? 'warn' : shown && shown.status === 'resubmit' ? 'bad' : shown && shown.status === 'unlocked' ? 'info' : '';
+          const base = shown && shown.stampAt ? '도장 ' + esc(shown.stampAt) : shown && shown.status === 'submitted' ? '제출' : shown && shown.status === 'resubmit' ? '재제출' : shown && shown.status === 'unlocked' ? '풀림' : '미제출';
+          const label = (base === '미제출') ? base : (onlyPrint ? '프린트 ' + base : base);
           const status = hasPh
-            ? `<button class="pill ${cls} pillbtn" data-act="photoBig" data-sid="${r.student.id}" data-at="${esc(sub.at)}">${label} 📸</button>`
+            ? `<button class="pill ${cls} pillbtn" data-act="photoBig" data-sid="${r.student.id}" data-at="${esc(shown.at || '')}">${label} 📸</button>`
             : `<span class="pill ${cls}">${label}</span>`;
           const open = !!view.stuOpen[r.student.id];
           return `<div class="sturow ${open ? 'open' : ''}">
@@ -1052,8 +1114,8 @@ window.EMA = window.EMA || {};
                   <span class="cnts"><span class="o">⭕${r.c1}</span><span class="x">❌${r.c2}</span><span class="f">⚔️${r.c3}</span><span class="q">⭐${r.c4}</span><span class="c">⏭️${r.c5}</span></span>
                 </span>
               </button>
-              <div class="stright">${status}${r.printSub ? '<span class="pill info">📝</span>' : ''}</div>
-              ${sub ? `<button class="more" data-act="stuTools" data-id="${r.student.id}" aria-label="도구">⋯</button>` : ''}
+              <div class="stright">${status}${(sub && psub) ? '<span class="pill info">📝+</span>' : ''}</div>
+              ${shown ? `<button class="more" data-act="stuTools" data-id="${r.student.id}" aria-label="도구">⋯</button>` : ''}
             </div>
             ${stuQuickButtons(cid, r)}
           </div>`;
@@ -1079,11 +1141,19 @@ window.EMA = window.EMA || {};
     };
 
     const l = store.lesson(cid);
+    const due = store.dueInfo(cid);
     return `
-      ${tg('lesson', '📖', '오늘 진도 · 숙제', `
+      ${tg('lesson', '📘', '오늘 진도 · 숙제', `
         <div class="kv"><span class="k">진도</span><span>${esc(l.lesson)}</span></div>
         <div class="kv"><span class="k">숙제</span><span>${esc(l.homework)}</span></div>
-        <button class="btn btn-ghost btn-block btn-sm" style="margin-top:10px" data-act="lessonEdit">쪽수 바꾸기</button>`)}
+        <div class="kv"><span class="k">제출 기한</span><span>${esc(due.label || '없음')} <span class="pill ${due.passed ? 'bad' : 'ok'}">${due.passed ? (due.closed ? '마감됨' : '기한 지남') : '진행 중'}</span></span></div>
+        <div class="hint wrap" style="margin:2px 0 4px">${esc(due.passed ? due.lateText : due.leftText)}</div>
+        <button class="btn btn-ghost btn-block btn-sm" style="margin-top:10px" data-act="openLessonEdit">숙제·기한 바꾸기</button>
+        <div class="row" style="margin-top:8px;gap:8px">
+          <button class="btn btn-primary grow btn-sm" data-act="closeDue">⏰ 지금 마감</button>
+          <button class="btn btn-ghost grow btn-sm" data-act="copyLessonOpen">📤 다른 반에 복사</button>
+        </div>
+        <div class="hint" style="margin-top:6px">마감하면 지금까지 안 푼 문제가 바로 ⚔️ 밀린문제로 넘어가요.</div>`, due.passed ? '기한 지남' : '진행 중')}
 
       ${tg('print', '🖨️', '프린트 설정', `
         ${rows.map(r => {
@@ -1092,8 +1162,10 @@ window.EMA = window.EMA || {};
             <b>${esc(r.student.nickname || r.student.name)}</b>
             <span class="grow muted">${info ? info.count + '문제' : '없음'}</span>
             <button class="btn btn-ghost btn-sm" data-act="openPrintSet" data-id="${r.student.id}">${info ? '바꾸기' : '넣기'}</button>
+            ${info ? `<button class="btn btn-ghost btn-sm" data-act="copyPrintAll" data-id="${r.student.id}" title="다른 학생에게 같이">복사</button>` : ''}
           </div>`;
-        }).join('')}`, `${rows.filter(r => store.hasPrint(cid, r.student.id)).length}명`)}
+        }).join('')}
+        <div class="hint" style="margin-top:8px">[복사] = 이 학생의 프린트 문제 수를 반 전체에 똑같이 넣어요.</div>`, `${rows.filter(r => store.hasPrint(cid, r.student.id)).length}명`)}
 
       ${tg('coupon', '🎁', '현실 보상 쿠폰', `
         <div class="pinrow"><b class="grow">쿠폰 보이기</b>
@@ -1155,6 +1227,70 @@ window.EMA = window.EMA || {};
       </div>`;
   }
 
+  /* =========================================================
+     선생님 반 대시보드 (v0.9) — 제출률·미제출·오답 수정률·학습량·학생별 비교
+  ========================================================= */
+  function teacherDashboard(c) {
+    const cid = c.id;
+    const d = store.dashboard(cid, view.dashRange);
+    const due = d.due;
+    const rangeName = { week: '이번 주', month: '이번 달', semester: '이번 학기' }[view.dashRange] || '이번 달';
+    const nm = s => esc(s.nickname || s.name);
+    const bar = (pct, color) => `<div class="pbar"><i style="width:${Math.max(0, Math.min(100, pct))}%;background:${color || 'var(--navy)'}"></i></div>`;
+    const open = !!view.dashOpen.detail;
+    return `
+      <div class="pad" style="margin-top:10px"><div class="segmented" style="margin:0">
+        ${[['week', '이번 주'], ['month', '이번 달'], ['semester', '이번 학기']].map(x =>
+          `<button class="${view.dashRange === x[0] ? 'on' : ''}" data-act="dashRange" data-r="${x[0]}">${x[1]}</button>`).join('')}
+      </div></div>
+
+      <div class="card dashcard">
+        <div class="dash-kpis">
+          <div class="kpi"><b>${d.submitRate}%</b><span>숙제 제출률</span><small>${d.submitted}/${d.total}명</small></div>
+          <div class="kpi"><b>${d.fixRate}%</b><span>오답 수정률</span><small>${d.wrongFixed}/${d.wrongTotal}개</small></div>
+          <div class="kpi"><b>${d.solved}</b><span>반 학습량</span><small>${rangeName} 문항</small></div>
+          <div class="kpi"><b>${d.avgHw}%</b><span>숙제 수행률</span><small>${rangeName}</small></div>
+        </div>
+        <div class="divider"></div>
+        <div class="dashrow"><span class="k">📘 숙제 기한</span><b>${esc(due.label)}까지</b></div>
+        <div class="dashrow"><span class="k">${due.passed ? '⏰' : '⏳'} 기한</span><span class="${due.passed ? 'neg' : 'pos'}">${esc(due.passed ? due.lateText : due.leftText)}</span></div>
+        <div class="dashrow"><span class="k">❌ 미제출</span><b>${d.missing.length}명</b><span class="grow"></span>${d.missing.length ? `<span class="hint">${d.missing.map(r => nm(r.student)).join(', ')}</span>` : '<span class="pos">전원 제출 🎉</span>'}</div>
+        <div class="dashrow"><span class="k">오답 3단</span><span>전체 <b>${d.wrongTotal}</b> · 아직 <b class="neg">${d.wrongOpen}</b> · 고침 <b class="pos">${d.wrongFixed}</b></span></div>
+        <div class="dashrow"><span class="k">✅ 도장</span><span>${d.stamped}/${d.total}명</span></div>
+      </div>
+
+      <div class="sect-t"><span>학생별 현황 비교</span><span class="grow"></span><span class="hint">${rangeName}</span></div>
+      <div class="card tight">
+        <div class="dtable">
+          <div class="dtrow dthead"><span>학생</span><span>제출</span><span>학습</span><span>오답(남음·고침)</span><span>수정률</span></div>
+          ${d.rows.map(r => {
+            const handed = r.submitted || r.printSubmitted;
+            const pill = r.stamped ? '<span class="pill ok">도장</span>' : r.submitted ? '<span class="pill warn">제출</span>' : r.printSubmitted ? '<span class="pill info">프린트</span>' : '<span class="pill bad">미제출</span>';
+            return `<div class="dtrow">
+              <span class="dtnm">${nm(r.student)}<small>${r.student.nickname ? esc(r.student.name) : ''}</small></span>
+              <span>${pill}</span>
+              <span>${r.solved}문항<br><small class="muted">숙제 ${r.hwRate}%</small></span>
+              <span><b class="neg">${r.wrongOpen}</b> · <b class="pos">${r.wrongFixed}</b><br><small class="muted">전체 ${r.wrongTotal}</small></span>
+              <span><b>${r.fixRate}%</b><br><small class="muted">${r.streak}일</small></span>
+            </div>`;
+          }).join('')}
+        </div>
+        <div class="hint wrap" style="margin-top:8px">오답(남음·고침) = 전체 틀린 문제 중 아직 고치지 않은 문제 · 다시 풀어 고친 문제</div>
+      </div>
+
+      <button class="btn btn-ghost btn-block btn-sm" data-act="dashOpen" data-k="detail">${open ? '접기' : rangeName + ' 상세 펼치기'}</button>
+      ${open ? `<div class="card">
+        ${d.rows.map(r => `<div class="dashstu">
+          <div class="ds-hd"><b>${nm(r.student)}</b><span class="grow"></span><span class="hint">연속 ${r.streak}일</span></div>
+          <div class="ds-line"><span>숙제 수행</span><b>${r.hwRate}%</b></div>${bar(r.hwRate, '#1E293B')}
+          <div class="ds-line"><span>오답 수정</span><b>${r.fixRate}%</b></div>${bar(r.fixRate, '#0F8F68')}
+          <div class="ds-line"><span>학습량</span><b>${r.solved}문항</b></div>${bar(Math.min(100, r.solved), '#5B47A8')}
+        </div>`).join('')}
+      </div>` : ''}
+
+      <button class="btn btn-navy btn-block" style="margin-top:4px" data-act="openLessonEdit">📘 오늘 숙제·기한 바꾸기</button>`;
+  }
+
   function teacherReport(c) {
     const cid = c.id;
     const rows = store.classDay(cid);
@@ -1197,19 +1333,36 @@ window.EMA = window.EMA || {};
   }
 
   function teacherStudents(c) {
+    const cid = c.id;
+    const act = store.activeStudents(cid);
+    const left = store.leftStudents(cid);
     return `
       <div class="card">
-        ${c.students.map(s => `<div class="pinrow">
+        ${act.map(s => `<div class="pinrow">
           ${avatarHtml(s, 32)}
           <span class="grow" style="min-width:0"><b>${esc(s.name)}</b> <small class="muted">${esc(s.nickname || '')}</small></span>
           <span class="pinval" data-pin="${s.id}">${view.pinReveal === s.id ? esc(s.pin) : '••••'}</span>
           <button class="btn btn-ghost btn-sm" data-act="revealPin" data-id="${s.id}">${view.pinReveal === s.id ? '숨기기' : '보기'}</button>
           <button class="btn btn-ghost btn-sm" data-act="resetStudentPin" data-id="${s.id}">PIN 초기화</button>
+        </div>
+        <div class="stuadmin">
+          <button class="linkbtn2" data-act="moveOpen" data-id="${s.id}">↪ 반 이동</button>
+          <button class="linkbtn2 neg" data-act="retire" data-id="${s.id}">🎒 퇴원(보관)</button>
         </div>`).join('')}
       </div>
       <div class="hint wrap" style="margin:6px 4px 10px">PIN 초기화 = 한 번에 <b>1234</b>로 바꿉니다. 아이가 ⚙️ 설정에서 직접 바꿀 수도 있어요.</div>
+      ${left.length ? `<div class="sect-t"><span>🎒 퇴원(보관) ${left.length}명</span><span class="grow"></span><span class="hint">기록은 그대로</span></div>
+      <div class="card tight">
+        ${left.map(s => `<div class="pinrow">
+          ${avatarHtml(s, 30)}
+          <span class="grow" style="min-width:0"><b>${esc(s.name)}</b> <small class="muted">${esc(s.nickname || '')}</small></span>
+          <span class="pill">퇴원 ${esc((s.leftAt || '').slice(5))}</span>
+          <button class="btn btn-ghost btn-sm" data-act="restore" data-id="${s.id}">되돌리기</button>
+        </div>`).join('')}
+      </div>` : ''}
+      <div class="hint wrap" style="margin:6px 4px 10px">반 이동·퇴원을 해도 펫·코인·XP·학습 기록(채점·오답·성취도)은 그대로 남습니다.</div>
       <button class="btn btn-ghost btn-block btn-sm" data-act="reissueRecovery">🔑 선생님 비상 복구 키 다시 만들기</button>
-      <div class="hint wrap" style="margin:6px 4px 0">복구 키를 잃어버렸을 때만 누르세요. 새 키가 나오고 예전 키는 쓸 수 없어요.</div>
+      <div class="hint wrap" style="margin:6px 4px 0">복구 키를 잊어버렸을 때만 누르세요. 새 키가 나오고 예전 키는 쓸 수 없어요.</div>
       <div class="kv"><span class="k">반</span><span>${esc(c.name)} · ${esc(c.semester)}</span></div>
       <div class="kv"><span class="k">수업</span><span>${esc(c.days)} ${esc(c.time)}</span></div>
       <div class="kv"><span class="k">교재</span><span>${esc((c.textbooks || []).join(' · '))}</span></div>`;
@@ -1227,7 +1380,8 @@ window.EMA = window.EMA || {};
       lessonEdit: sheetLessonEdit, pmpage: sheetPmPage, yesterday: sheetYesterday,
       photocopy: sheetPhotoCopy, printpick: sheetPrintPick,
       story: storySheet, photoconfirm: sheetPhotoConfirm, nextday: sheetNextDay,
-      settings: sheetSettings, bigphoto: sheetBigPhoto, recovery: sheetRecovery
+      settings: sheetSettings, bigphoto: sheetBigPhoto, recovery: sheetRecovery,
+      moveStu: sheetMoveStu, copyLesson: sheetCopyLesson
     };
     const fn = map[view.sheet];
     return fn ? fn() : '';
@@ -1842,6 +1996,10 @@ window.EMA = window.EMA || {};
       </div>
       <input id="printInput" class="tinput" inputmode="numeric" placeholder="직접 입력 (예: 18)" value="${cur || ''}">
       <div class="hint" style="margin-top:8px">제출 완료 전에는 날이 바뀌어도 그대로 이어져요.</div>
+      <div class="sect-t" style="margin-top:12px"><span>같은 문제 수를 다른 학생에게</span><span class="grow"></span><span class="hint">${esc(s.name)} → </span></div>
+      <div class="chipx">
+        ${store.activeStudents(cid).filter(x => x.id !== sid).map(x => `<button class="chipx-item" data-act="copyPrintOne" data-id="${x.id}">${esc(x.nickname || x.name)}</button>`).join('')}
+      </div>
       <div class="row" style="margin-top:12px">
         <button class="btn btn-primary grow" data-act="savePrint">저장</button>
         ${(info || cur) ? `<button class="btn btn-danger" data-act="clearPrint">없애기</button>` : ''}
@@ -1863,31 +2021,85 @@ window.EMA = window.EMA || {};
 
   function sheetLessonEdit() {
     const cid = view.classId;
-    const l = store.lesson(cid);
     const books = store.bookList();
     const book = view.lessonEditBook || (store.books(cid)[0] || {}).book || books[0];
-    const pages = view.lessonEditPages != null ? view.lessonEditPages : (store.books(cid).find(b => b.book === book) || { pages: [] }).pages.join(',');
-    const list = EMA.util.parsePages(pages);
-    const tiles = store.tilesOf(book, list);
-    const missing = list.filter(p => !store.pageInfo(book, p));
-    return sheetWrap('이번 숙제 쪽수 바꾸기', `
-      <div class="sub">시트 <b>숙제</b> 칸에 적는 것과 같은 방식이에요. <b>8-10쪽</b>, <b>8~10</b>, <b>8, 9, 10쪽</b> 모두 됩니다.</div>
+    view.lessonEditBook = book;
+    const saved = (store.books(cid).find(b => b.book === book) || { pages: [] }).pages;
+    const pages = (view.lessonEditPages != null ? view.lessonEditPages.slice() : saved.slice()).sort((a, b) => a - b);
+    const tiles = store.tilesOf(book, pages);
+    const missing = pages.filter(p => !store.pageInfo(book, p));
+    const due = view.lessonEditDue != null ? view.lessonEditDue : store.dueAtOf(cid);
+    const nextDue = store.defaultDueAt(cid);
+    return sheetWrap('📘 숙제 쪽수 · 제출 기한', `
+      <div class="sub">쪽수 범위를 적으면 칸이 <b>자동으로</b> 생겨요. 만든 칸은 눌러서 하나씩 뺄 수 있어요.</div>
       <div class="tabs-scroll" style="padding:0 0 10px">
         ${books.map(b => `<button class="${b === book ? 'on' : ''}" data-act="lessonBook" data-b="${esc(b)}">${esc(b)}</button>`).join('')}
       </div>
-      <div class="editor"><input id="pageInput" value="${esc(String(pages))}" placeholder="예: 8,9,10 또는 8-10쪽"></div>
-      <div class="muted" style="margin-top:8px">→ ${tiles.length}개: ${tiles.map(t => t.label).join(', ')}</div>
-      <div class="preview-tiles">${tiles.map(t => `<div class="pt">${esc(t.label)}</div>`).join('')}</div>
+      <div class="editor"><input id="pageInput" value="${esc(view.lessonEditInput != null ? view.lessonEditInput : pagesText(pages))}" placeholder="8-10, 12쪽 · 1~14쪽"></div>
+      <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="lessonRange">🔢 이 범위로 칸 만들기</button>
+      <div class="chipx">${pages.length ? pages.map(p => `<button class="chipx-item" data-act="lessonPageDel" data-p="${p}">${p}쪽 ✕</button>`).join('') : '<span class="hint">아직 쪽이 없어요 — 위에 범위를 적어 주세요</span>'}</div>
+      <div class="row" style="margin-top:8px;gap:8px">
+        <input id="lessonNewPage" class="tinput grow" inputmode="numeric" placeholder="쪽 하나 추가 (예: 56)">
+        <button class="btn btn-ghost btn-sm" data-act="lessonPageAdd">추가</button>
+      </div>
+      <div class="muted" style="margin-top:8px">→ 문제 ${tiles.length}개${tiles.length ? ': ' + tiles.slice(0, 12).map(t => t.label).join(', ') + (tiles.length > 12 ? ' …' : '') : ''}</div>
       ${missing.length ? `<div class="card tight missing-note" style="margin-top:10px"><div class="muted wrap" style="font-size:12px;white-space:normal">⚠️ <b>${missing.join(', ')}쪽</b>은 쪽수표에 없어요. 저장은 되지만 채점하려면 <b>⚙️ 관리 → 쪽수표 → 쪽 추가</b>에서 그 쪽 문제번호를 넣어 주세요.</div></div>` : ''}
-      <button class="btn btn-primary btn-block" style="margin-top:14px" data-act="saveLesson">이 쪽수로 저장</button>
+      <div class="sect-t" style="margin-top:14px"><span>⏰ 제출 기한</span><span class="grow"></span><span class="hint">${esc(store.dueInfo(cid).leftText || store.dueInfo(cid).lateText)}</span></div>
+      <input id="dueAt" class="tinput" type="datetime-local" value="${esc(String(due).replace(' ', 'T'))}">
+      <div class="row" style="margin-top:8px;gap:8px">
+        <button class="btn btn-ghost btn-sm grow" data-act="dueNext">다음 수업일 (${esc(nextDue)})</button>
+        <button class="btn btn-ghost btn-sm grow" data-act="dueClear">기한 없음</button>
+      </div>
+      <div class="hint wrap" style="margin-top:8px">비워 두면 기한 없이 계속 진행 중이에요. 기한이 지나면 그때 안 푼 문제만 ⚔️ 밀린문제로 넘어갑니다.</div>
+      <button class="btn btn-primary btn-block" style="margin-top:14px" data-act="saveLesson">저장</button>
     `);
   }
 
   function sheetPmPage(c) {
+    const list = view.pmList != null ? view.pmList : String(view.pmInput || '').split(',').map(x => x.trim()).filter(Boolean);
     return sheetWrap(`${esc(view.pmBook)} ${view.pmPage}쪽 문제번호`, `
-      <div class="sub">이 쪽에 있는 문제 번호를 쉼표로 적어요. 예: <b>1, 2, 2-1, 3, 4</b> (2-1은 2번의 (1) 같은 하위 문제)</div>
-      <div class="editor"><input id="pmInput" value="${esc(view.pmInput)}" placeholder="1, 2, 2-1, 3"></div>
+      <div class="sub">범위로 적으면 <b>1~14번, 15~28번</b>처럼 자동으로 칸이 생겨요. 만든 번호는 눌러서 하나씩 뺄 수 있어요.</div>
+      <div class="editor"><input id="pmInput" value="${esc(view.pmInput)}" placeholder="1-14, 15-28"></div>
+      <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="pmRange">🔢 이 범위로 번호 만들기</button>
+      <div class="chipx">${list.length ? list.map(n => `<button class="chipx-item" data-act="pmDel" data-n="${esc(n)}">${esc(n)}번 ✕</button>`).join('') : '<span class="hint">아직 번호가 없어요</span>'}</div>
+      <div class="row" style="margin-top:8px;gap:8px">
+        <input id="pmNewNo" class="tinput grow" placeholder="번호 하나 추가 (예: 2-1)">
+        <button class="btn btn-ghost btn-sm" data-act="pmAdd">추가</button>
+      </div>
       <button class="btn btn-primary btn-block" style="margin-top:14px" data-act="pmSave">저장</button>
+    `);
+  }
+
+  /** 반 이동 */
+  function sheetMoveStu() {
+    const cid = view.classId;
+    const s = store.student(cid, view.moveSid);
+    if (!s) return '';
+    const others = store.state.classes.filter(c => c.id !== cid);
+    return sheetWrap('↪ 반 이동', `
+      <div class="sub"><b>${esc(s.name)}</b> 학생을 어느 반으로 옮길까요?</div>
+      ${others.map(c => `<button class="pickrow ${view.moveTo === c.id ? 'on' : ''}" data-act="moveTo" data-id="${c.id}">
+        <span class="em">${c.emoji || '🏫'}</span>
+        <span class="grow"><b>${esc(c.name)}</b><small>${esc(c.days || '')} ${esc(c.time || '')} · ${store.activeStudents(c.id).length}명</small></span>
+        <span class="r">${view.moveTo === c.id ? '✓' : '›'}</span></button>`).join('')}
+      <div class="hint wrap" style="margin-top:10px">펫·코인·XP·채점·오답·성취도 기록이 <b>그대로</b> 새 반으로 따라갑니다.</div>
+      <button class="btn btn-primary btn-block" style="margin-top:12px" data-act="moveGo" ${view.moveTo ? '' : 'disabled'}>이 반으로 옮기기</button>
+    `);
+  }
+
+  /** 다른 반에 숙제·쪽수 설정 복사 */
+  function sheetCopyLesson() {
+    const cid = view.classId;
+    const l = store.lesson(cid) || {};
+    const others = store.state.classes.filter(c => c.id !== cid);
+    return sheetWrap('📤 다른 반에 숙제 복사', `
+      <div class="sub">지금 숙제(<b>${esc((l.books || []).map(b => b.book + ' ' + pagesText(b.pages) + '쪽').join(', ') || l.homework || '')}</b>)를 어느 반에 똑같이 낼까요?</div>
+      ${others.map(c => `<button class="pickrow ${view.copyTo === c.id ? 'on' : ''}" data-act="copyTo" data-id="${c.id}">
+        <span class="em">${c.emoji || '🏫'}</span>
+        <span class="grow"><b>${esc(c.name)}</b><small>${esc(c.days || '')} ${esc(c.time || '')} · ${store.activeStudents(c.id).length}명</small></span>
+        <span class="r">${view.copyTo === c.id ? '✓' : '›'}</span></button>`).join('')}
+      <div class="hint wrap" style="margin-top:10px">쪽수·기한(그 반 다음 수업일)이 함께 복사돼요. 복사한 반은 따로 고칠 수 있어요.</div>
+      <button class="btn btn-primary btn-block" style="margin-top:12px" data-act="copyGo" ${view.copyTo ? '' : 'disabled'}>이 반에 복사</button>
     `);
   }
 
@@ -2196,7 +2408,12 @@ window.EMA = window.EMA || {};
       store.setSession(null); view.resetScroll = true; render();
     },
     tab(d) { view.tab = d.tab; view.sheet = null; view.flow = null; saveDraft(); view.resetScroll = true; EMA.ui.sound('tap'); render(); },
-    homeTab(d) { view.homeTab = d.t; view.sheet = null; view.flow = null; saveDraft(); view.resetScroll = true; EMA.ui.sound('tap'); render(); },
+    homeTab(d) {
+      view.homeTab = d.t;
+      view.tab = 'home';                 // ★ 내 도감에서 '고치기 →'를 누르면 숙제 탭으로 실제 이동
+      view.sheet = null; view.flow = null; saveDraft(); view.resetScroll = true;
+      EMA.ui.sound('tap'); render();
+    },
     teacherTab(d) { view.teacherTab = d.t; view.sheet = null; view.resetScroll = true; EMA.ui.sound('tap'); render(); },
 
     /* ---- 채점 동선 ---- */
@@ -2388,6 +2605,21 @@ window.EMA = window.EMA || {};
         if (i2) i2.click(); else EMA.ui.toast('사진 다시 올리기 버튼을 눌러 주세요');
       }, 240);
     },
+    /** 💾 임시 저장 — 사진 없이 채점만 남깁니다. 기한 전에는 밀린문제로 넘기지 않아요 */
+    saveTemp() {
+      const cid = view.classId, sid = view.studentId;
+      const kind = view.gradeSource === 'print' ? 'print' : 'hw';
+      if (store.saveProgress) store.saveProgress(cid, sid, kind);
+      else store.save();
+      const st = kind === 'print' ? store.printStats(cid, sid) : store.stats(cid, sid);
+      const due = store.dueInfo(cid);
+      view.flow = null; view.tab = 'home'; view.homeTab = 'today'; view.sheet = null;
+      view.pending.photo = null; view.resetScroll = true;
+      saveDraft();
+      EMA.ui.sound('coin');
+      EMA.ui.toast(`💾 임시 저장했어요 · ${st.marked}/${st.total}문제${due.passed ? '' : ' · 기한까지 이어서 할 수 있어요'}`, 3200);
+      render();
+    },
     async submit() {
       const cid = view.classId, sid = view.studentId;
       const kind = view.gradeSource === 'print' ? 'print' : 'hw';
@@ -2430,7 +2662,7 @@ window.EMA = window.EMA || {};
         if (r && r.killed) items.push({ kind: 'boss', em: '🏆', title: '보스 처치!', sub: '반 전원 보너스 코인 30개 · 한정판 칭호', sfx: 'bossdown', ms: 2400 });
         if (r && r.sub && r.sub.shield) items.push({ kind: 'shield', em: '🛡️', title: '보스 방어막 발동!', sub: '수업 당일에 몰아서 내서 보스·코인 50%만 들어갔어요', sfx: 'shield' });
         else if (r && r.sub && r.sub.early) items.push({ kind: 'early', em: '⚡', title: '얼리버드 크리티컬 2배!', sub: '일찍 내서 코인 2배 + XP 20 보너스!', sfx: 'fanfare' });
-        if (r && r.carried) items.push({ kind: 'title', em: '🥚', title: '안 푼 ' + r.carried + '문제 → 밀린문제', sub: '제출하면 바로 ⚔️ 밀린문제로 넘어가요 · 감점 없어요', sfx: 'tap', ms: 1800 });
+        if (r && r.carried) items.push({ kind: 'title', em: '🥚', title: '안 푼 ' + r.carried + '문제 → 밀린문제', sub: '제출 기한이 지나 ⚔️ 밀린문제로 넘어갔어요', sfx: 'tap', ms: 1800 });
         celebrateQueue(items);
         view.pending.photo = null;
       } else {
@@ -2802,6 +3034,25 @@ window.EMA = window.EMA || {};
       EMA.ui.sound('coin');
       render();
     },
+    regenPin(d) {
+      const pin = store.regenPin(view.classId, d.id);
+      view.pinReveal = d.id;
+      EMA.ui.toast('새 PIN: ' + pin);
+      render();
+    },
+    rankMode(d) { view.rankMode = d.m; render(); },
+    rankScope(d) { view.rankScope = d.s; render(); },
+    pmBook(d) { view.pmBook = d.b; view.pmList = null; render(); },
+    pmPage(d) {
+      const l = store.lesson(view.classId) || {};
+      const book = view.pmBook || l.book || store.bookList()[0];
+      view.pmBook = book;
+      const p = store.pagesOfBook(book).find(x => x.page === parseInt(d.p, 10));
+      view.pmPage = parseInt(d.p, 10);
+      view.pmInput = p ? p.problems.join(', ') : '';
+      view.pmList = p ? p.problems.slice() : [];
+      view.sheet = 'pmpage'; render();
+    },
     pmAddPage() {
       const v = (document.querySelector('#pmNewPage') || {}).value || '';
       const p = parseInt(v, 10);
@@ -2811,61 +3062,171 @@ window.EMA = window.EMA || {};
       view.pmPage = p;
       const hit = store.pageInfo(book, p);
       view.pmInput = hit ? hit.문제.join(', ') : '';
+      view.pmList = hit ? hit.문제.slice() : [];
       view.sheet = 'pmpage';
       render();
     },
-    regenPin(d) {
-      const pin = store.regenPin(view.classId, d.id);
-      view.pinReveal = d.id;
-      EMA.ui.toast('새 PIN: ' + pin);
+    /** 쪽수표 문제번호 — 범위(1~14번, 15~28번)로 자동 생성 */
+    pmRange() {
+      const v = (document.querySelector('#pmInput') || {}).value || '';
+      view.pmInput = v;
+      view.pmList = rangeList(v);
+      EMA.ui.sound('tap');
       render();
     },
-    rankMode(d) { view.rankMode = d.m; render(); },
-    rankScope(d) { view.rankScope = d.s; render(); },
-    pmBook(d) { view.pmBook = d.b; render(); },
-    pmPage(d) {
-      const l = store.lesson(view.classId) || {};
-      const book = view.pmBook || l.book || store.bookList()[0];
-      view.pmBook = book;
-      const p = store.pagesOfBook(book).find(x => x.page === parseInt(d.p, 10));
-      view.pmPage = parseInt(d.p, 10);
-      view.pmInput = p ? p.problems.join(', ') : '';
-      view.sheet = 'pmpage'; render();
+    pmDel(d) {
+      view.pmList = (view.pmList || []).filter(n => String(n) !== String(d.n));
+      view.pmInput = view.pmList.join(', ');
+      render();
+    },
+    pmAdd() {
+      const v = String((document.querySelector('#pmNewNo') || {}).value || '').trim();
+      if (!v) { EMA.ui.toast('번호를 넣어 주세요'); return; }
+      view.pmList = (view.pmList || []).concat([v]);
+      view.pmInput = view.pmList.join(', ');
+      render();
     },
     pmSave() {
-      const v = (document.querySelector('#pmInput') || {}).value || '';
-      const list = v.split(',').map(x => x.trim()).filter(Boolean);
+      const list = (view.pmList && view.pmList.length) ? view.pmList.slice() : rangeList(view.pmInput);
       if (!list.length) { EMA.ui.toast('문제 번호를 적어 주세요'); return; }
       const book = view.pmBook || (store.lesson(view.classId) || {}).book || store.bookList()[0];
       store.setPageProblem(book, view.pmPage, list);
-      view.sheet = null; EMA.ui.toast(view.pmPage + '쪽 문제번호를 저장했어요');
+      view.sheet = null; view.pmList = null;
+      EMA.ui.toast(view.pmPage + '쪽 문제 ' + list.length + '개를 저장했어요');
       render();
     },
     lessonEdit() {
       const l = store.lesson(view.classId);
       const b0 = store.books(view.classId)[0] || {};
       view.lessonEditBook = b0.book || (l && l.book);
-      view.lessonEditPages = (b0.pages || []).join(',');
+      view.lessonEditPages = (b0.pages || []).slice();
+      view.lessonEditInput = pagesText(view.lessonEditPages);
+      view.lessonEditDue = store.dueAtOf(view.classId);
       view.sheet = 'lessonEdit'; render();
     },
-    lessonBook(d) { view.lessonEditBook = d.b; view.lessonEditPages = null; render(); },
+    openLessonEdit() { actions.lessonEdit(); },
+    lessonBook(d) {
+      view.lessonEditBook = d.b;
+      const b = store.books(view.classId).find(x => x.book === d.b) || { pages: [] };
+      view.lessonEditPages = (b.pages || []).slice();
+      view.lessonEditInput = pagesText(view.lessonEditPages);
+      render();
+    },
+    lessonRange() {
+      const v = (document.querySelector('#pageInput') || {}).value || '';
+      view.lessonEditInput = v;
+      view.lessonEditPages = EMA.util.parsePages(v);
+      EMA.ui.sound('tap');
+      render();
+    },
+    lessonPageDel(d) {
+      view.lessonEditPages = (view.lessonEditPages || []).filter(p => String(p) !== String(d.p));
+      view.lessonEditInput = pagesText(view.lessonEditPages);
+      render();
+    },
+    lessonPageAdd() {
+      const v = (document.querySelector('#lessonNewPage') || {}).value || '';
+      const p = parseInt(v, 10);
+      if (!p || p < 1 || p > 999) { EMA.ui.toast('쪽 번호를 숫자로 넣어 주세요 (예: 56)'); return; }
+      const list = (view.lessonEditPages || []).slice();
+      if (list.indexOf(p) < 0) list.push(p);
+      view.lessonEditPages = list.sort((a, b) => a - b);
+      view.lessonEditInput = pagesText(view.lessonEditPages);
+      render();
+    },
+    dueNext() { view.lessonEditDue = store.defaultDueAt(view.classId); render(); },
+    dueClear() { view.lessonEditDue = ''; render(); },
     saveLesson() {
-      const raw = view.lessonEditPages || '';
-      const pages = EMA.util.parsePages(raw);
-      if (!pages.length) { EMA.ui.toast('쪽수를 숫자로 적어 주세요 (예: 8-10, 12쪽)'); return; }
-      const book = view.lessonEditBook || (store.books(view.classId)[0] || {}).book;
+      const cid = view.classId;
+      const pages = (view.lessonEditPages || []).slice().sort((a, b) => a - b);
+      if (!pages.length) { EMA.ui.toast('쪽수를 범위로 만들거나 하나 추가해 주세요'); return; }
+      const book = view.lessonEditBook || (store.books(cid)[0] || {}).book;
       const tiles = store.tilesOf(book, pages);
       const missing = pages.filter(p => !store.pageInfo(book, p));
-      const books = store.books(view.classId).map(b => b.book === book ? { book, pages } : b);
+      const books = store.books(cid).map(b => b.book === book ? { book, pages } : b);
       if (!books.find(b => b.book === book)) books.push({ book, pages });
-      store.saveLesson(view.classId, {
+      const dueEl = document.querySelector('#dueAt');
+      const dueVal = String(dueEl ? dueEl.value : (view.lessonEditDue || '')).replace('T', ' ').trim();
+      store.saveLesson(cid, {
+        date: store.state.today,
         books,
-        homework: books.map(b => b.book + ' ' + (b.pages.length > 1 ? b.pages[0] + '-' + b.pages[b.pages.length - 1] : b.pages[0]) + '쪽').join(', ')
+        homework: books.map(b => b.book + ' ' + pagesText(b.pages) + '쪽').join(', '),
+        assignedAt: (store.lesson(cid) || {}).assignedAt || store.state.today
       });
+      store.setDue(cid, dueVal);
       view.sheet = null;
+      const d = store.dueInfo(cid);
       EMA.ui.toast(missing.length
-        ? `${book} ${pages.join(', ')}쪽 → 문제 ${tiles.length}개 (${missing.join(', ')}쪽은 쪽수표에 없어 ?로 나와요)`
-        : `${book} ${pages.join(', ')}쪽 → 문제 ${tiles.length}개로 바꿨어요`, 3400);
+        ? `${book} ${pagesText(pages)}쪽 → 문제 ${tiles.length}개 (${missing.join(', ')}쪽은 쪽수표에 없어 ?로 나와요)`
+        : `${book} ${pagesText(pages)}쪽 → 문제 ${tiles.length}개 · 기한 ${d.label}`, 3600);
+      render();
+    },
+    /** ⏰ 지금 마감 — 안 푼 문제를 바로 밀린문제로 */
+    closeDue() {
+      if (!confirm('지금 숙제를 마감할까요? 안 푼 문제는 ⚔️ 밀린문제로 넘어갑니다.')) return;
+      const n = store.closeDue(view.classId);
+      EMA.ui.sound('coin');
+      EMA.ui.toast(n ? `마감했어요 · 안 푼 ${n}문제를 밀린문제로 넘겼어요` : '마감했어요', 3200);
+      render();
+    },
+    dashRange(d) { view.dashRange = d.r; view.dashOpen = {}; EMA.ui.sound('tap'); render(); },
+    dashOpen(d) { view.dashOpen[d.k] = !view.dashOpen[d.k]; EMA.ui.sound('tap'); render(); },
+    /** 프린트 문제 수를 학생 한 명에게 복사 */
+    copyPrintOne(d) {
+      const cid = view.classId;
+      const info = store.printInfo(cid, view.printSid);
+      if (!info) { EMA.ui.toast('먼저 이 학생의 프린트 문제 수를 저장해 주세요'); return; }
+      store.copyPrint(cid, view.printSid, [d.id]);
+      const to = store.student(cid, d.id);
+      EMA.ui.sound('coin');
+      EMA.ui.toast(`${to.name} 학생에게 ${info.count}문제로 똑같이 넣었어요`);
+      render();
+    },
+    /** 프린트 문제 수를 반 전체에 복사 */
+    copyPrintAll(d) {
+      const cid = view.classId;
+      const info = store.printInfo(cid, d.id);
+      if (!info) { EMA.ui.toast('복사할 프린트가 없어요'); return; }
+      const to = store.activeStudents(cid).map(s => s.id);
+      const n = store.copyPrint(cid, d.id, to);
+      EMA.ui.sound('coin');
+      EMA.ui.toast(`${info.count}문제를 ${n}명에게 똑같이 넣었어요`);
+      render();
+    },
+    moveOpen(d) { view.moveSid = d.id; view.moveTo = null; view.sheet = 'moveStu'; render(); },
+    moveTo(d) { view.moveTo = d.id; render(); },
+    moveGo() {
+      const r = store.moveStudent(view.classId, view.moveSid, view.moveTo);
+      if (!r) { EMA.ui.toast('옮기지 못했어요'); return; }
+      const to = store.getClass(view.moveTo);
+      view.sheet = null; view.moveSid = null; view.moveTo = null;
+      EMA.ui.sound('fanfare');
+      EMA.ui.toast(`${r.name} 학생을 ${to.name} 반으로 옮겼어요 · 기록 그대로`);
+      render();
+    },
+    retire(d) {
+      const s = store.student(view.classId, d.id);
+      if (!s) return;
+      if (!confirm(`${s.name} 학생을 퇴원(보관) 처리할까요? 기록은 지우지 않고 그대로 보관해요.`)) return;
+      store.retireStudent(view.classId, d.id);
+      EMA.ui.toast(`${s.name} 학생을 퇴원(보관)했어요 · 기록은 남아 있어요`, 3000);
+      render();
+    },
+    restore(d) {
+      const s = store.restoreStudent(view.classId, d.id);
+      EMA.ui.sound('coin');
+      EMA.ui.toast(`${s.name} 학생을 다시 재원으로 돌렸어요`);
+      render();
+    },
+    copyLessonOpen() { view.copyTo = null; view.sheet = 'copyLesson'; render(); },
+    copyTo(d) { view.copyTo = d.id; render(); },
+    copyGo() {
+      const r = store.copyLesson(view.classId, view.copyTo);
+      if (!r) { EMA.ui.toast('복사하지 못했어요'); return; }
+      const to = store.getClass(view.copyTo);
+      view.sheet = null; view.copyTo = null;
+      EMA.ui.sound('fanfare');
+      EMA.ui.toast(`${to.name} 반에 숙제를 복사했어요 · 기한 ${store.dueInfo(to.id).label}`, 3400);
       render();
     }
   };
@@ -2937,6 +3298,8 @@ window.EMA = window.EMA || {};
     } catch (e) { }
 
     const s = store.session();
+    // v0.9 — 숙제 기한이 지난 반의 미푼 문제를 한 번만 밀린문제로 이월
+    try { store.sweepDue(); } catch (e) { }
     if (s && s.role === 'student' && store.student(s.classId, s.studentId)) {
       view.role = 'student'; view.classId = s.classId; view.studentId = s.studentId;
       const d = readDraft();

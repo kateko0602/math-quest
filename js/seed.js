@@ -1,4 +1,4 @@
-/* 예시 데이터 v0.8 — 관리시트의 반 구조를 따릅니다.
+/* 예시 데이터 v0.9 — 관리시트의 반 구조를 따릅니다.
    (초6 심화반 5명 · 시트 🏫 반·학생 / 📖 진도·숙제 기준 · v0.8 펫 알·펫 도감 모델)
 
    ★ 이 파일은 '연습용 예시 데이터'입니다 (meta.demo = true).
@@ -29,7 +29,7 @@ window.EMA = window.EMA || {};
   let avI = 0;
   function stu(id, name, opts) {
     return Object.assign({
-      id, name, pin: '1234',
+      id, name, pin: '1234', status: 'active',
       nickname: null, avatar: AVATARS[avI++ % AVATARS.length],
       xp: 0, bonusXp: 0, coins: 0, streak: 0,
       pets: [], egg: null, bag: { snack: 0, shield: 0, bomb: 0 },
@@ -132,10 +132,11 @@ window.EMA = window.EMA || {};
           { book: '6-1 발전책', pages: [8, 9, 10] },
           { book: '6-1 응용심화책', pages: [6, 7] }
         ],
-        // 숙제가 나간 날 = 지난 수업일, 마감 = 다음 수업일
+        // 숙제가 나간 날 = 지난 수업일, 마감 = 다음 수업일 그 반 수업 시작(18:00) 전까지
         assignedAt: y1,
         dueDate: nxt,
-        due: '다음 수업(' + nxt.slice(5) + ' ' + dow(nxt) + ') 전까지',
+        dueAt: nxt + ' 18:00',
+        due: '다음 수업(' + nxt.slice(5) + ' ' + dow(nxt) + ') 18:00 전까지',
         memo: '식 쓰는 연습이 필요한 친구 있음 / 심화 혼자 잘 푸는 친구 있음'
       }
     };
@@ -302,19 +303,20 @@ window.EMA = window.EMA || {};
     };
 
     return JSON.parse(JSON.stringify({
-      version: 5,
+      version: 6,
       today: T,
       classes, lessons, dayLessons, exams,
       pageMaps: window.EMA_PAGE_MAPS || {},
       grades, submissions, history, monsters, carried, prints,
       solvedCarried: {},
+      activity: {},
       lateUploads: { [K('c4m2', y1, 's1')]: { at: '20:12', photoId: 'p_late_s1', solved: 4 } },
       photos: {},
       shop: { rewardsOn: true, claims: [] },
       gallery: { mode: 'auto' },
       bossBoosts: {},
       bossKills: {},
-      meta: { seededAt: new Date().toISOString(), demo: true, origin: 'seed', model: 'v0.8' }
+      meta: { seededAt: new Date().toISOString(), demo: true, origin: 'seed', model: 'v0.9' }
     }));
   };
 })();
