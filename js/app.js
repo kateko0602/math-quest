@@ -1358,7 +1358,7 @@ window.EMA = window.EMA || {};
           ? `<button class="btn btn-primary btn-block btn-lg" data-act="saveStamped">${btnLabel}</button>
         <div class="hint center" style="margin-top:8px">선생님 도장은 그대로예요 · 고친 해결·질문만 저장돼요</div>`
           : (optional && !existingPhoto && !view.pending.photo && !locked)
-            ? `<div class="hint center" style="margin:0 0 4px">위에서 <b>⚡ 사진 없이 바로 완료</b> 또는 <b>📸 사진 올리기</b>를 골라 주세요</div>`
+            ? ''
             : `<button class="btn btn-primary btn-block btn-lg" data-act="submit">${btnLabel}</button>`}
         ${(!isPrint && store.dueInfo(cid).has && !store.dueInfo(cid).passed && !stamped) ? `<button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="saveTemp">💾 사진 없이 임시 저장 (기한까지 이어서)</button>` : ''}
       </div>
