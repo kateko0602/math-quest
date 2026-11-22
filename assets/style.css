@@ -1203,3 +1203,119 @@ button,input,select,textarea{font-family:var(--font)}
 .linkbtn2{border:none;background:none;font-family:var(--font);font-size:11.5px;font-weight:900;color:#1F6FA8;padding:6px 8px;border-radius:8px;cursor:pointer}
 .linkbtn2.neg{color:#C53030}
 .linkbtn2:active{background:#F4F0EB}
+
+/* ============================================================
+   v1.0 — 3단계: 하루 3문제 미션 · 펫 성장 · 5초 컷 채점 · 선생님 리스트
+   ============================================================ */
+
+/* ---------- 홈: 오늘 미션 카드 ---------- */
+.mission{background:linear-gradient(120deg,#FFFFFF,#FFF6E6);border:1.5px solid #FFE2B8}
+.mission.done{background:linear-gradient(120deg,#F2FFF9,#E8FBF2);border-color:#B9EBD6}
+.mission .mline{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:900;color:#7A6F63}
+.mission .mt{font-size:13.5px;color:var(--navy)}
+.mission .mnum{font-size:13px;font-weight:900;color:#C98A1A}
+.mission.done .mnum{color:var(--mint-d)}
+.mission .mline.sub{font-size:11.5px;font-weight:800;color:#9A8E82;margin-top:7px}
+.mission .week{color:#8A7E72}
+.mission .week b{color:#C98A1A;font-size:12.5px}
+.mdots{display:flex;gap:5px;margin-top:7px}
+.mdots i{display:block;height:7px;flex:1;border-radius:99px;background:#F0E7DB}
+.mdots i.on{background:linear-gradient(90deg,#FFC93C,#FF9F1C)}
+.mdots.wk{margin-top:5px}
+.mdots.wk i{height:5px}
+.mdots.wk i.on{background:linear-gradient(90deg,#43E5BB,#12A57F)}
+.mission .mcome{margin-top:9px;font-size:11.5px;font-weight:900;color:#7A4BD6;background:#F5F0FF;border-radius:10px;padding:8px 10px}
+.mission .mcome b{color:#5B2FC4}
+
+/* ---------- ① 채점: 🏫 5초 컷 도구 ---------- */
+.gtools{display:flex;gap:7px;margin:0 16px 8px;flex-wrap:wrap}
+.gtool{
+  border:1.5px solid #E7DED4;background:#fff;border-radius:12px;padding:0 12px;min-height:42px;
+  font-family:var(--font);font-size:12.5px;font-weight:900;color:#6B6157;cursor:pointer;
+  box-shadow:var(--shadow-s);display:inline-flex;align-items:center;gap:4px;flex:1 1 auto;justify-content:center;
+}
+.gtool:active{transform:scale(.97)}
+.gtool.on{background:#EAF7FF;border-color:#8FC7EE;color:#1F6FA8}
+.gtool.sm{flex:0 1 auto;min-height:38px;font-size:12px;padding:0 12px}
+.gtool-lb{display:inline-flex;align-items:center;font-size:11.5px;font-weight:900;color:#A79C90;padding:0 2px}
+.gfold{margin:0 18px 8px;font-size:11.5px;font-weight:800;color:#8A7E72;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.gfold b{color:#1F6FA8}
+.gfold .linkbtn2{padding:2px 6px}
+
+/* ⭐ 맞은 문제 질문 버튼 (한 줄 4칸) */
+.ox-row.has-star{grid-template-columns:52px 1fr 1fr 38px;gap:6px}
+.ox-row.has-star .ox-label{font-size:16px}
+.ox-star{
+  border:2.5px solid #F3E6C4;background:#FFFDF6;border-radius:12px;cursor:pointer;
+  font-size:15px;line-height:1;color:#C9A227;box-shadow:0 2px 0 #F1E6CB;padding:0;
+}
+.ox-star.on{background:#FFC93C;border-color:#E8B22B;box-shadow:0 3px 0 #D9A31F}
+.ox-star:disabled{opacity:.28;background:#F8F4EF;border-color:#EDE4DA;box-shadow:none;cursor:default}
+.ox-star:active{transform:scale(.94)}
+.oxsum .nums .s-cls{background:#EAF3FB;color:#1F6FA8}
+
+/* ② 정리: ⭕+⭐ 목록 */
+.clean-list{display:flex;flex-wrap:wrap;gap:5px}
+.chipx-mini{border:none;background:none;font-family:var(--font);font-size:10px;font-weight:900;color:#B06A2C;padding:0 2px;cursor:pointer}
+
+/* ---------- 🏫 몇 번부터 숙제? 시트 ---------- */
+.sfgroup{margin-bottom:12px}
+.sfpage{font-size:11.5px;font-weight:900;color:#8A7E72;margin-bottom:6px}
+.sfgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.sfbtn{
+  border:1.5px solid #E7DED4;background:#fff;border-radius:10px;min-height:44px;
+  font-family:var(--font);font-size:13px;font-weight:900;color:#4B5563;cursor:pointer;box-shadow:var(--shadow-s);
+}
+.sfbtn.on{background:#1F6FA8;border-color:#175B8C;color:#fff}
+.sfbtn.done{background:#F1F7F3;color:#0F8F68;border-color:#CFE9DC}
+.sfbtn:active{transform:scale(.95)}
+
+/* ---------- 📚 책 전체 보기 (선생님) ---------- */
+.baunit{border:1.5px solid #EFE7DE;border-radius:14px;padding:10px 11px;margin-bottom:9px;background:#FFFDFA}
+.bahd{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:800;color:#4B5563;margin-bottom:8px}
+.bahd b{color:var(--navy);font-size:13.5px}
+.bahd .btn-sm{min-height:34px;font-size:11.5px;padding:0 10px}
+.bapages{display:grid;grid-template-columns:repeat(6,1fr);gap:5px}
+.bapage{
+  border:1.5px solid #EDE4DA;background:#fff;border-radius:10px;padding:5px 2px;cursor:pointer;
+  font-family:var(--font);display:flex;flex-direction:column;align-items:center;gap:1px;min-height:44px;justify-content:center;
+}
+.bapage b{font-size:12.5px;font-weight:900;color:#4B5563}
+.bapage small{font-size:8.5px;font-weight:800;color:#A79C90}
+.bapage.on{background:#EAF7FF;border-color:#8FC7EE}
+.bapage.on b{color:#1F6FA8}
+.bapage.empty{opacity:.45}
+.bapage.empty small{color:#B0A597}
+.bhintbar{position:sticky;bottom:0;background:#FFF;border-radius:12px;padding:9px 12px;font-size:12px;font-weight:800;color:#6B6157;box-shadow:var(--shadow-s);margin-top:10px}
+.bhintbar b{color:#1F6FA8}
+
+/* ---------- 선생님: 질문·오답 리스트 / 단원 묶음 ---------- */
+.tlist{padding:10px 12px}
+.tlwrap{padding:8px 0;border-bottom:1px solid #F4F0EB}
+.tlwrap:last-child{border-bottom:none}
+.tlrow{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--navy)}
+.tlrow b{font-size:13px}
+.tlno{width:20px;height:20px;border-radius:7px;background:#FFF3D2;color:#A87800;font-size:11px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+.tlno.bad{background:#FDECEC;color:#C53030}
+.tlct{font-size:11.5px;font-weight:900;color:#7A6F63;white-space:nowrap}
+.tlct small{font-weight:900}
+.okc{color:#0F8F68}
+.badc{color:#C53030}
+.tlwho{font-size:11px;font-weight:700;color:#9A8E82;padding-left:28px;margin-top:3px;line-height:1.45}
+.unitblk{margin-bottom:12px}
+.unithd{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#7A6F63;margin:4px 0 6px}
+.unithd b{font-size:13px;color:var(--navy)}
+.ns .n.empty{font-size:10.5px;color:#B3A79A;background:none;border:1px dashed #E7DED4;padding:3px 7px}
+
+/* 펫 성장 표시 */
+.petcard .pst{font-size:9px;font-weight:900;color:#8C8175;line-height:1.2}
+.petcard.got .pst{color:#C98A1A}
+.pethero .ph-stage{font-size:12px;font-weight:900;color:#5B4B3E;margin-top:6px}
+.pethero .ph-stage b{color:#C98A1A}
+
+/* 미션 카드 한 줄 압축 (v1.0) */
+.mission .mdots.inline{flex:0 0 auto;width:66px;margin:0 0 0 2px;height:7px;display:inline-flex;gap:4px}
+.mission .mdots.inline i{height:7px}
+.mission .mline .mdots.wk{flex:0 0 auto;width:86px;margin:0;height:5px;display:inline-flex;gap:4px}
+.mission .mline .mdots.wk i{height:5px}
+.mission .mline.sub{margin-top:6px;font-size:11.5px}

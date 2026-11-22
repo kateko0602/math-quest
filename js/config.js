@@ -6,5 +6,5 @@ window.EMA_CONFIG = {
   apiUrl: '',                 // 예: 'https://script.google.com/macros/s/AKfy.../exec'
   classId: 'c4m2',            // 시범 반: 초6 심화반
   demo: false,                // true(?mode=demo)면 연습용 저장칸(ema.state.demo.v5)을 씁니다
-  version: '0.9'
+  version: '1.0'
 };

@@ -8,9 +8,13 @@
 window.EMA = window.EMA || {};
 (function () {
   const KEY = 'ema.sound.v1';
-  let ctx = null, master = null, unlocked = false;
+  let ctx = null, master = null, limiter = null, unlocked = false;
   let lastGesture = 0;
   let enabled = true;
+  let voices = 0;                     // 지금 울리는 소리 수 — 너무 많으면 띡끽거려서 제한합니다
+  let skipped = 0;                    // 겹침 방지로 건너뛴 횟수 (점검용)
+  const MIN_GAP = 32;                 // 같은 순간에 같은 소리가 겹쳐 터지는 것을 막습니다 (ms)
+  const lastAt = {};
   try { enabled = localStorage.getItem(KEY) !== 'off'; } catch (e) { }
 
   function ensure() {
@@ -20,8 +24,21 @@ window.EMA = window.EMA || {};
     try {
       ctx = new AC();
       master = ctx.createGain();
-      master.gain.value = 0.5;
-      master.connect(ctx.destination);
+      master.gain.value = 0.34;       // v1.0: 조금 줄여 겹칠 때 찢어지는 소리를 막습니다
+      /* iOS에서 소리가 여러 개 겹칠 때 '띡·끽' 하고 찢어지는 것은 대부분 과입력(clipping)입니다.
+         리미터(컴프레서)를 하나 두고 그 뒤로 흘려보냅니다. */
+      try {
+        limiter = ctx.createDynamicsCompressor();
+        limiter.threshold.value = -14;
+        limiter.knee.value = 8;
+        limiter.ratio.value = 12;
+        limiter.attack.value = 0.003;
+        limiter.release.value = 0.16;
+        master.connect(limiter);
+        limiter.connect(ctx.destination);
+      } catch (e) {
+        master.connect(ctx.destination);
+      }
     } catch (e) { ctx = null; }
     return ctx;
   }
@@ -64,26 +81,31 @@ window.EMA = window.EMA || {};
   function tone(freq, dur, opt) {
     const c = ensure();
     if (!c || !enabled) return;
+    if (voices > 10) return;                        // 겹침 제한
     try { if (c.state === 'suspended' && c.resume) { const p = c.resume(); if (p && p.catch) p.catch(() => { }); } } catch (e) { }
     const o = c.createOscillator();
     const g = c.createGain();
-    const t = c.currentTime + (opt.delay || 0);
+    /* ★ 시작을 조금 미룹니다 — currentTime 정각에 예약하면 이미 지난 시점이 되어 '톡' 끊깁니다 */
+    const t = c.currentTime + 0.008 + (opt.delay || 0);
     o.type = opt.type || 'sine';
     o.frequency.setValueAtTime(freq, t);
     if (opt.to) o.frequency.exponentialRampToValueAtTime(Math.max(30, opt.to), t + dur);
     const vol = (opt.gain == null ? 0.16 : opt.gain);
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + 0.014);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g); g.connect(master);
-    o.start(t); o.stop(t + dur + 0.03);
+    voices++;
+    o.onended = function () { voices = Math.max(0, voices - 1); try { o.disconnect(); g.disconnect(); } catch (e) { } };
+    o.start(t); o.stop(t + dur + 0.02);
   }
-  /** 잡음(타격감) */
+  /** 잡음(타격감) — 시작·끝에 게인을 부드럽게 올리고 내려 '칙' 소리를 없앴습니다 */
   function noise(dur, gain, filterHz) {
     const c = ensure();
     if (!c || !enabled) return;
+    if (voices > 10) return;
     try { if (c.state === 'suspended' && c.resume) { const p = c.resume(); if (p && p.catch) p.catch(() => { }); } } catch (e) { }
-    const len = Math.floor(c.sampleRate * dur);
+    const len = Math.max(1, Math.floor(c.sampleRate * dur));
     const buf = c.createBuffer(1, len, c.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
@@ -93,9 +115,15 @@ window.EMA = window.EMA || {};
     f.type = 'lowpass';
     f.frequency.value = filterHz || 1200;
     const g = c.createGain();
-    g.gain.value = gain == null ? 0.12 : gain;
+    const t = c.currentTime + 0.008;
+    const vol = gain == null ? 0.12 : gain;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     src.connect(f); f.connect(g); g.connect(master);
-    src.start();
+    voices++;
+    src.onended = function () { voices = Math.max(0, voices - 1); try { src.disconnect(); f.disconnect(); g.disconnect(); } catch (e) { } };
+    src.start(t); src.stop(t + dur + 0.02);
   }
 
   const recipes = {
@@ -133,8 +161,15 @@ window.EMA = window.EMA || {};
       if (!enabled) return;
       const fn = recipes[name];
       if (!fn) return;
+      /* 같은 소리가 짧은 간격으로 계속 겹치면 찢어집니다 — 최소 간격을 둡니다 */
+      const now = Date.now();
+      if (lastAt[name] && now - lastAt[name] < MIN_GAP) { skipped++; return; }
+      lastAt[name] = now;
       try { unlock(); fn(); } catch (e) { }
     },
+    /** 점검용 — 지금 울리는 소리 수 (아이폰 겹침 확인) */
+    voices() { return voices; },
+    stats() { return { voices: voices, skipped: skipped, state: ctx ? ctx.state : 'none', gain: master ? master.gain.value : 0 }; },
     on() { return enabled; },
     state() { const c = ensure(); return c ? c.state : 'none'; },
     set(v) {

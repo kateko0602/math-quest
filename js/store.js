@@ -1,5 +1,10 @@
-/* 저장소 v0.9 — 로컬(브라우저) 모드와 시트 API 모드를 같은 인터페이스로 씁니다.
+/* 저장소 v1.0 — 로컬(브라우저) 모드와 시트 API 모드를 같은 인터페이스로 씁니다.
 
+   ★ v1.0 3단계에서 더한 것 ★
+     ① 하루 3문제 미션(+10) · 연속 🔥 · 주간 목표(주 5일, +30) · 복귀 보상(+15)
+     ② 펫 경험치 → 3단계 성장(아기 → 성장 → 완성 + 칭호)
+     ③ 수업에서 푼 문제(대표문제·시작번호)를 '제외'로 표시 — 밀린문제·오답 통계에 안 섞임
+     ④ 맞은 문제도 ⭐ 질문 · 선생님 전용 질문/오답 TOP 5 · 학생별 못 고친 오답
    ★ v0.9 2단계에서 더한 것 ★
      ① 숙제 제출 기한(lesson.dueAt) — 기한 전은 '📘 진행 중', 기한이 지나야 미푼 문제만 '⚔️ 밀린문제'로
      ② 오답 3단 구분(전체 틀린 문제 / 아직 고치지 않은 / 다시 풀어 고친) + 선생님 반 대시보드
@@ -40,15 +45,26 @@ window.EMA = window.EMA || {};
   const KEY = 'ema.state.v5';           // 저장 칸 이름은 v0.8 그대로 — 기록을 옮기지 않아도 됩니다
   const DEMO_KEY = 'ema.state.demo.v5';       // 연습(?mode=demo)은 실제 운영 데이터와 다른 칸에 쌓입니다
   const LEGACY_KEYS = ['ema.state.v4', 'ema.state.v3'];
-  const SCHEMA = 6;                     // 구조 버전 6 — 숙제 기한·반 이동·퇴원·오답 3단이 더해졌습니다
+  const SCHEMA = 7;                     // 구조 버전 7 — v1.0 3단계: 미션·주간목표·펫 경험치·수업에서 푼 문제(excl)
   const SESSION = 'ema.session.v2';
   const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
-  /** 쪽수 입력 파서 — '8~10쪽', '8 ∼ 10', '8,9,10', '8-10쪽' 모두 받습니다 */
+  /** 쪽수 입력 파서 — '8~10쪽', '8 ∼ 10', '8,9,10', '8-10쪽' 모두 받습니다
+      ★ v1.0: 전각 쉼표(，、；)도 보통 쉼표로 바꿔 '2，4，5，6'을 개별 숫자로 읽습니다 */
   function parsePages(raw) {
     const out = [];
     const push = n => { const v = parseInt(n, 10); if (v > 0 && v < 1000 && out.indexOf(v) < 0) out.push(v); };
-    const txt = String(raw == null ? '' : raw)
+    /* ★ 교재명에 들어 있는 숫자('6-1 발전책')가 쪽수로 읽히지 않게 교재명을 먼저 지웁니다 */
+    const stripBooks = t => {
+      let s = String(t || '');
+      try {
+        const books = Object.keys((window.EMA_PAGE_MAPS || {}).교재 || {});
+        books.forEach(b => { s = s.split(b).join(' '); });
+      } catch (e) { }
+      return s.replace(/발전책|발전진도북|응용심화 ?셀프북|응용심화책|셀프북|진도북/g, ' ');
+    };
+    const txt = stripBooks(raw)
+      .replace(/[，、；;]/g, ',')
       .replace(/쪽/g, ' ')
       .replace(/[∼〜～]/g, '~')
       .replace(/[–—－]/g, '-')
@@ -65,10 +81,37 @@ window.EMA = window.EMA || {};
     return out.sort((a, b) => a - b);
   }
 
-  EMA.util = { todayISO, nowHHMM, DOW, pad, shiftISO, parsePages };
+  /** 문제번호 파서 — '2,4,5,6' · '2，4' · '1~14번, 15~28번' · '1-1' 모두 개별 번호로
+      ★ v1.0: 공백 없는 쉼표·전각 쉼표·'번'이 섞여도 한 칸에 몰리지 않습니다 */
+  function parseProblemNos(raw) {
+    const out = [];
+    const push = v => { const s = String(v).trim(); if (s && out.indexOf(s) < 0) out.push(s); };
+    String(raw == null ? '' : raw)
+      .replace(/[，、；;]/g, ',')
+      .replace(/번/g, ' ')
+      .split(/[,\s]+/).filter(Boolean).forEach(part => {
+        const m = part.match(/^(\d+)\s*[~∼〜]\s*(\d+)$/);
+        if (m) {
+          const a = +m[1], b = +m[2];
+          for (let i = Math.min(a, b); i <= Math.max(a, b); i++) push(String(i));
+        } else if (/^\d+(-\d+)*$/.test(part)) push(part);
+      });
+    return out;
+  }
+
+  EMA.util = { todayISO, nowHHMM, DOW, pad, shiftISO, parsePages, parseProblemNos };
 
   const CAP_XP = 200;       // 일일 XP 상한 (몰아치기 방지)
   const FLAME_MIN = 3;      // 불꽃 인정 최소 문제 수
+  /* v1.0 3단계 — 미션·주간 목표·복귀 보상·펫 성장 */
+  const MISSION = { need: 3, coins: 10, weekNeed: 5, weekCoins: 30, comeback: 15, comebackDays: 2 };
+  const PET_XP = { need2: 12, need3: 30, dayCap: 15 };   // 펫 경험치: 12 → 2단계, 30 → 3단계(완성) · 하루 15까지
+  const PET_STAGES = [
+    null,
+    { stage: 1, name: '아기', em: '🐣' },
+    { stage: 2, name: '성장', em: '🌱' },
+    { stage: 3, name: '완성', em: '👑' }
+  ];
   const GAME = () => window.EMA_GAME || { pets: [], shop: [], bosses: [], titles: [], monsters: [], rarity: {}, dailyTitles: [] };
 
   function K(c, d, s) { return c + '|' + d + '|' + s; }
@@ -183,11 +226,18 @@ window.EMA = window.EMA || {};
           out.push({ key: tileKey(bookName, p, 0), label: '?', page: p, num: null, book: bookName, type: '표없음', unitName: '', missing: true });
           return;
         }
-        info.문제.forEach((num, i) => out.push({
+        // ★ v1.0: 문제가 없는 개념 설명 쪽(예: 응용심화 58·59쪽)은 '58쪽 ?번' 타일을 만들지 않습니다
+        const nums = (info.문제 || []).filter(n => String(n == null ? '' : n).trim() !== '');
+        if (!nums.length) return;
+        nums.forEach((num, i) => out.push({
           key: tileKey(bookName, p, i), label: num, page: p, num, book: bookName, type: info.유형, unitName: unitOf(p)
         }));
       });
       return out;
+    }
+    /** 문제가 하나도 없는 쪽(개념 설명만 있는 쪽) — 숙제 범위에 들어와도 자동으로 빠집니다 */
+    conceptPages(bookName) {
+      return this.pagesOfBook(bookName).filter(p => !(p.problems || []).length).map(p => p.page);
     }
     /** 문제(교재·쪽)가 속한 단원 이름 — 쪽수표에 없는 쪽은 가장 가까운 단원으로 */
     unitNameOf(bookName, page) {
@@ -394,8 +444,15 @@ window.EMA = window.EMA || {};
         const i = hash(sid + '|' + this.state.today + '|verify') % pool.length;
         return { book: pool[i].book, page: pool[i].page };
       }
+      // 아직 아무것도 안 눌렀으면 문제가 있는 쪽 중에서 (개념 설명만 있는 쪽은 빼고)
+      const seen = {};
       const all = [];
-      bs.forEach(b => (b.pages || []).forEach(p => all.push({ book: b.book, page: p })));
+      this.tiles(classId).forEach(t => {
+        const k = t.book + '|' + t.page;
+        if (seen[k] || t.missing) return;
+        seen[k] = true;
+        all.push({ book: t.book, page: t.page });
+      });
       if (!all.length) return null;
       const i = hash(sid + '|' + this.state.today + '|verify') % all.length;
       return all[i];
@@ -413,19 +470,21 @@ window.EMA = window.EMA || {};
     grade(classId, sid, date) {
       const d = date || this.hwDate(classId);
       const g = this.state.grades[K(classId, d, sid)];
-      if (!g) return { marks: {}, cleanup: {}, tags: {}, updatedAt: null };
+      if (!g) return { marks: {}, cleanup: {}, tags: {}, excl: {}, updatedAt: null };
       if (!g.marks) g.marks = {};
       if (!g.cleanup) g.cleanup = {};
       if (!g.tags) g.tags = {};
+      if (!g.excl) g.excl = {};
       return g;
     }
     gradeOf(classId, sid, kind) {
       const k = SK(classId, kind === 'print' ? this.state.today : this.hwDate(classId), sid, kind);
       const g = this.state.grades[k];
-      if (!g) return { marks: {}, cleanup: {}, tags: {}, updatedAt: null };
+      if (!g) return { marks: {}, cleanup: {}, tags: {}, excl: {}, updatedAt: null };
       if (!g.marks) g.marks = {};
       if (!g.cleanup) g.cleanup = {};
       if (!g.tags) g.tags = {};
+      if (!g.excl) g.excl = {};
       return g;
     }
     markOf(classId, sid, key, date) { return this.grade(classId, sid, date).marks[key] || ''; }
@@ -440,12 +499,14 @@ window.EMA = window.EMA || {};
       return '';
     }
 
-    /** 타일 묶음의 다섯 상태 집계 */
+    /** 타일 묶음의 다섯 상태 집계 (+ 수업에서 품·안 낸 문제 c6) */
     _count(tiles, g) {
-      let c1 = 0, c2 = 0, c3 = 0, c4 = 0, c5 = 0;
+      let c1 = 0, c2 = 0, c3 = 0, c4 = 0, c5 = 0, c6 = 0, starO = 0;
+      const excl = (g && g.excl) || {};
       tiles.forEach(t => {
         const m = g.marks[t.key];
-        if (m === 'o') { c1++; return; }
+        if (!m && excl[t.key]) { c6++; return; }          // 🏫 수업에서 푼 문제 · 안 낸 문제 — 채점·밀린문제·미션에서 빼요
+        if (m === 'o') { c1++; if (g.cleanup[t.key] === 'star') starO++; return; }
         if (m === 'x') {
           const cl = g.cleanup[t.key];
           if (cl === 'fixed') c3++;
@@ -455,7 +516,11 @@ window.EMA = window.EMA || {};
         }
         c5++;
       });
-      return { c1, c2, c3, c4, c5, correct: c1, wrongLeft: c2, fixed: c3, question: c4, carry: c5, marked: c1 + c2 + c3 + c4, total: tiles.length };
+      return {
+        c1, c2, c3, c4, c5, c6, starO,
+        correct: c1, wrongLeft: c2, fixed: c3, question: c4 + starO, carry: c5,
+        marked: c1 + c2 + c3 + c4, total: c1 + c2 + c3 + c4 + c5, all: tiles.length
+      };
     }
     counts(classId, sid, date) {
       const g = this.grade(classId, sid, date);
@@ -472,6 +537,288 @@ window.EMA = window.EMA || {};
     /** 숙제 + 프린트 합친 오늘 푼 문제 수 */
     solvedToday(classId, sid) {
       return this.counts(classId, sid).marked + this.printCounts(classId, sid).marked;
+    }
+
+    /* =========================================================
+       v1.0 3단계 — 하루 3문제 미션 · 주간 목표 · 복귀 보상
+    ========================================================= */
+    /** 이번 주 월요일 (주간 목표는 월~일 한 주 단위) */
+    weekStart(iso) {
+      const d = iso || this.state.today;
+      const dow = new Date(d + 'T12:00:00').getDay();
+      return shiftISO(d, -(dow === 0 ? 6 : dow - 1));
+    }
+    _daysBetween(a, b) {
+      const ms = new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00');
+      return Math.round(ms / 86400000);
+    }
+    /** 오늘 '해결'한 밀린문제 수 (⏭️ 안 푼 문제는 제외) */
+    carrySolvedToday(sid) {
+      return ((this.state.solvedCarried || {})[sid] || [])
+        .filter(m => m && m.solvedAt === this.state.today && !m.skip).length;
+    }
+    /** 오늘 미션에 세는 문제 수 — 숙제·오답프린트 채점 + 밀린문제 해결 */
+    missionCount(classId, sid) {
+      return this.solvedToday(classId, sid) + this.carrySolvedToday(sid);
+    }
+    /** 오늘 미션 기록 (완료했을 때만 있음) */
+    missionRecord(sid, date) {
+      return (((this.state.missions || {})[sid] || {})[date || this.state.today]) || null;
+    }
+    /** 이번 주에 미션을 마친 날 수 */
+    weekMissionDays(sid) {
+      const from = this.weekStart(this.state.today);
+      const rec = (this.state.missions || {})[sid] || {};
+      return Object.keys(rec).filter(d => d >= from && d <= this.state.today).length;
+    }
+    /** 마지막으로 뭐라도 한 날 (오늘 이전) — 복귀 보상 판정 */
+    lastActiveBefore(sid, date) {
+      const today = date || this.state.today;
+      let last = '';
+      const A = (this.state.activity || {})[sid] || {};
+      Object.keys(A).forEach(d => { if (d < today && Number(A[d] || 0) > 0 && d > last) last = d; });
+      ((this.state.history || {})[sid] || []).forEach(r => {
+        if (r && r.date && r.date < today && Number(r.solved || 0) > 0 && r.date > last) last = r.date;
+      });
+      ((this.state.solvedCarried || {})[sid] || []).forEach(m => {
+        if (m && m.solvedAt && m.solvedAt < today && m.solvedAt > last) last = m.solvedAt;
+      });
+      Object.keys((this.state.missions || {})[sid] || {}).forEach(d => { if (d < today && d > last) last = d; });
+      return last;
+    }
+    /** 미션·주간 목표·복귀 상태 (화면용) */
+    missionInfo(classId, sid) {
+      const today = this.state.today;
+      const count = this.missionCount(classId, sid);
+      const rec = this.missionRecord(sid, today);
+      const ws = this.weekStart(today);
+      const days = this.weekMissionDays(sid);
+      const wk = (((this.state.weekBonus || {})[sid] || {})[ws]) || null;
+      const last = this.lastActiveBefore(sid, today);
+      const gap = last ? this._daysBetween(last, today) : 0;
+      const comeback = !rec && gap >= MISSION.comebackDays;
+      return {
+        today, count, need: MISSION.need, left: Math.max(0, MISSION.need - count),
+        done: count >= MISSION.need, rewarded: !!rec, scored: rec ? rec.coins : 0,
+        coins: MISSION.coins,
+        weekStart: ws, weekDays: days, weekNeed: MISSION.weekNeed, weekCoins: MISSION.weekCoins,
+        weekDone: days >= MISSION.weekNeed, weekRewarded: !!wk,
+        comeback, comebackDays: gap, comebackCoins: MISSION.comeback
+      };
+    }
+    /** 3문제를 채우면 — 오늘 미션(+10) · 주간 목표(+30) · 복귀 보상(+15) 코인을 한 번만 넣습니다 */
+    ensureMission(classId, sid) {
+      const info = this.missionInfo(classId, sid);
+      if (!info.done || info.rewarded) return null;
+      const s = this.student(classId, sid);
+      if (!s) return null;
+      const rec = { coins: MISSION.coins, at: nowHHMM(), count: info.count };
+      let coins = MISSION.coins;
+      if (info.comeback) { rec.comeback = MISSION.comeback; coins += MISSION.comeback; }
+      // 오늘 기록은 아직 안 들어가 있으니 '오늘까지'로 한 번 더 셉니다
+      const daysNow = info.weekDays + (info.rewarded ? 0 : 1);
+      if (daysNow >= MISSION.weekNeed && !info.weekRewarded) {
+        rec.weekly = MISSION.weekCoins;
+        coins += MISSION.weekCoins;
+        this.state.weekBonus = this.state.weekBonus || {};
+        const w = this.state.weekBonus[sid] = this.state.weekBonus[sid] || {};
+        w[info.weekStart] = { at: this.state.today, coins: MISSION.weekCoins };
+      }
+      rec.coins = coins;
+      this.state.missions = this.state.missions || {};
+      const mine = this.state.missions[sid] = this.state.missions[sid] || {};
+      mine[this.state.today] = rec;
+      s.coins = (s.coins || 0) + coins;
+      this.save();
+      return {
+        awarded: true, coins, mission: MISSION.coins,
+        comeback: info.comeback ? MISSION.comeback : 0,
+        weekly: rec.weekly || 0, count: info.count,
+        weekDays: this.weekMissionDays(sid), weekNeed: MISSION.weekNeed
+      };
+    }
+
+    /* ---------- 펫 경험치 · 3단계 성장 ---------- */
+    petStageOf(p) {
+      const xp = Number((p && p.xp) || 0);
+      const xpStage = xp >= PET_XP.need3 ? 3 : xp >= PET_XP.need2 ? 2 : 1;
+      return Math.max(Number((p && p.lv) || 1), xpStage);
+    }
+    /** 다음 단계까지 필요한 경험치 */
+    petNextNeed(p) {
+      const st = this.petStageOf(p);
+      if (st >= 3) return { need: null, have: Number((p && p.xp) || 0), pct: 100 };
+      const need = st === 1 ? PET_XP.need2 : PET_XP.need3;
+      const have = Number((p && p.xp) || 0);
+      const from = st === 1 ? 0 : PET_XP.need2;
+      return { need: need - from, have: have - from, pct: Math.round(Math.max(0, Math.min(1, (have - from) / (need - from))) * 100) };
+    }
+    petStageLabel(p) { return PET_STAGES[this.petStageOf(p)] || PET_STAGES[1]; }
+    /** 문제를 풀 때마다 보유 펫들이 경험치를 얻습니다 (하루 15까지 · 3단계엔 칭호) */
+    addPetXp(classId, sid, n) {
+      const s = this.student(classId, sid);
+      if (!s) return 0;
+      const pets = s.pets || [];
+      if (!pets.length) return 0;
+      const add0 = Number(n) || 0;
+      if (add0 <= 0) return 0;
+      this.state.petXp = this.state.petXp || {};
+      const row = this.state.petXp[sid] = this.state.petXp[sid] || {};
+      const today = this.state.today;
+      const used = Number(row[today] || 0);
+      const add = Math.max(0, Math.min(add0, PET_XP.dayCap - used));
+      if (!add) return 0;
+      row[today] = used + add;
+      let up = [];
+      pets.forEach(p => {
+        const before = this.petStageOf(p);
+        p.xp = Number(p.xp || 0) + add;
+        const after = this.petStageOf(p);
+        if (after > before) p.lv = after;
+        if (after >= 3) {
+          // 3단계(완성)가 되면 그 펫의 칭호가 열립니다 (이미 있으면 두 번 넣지 않음)
+          s.titles = s.titles || [];
+          const tid = 'pet_' + p.id;
+          if (!s.titles.find(t => t.id === tid)) {
+            const def = this.petDef(p.id) || {};
+            s.titles.push({ id: tid, name: (def.name || p.name || '펫') + ' 대장', em: def.em || p.em || '🐾', at: today });
+          }
+        }
+        if (after > before) up.push({ id: p.id, name: p.name, stage: after, title: (this.petDef(p.id) || {}).name || p.name });
+      });
+      this.save();
+      return add;
+    }
+
+    /* ---------- 수업에서 푼 문제(제외) ---------- */
+    /** reason: 'class'(수업에서 품) / 'filter'(홀·짝 보기) — 미채점 타일을 '제외'로 표시합니다. 채점한 문제는 그대로
+        keys 는 ['키', …] 또는 [{key, reason}, …] 둘 다 받습니다 */
+    setExcl(classId, sid, keys, kind, reason) {
+      const g = this.gradeRow(classId, sid, kind);
+      g.excl = g.excl || {};
+      let n = 0;
+      (keys || []).forEach(item => {
+        const k = typeof item === 'string' ? item : String((item && item.key) || '');
+        const why = typeof item === 'string' ? String(reason || '') : String((item && item.reason) || reason || '');
+        if (!k) return;
+        if (g.marks[k]) return;                       // 이미 채점한 문제는 건드리지 않습니다
+        if (why) { if (g.excl[k] !== why) n++; g.excl[k] = why; }
+        else if (g.excl[k]) { delete g.excl[k]; n++; }
+      });
+      g.updatedAt = nowHHMM();
+      this.save();
+      return n;
+    }
+    clearExcl(classId, sid, kind, onlyReason) {
+      const g = this.gradeRow(classId, sid, kind);
+      if (!g.excl) return 0;
+      let n = 0;
+      Object.keys(g.excl).forEach(k => {
+        if (onlyReason && g.excl[k] !== onlyReason) return;
+        delete g.excl[k]; n++;
+      });
+      if (n) this.save();
+      return n;
+    }
+    exclOf(classId, sid, key, kind) {
+      const g = this.gradeOf(classId, sid, kind);
+      return (g.excl || {})[key] || '';
+    }
+    /** ✨ 나머지 전부 ⭕ — 아직 안 누른 칸만 ⭕로 (❌ 틀린 문제는 그대로) */
+    fillRestCorrect(classId, sid, kind, bookName, keys) {
+      const g = this.gradeRow(classId, sid, kind);
+      const tiles = kind === 'print' ? this.printTiles(classId, sid) : this.tiles(classId, bookName || null);
+      const set = keys && keys.length ? new Set(keys) : null;
+      let n = 0;
+      tiles.forEach(t => {
+        if (t.missing) return;
+        if (set && !set.has(t.key)) return;
+        if (g.marks[t.key]) return;
+        if ((g.excl || {})[t.key]) return;
+        g.marks[t.key] = 'o';
+        delete g.cleanup[t.key];
+        n++;
+      });
+      if (n) {
+        this._touchActivity(classId, sid, n);
+        this.addPetXp(classId, sid, n);
+      }
+      g.updatedAt = nowHHMM();
+      this.save();
+      return n;
+    }
+
+    /* ---------- 선생님 전용: 질문 · 많이 틀린 문제 · 못 고친 오답 ---------- */
+    /** 문제 키('교재|쪽:순번') → 화면용 타일 — 오늘 숙제 범위 밖의 기록도 제대로 보여 줍니다 */
+    tileOfKey(key) {
+      const parts = String(key || '').split(':');
+      const bp = parts[0] || '';
+      const i = Number(parts[1] || 0) || 0;
+      const cut = bp.indexOf('|');
+      const book = cut >= 0 ? bp.slice(0, cut) : bp;
+      const page = cut >= 0 ? bp.slice(cut + 1) : '';
+      if (!book || !page) return null;
+      if (book === '프린트') return { book: '프린트', page: '프린트', num: String(page), type: '오답프린트', unitName: '' };
+      const info = this.pageInfo(book, parseInt(page, 10));
+      const num = info && info.문제 && info.문제[i] != null ? info.문제[i] : '?';
+      return { book, page: parseInt(page, 10), num, type: info ? info.유형 : '', unitName: this.unitNameOf(book, page) };
+    }
+    /** ⭐ 질문 TOP — 맞은 문제의 질문(⭕+⭐)도 포함합니다 */
+    questionTop(classId, date, limit) {
+      const d = date || this.state.today;
+      const tiles = this.tiles(classId);
+      const map = {};
+      const add = (s, k, m) => {
+        const row = map[k] || (map[k] = { key: k, students: [], kinds: { x: 0, o: 0 } });
+        if (!row.students.find(x => x.id === s.id)) row.students.push(s);
+        row.kinds[m === 'o' ? 'o' : 'x']++;
+      };
+      this.activeStudents(classId).forEach(s => {
+        const g = this.grade(classId, s.id, d);
+        Object.keys(g.marks).forEach(k => {
+          if (g.cleanup[k] === 'star') add(s, k, g.marks[k]);
+        });
+      });
+      return Object.values(map).map(m => {
+        const t = tiles.find(x => x.key === m.key) || this.tileOfKey(m.key) || { page: '?', num: '?', type: '', book: '' };
+        return Object.assign(m, { page: t.page, num: t.num, type: t.type, book: t.book, count: m.students.length });
+      }).sort((a, b) => b.count - a.count).slice(0, limit || 5);
+    }
+    /** ❌ 반 전체 많이 틀린 문제 TOP — 질문을 안 눌렀어도 다수가 틀리면 올라옵니다 */
+    wrongTop(classId, date, limit) {
+      const d = date || this.state.today;
+      const tiles = this.tiles(classId);
+      const map = {};
+      this.activeStudents(classId).forEach(s => {
+        const g = this.grade(classId, s.id, d);
+        Object.keys(g.marks).forEach(k => {
+          if (g.marks[k] !== 'x') return;
+          const row = map[k] || (map[k] = { key: k, students: [], fixed: 0, star: 0 });
+          if (!row.students.find(x => x.id === s.id)) row.students.push(s);
+          if (g.cleanup[k] === 'fixed') row.fixed++;
+          if (g.cleanup[k] === 'star') row.star++;
+        });
+      });
+      return Object.values(map).map(m => {
+        const t = tiles.find(x => x.key === m.key) || this.tileOfKey(m.key) || { page: '?', num: '?', type: '', book: '' };
+        return Object.assign(m, { page: t.page, num: t.num, type: t.type, book: t.book, count: m.students.length });
+      }).sort((a, b) => (b.count - a.count) || (a.page - b.page)).slice(0, limit || 5);
+    }
+    /** 📋 학생별 아직 고치지 않은 오답 목록 — 누가 어느 쪽 몇 번을 못 고쳤는지 */
+    openWrongByStudent(classId) {
+      return this.activeStudents(classId).map(s => {
+        const g = this.grade(classId, s.id);
+        const rows = [];
+        this.tiles(classId).forEach(t => {
+          if (g.marks[t.key] !== 'x' || g.cleanup[t.key] === 'fixed') return;
+          rows.push({ book: t.book, page: t.page, num: t.num, label: (t.page + '쪽 ' + t.num + '번'), star: g.cleanup[t.key] === 'star', today: true });
+        });
+        this.carried(classId, s.id).forEach(m => {
+          if ((m.reason || 'x') === 'skip') return;
+          rows.push({ book: m.book, page: m.page, num: m.num, label: (m.label || (m.page + '쪽 ' + m.num + '번')), star: m.reason === 'star', carried: true });
+        });
+        return { student: s, rows };
+      });
     }
     stats(classId, sid) {
       const c = this.counts(classId, sid);
@@ -680,6 +1027,9 @@ window.EMA = window.EMA || {};
     }
 
     top5(classId, date) {
+      // ★ v1.0: 맞은 문제에 단 질문(⭕+⭐)도 함께 올립니다. 없으면 예전처럼 ❌ 많은 문제로
+      const list = this.questionTop(classId, date, 5);
+      if (list.length) return list;
       const d = date || this.state.today;
       const tiles = this.tiles(classId);
       const map = {};
@@ -1333,6 +1683,9 @@ window.EMA = window.EMA || {};
       st.photos = st.photos || {};
       st.carryResolve = st.carryResolve || {};
       st.activity = st.activity || {};          // v0.9 — 날짜별 실제로 누른 문제 수
+      st.missions = st.missions || {};          // v1.0 — 날짜별 미션 완료 기록
+      st.weekBonus = st.weekBonus || {};        // v1.0 — 주간 목표 보너스 지급 기록
+      st.petXp = st.petXp || {};                // v1.0 — 펫 경험치 하루 상한 기록
       if (!st.shop) st.shop = { rewardsOn: true, claims: [] };
       if (!st.gallery) st.gallery = { mode: 'auto' };
       if (!st.bossBoosts) st.bossBoosts = {};
@@ -1377,6 +1730,7 @@ window.EMA = window.EMA || {};
         if (!g.marks) g.marks = {};
         if (!g.cleanup) g.cleanup = {};
         if (!g.tags) g.tags = {};
+        if (!g.excl) g.excl = {};
       });
       // 사진은 지워져도 '사진을 냈다'는 사실은 영구히 남깁니다
       Object.keys(st.submissions).forEach(k => {
@@ -1532,10 +1886,11 @@ window.EMA = window.EMA || {};
 
     gradeRow(classId, sid, kind) {
       const k = SK(classId, kind === 'print' ? this.state.today : this.hwDate(classId), sid, kind);
-      const g = this.state.grades[k] || (this.state.grades[k] = { marks: {}, cleanup: {}, tags: {}, updatedAt: null });
+      const g = this.state.grades[k] || (this.state.grades[k] = { marks: {}, cleanup: {}, tags: {}, excl: {}, updatedAt: null });
       if (!g.marks) g.marks = {};
       if (!g.cleanup) g.cleanup = {};
       if (!g.tags) g.tags = {};
+      if (!g.excl) g.excl = {};
       return g;
     }
 
@@ -1551,7 +1906,7 @@ window.EMA = window.EMA || {};
       } else {
         g.marks[key] = mark;
         if (mark === 'o') { delete g.cleanup[key]; delete g.tags[key]; }
-        if (!had) this._touchActivity(classId, sid, 1);     // 오늘 새로 누른 문제
+        if (!had) { this._touchActivity(classId, sid, 1); this.addPetXp(classId, sid, 1); }     // 오늘 새로 누른 문제 · 펫 경험치
       }
       // 다시 채점한 문제는 '밀린문제'에서 뺀다 (오늘 넘긴 것만)
       if (mark) this.dropTodayCarry(sid, key);
@@ -1570,18 +1925,16 @@ window.EMA = window.EMA || {};
       return g.tags[key] || '';
     }
     markAllCorrect(classId, sid, kind, bookName) {
-      const g = this.gradeRow(classId, sid, kind);
-      const tiles = kind === 'print' ? this.printTiles(classId, sid) : this.tiles(classId, bookName || viewBook(this, classId));
-      let n = 0;
-      tiles.forEach(t => { if (!t.missing) { if (!g.marks[t.key]) n++; g.marks[t.key] = 'o'; delete g.cleanup[t.key]; } });
-      if (n) this._touchActivity(classId, sid, n);
-      g.updatedAt = nowHHMM();
-      this.save();
-      return true;
+      // ★ v1.0: '✨ 나머지 전부 ⭕' — 아직 안 누른 칸만 채우고, ❌ 틀린 문제는 그대로 둡니다
+      return this.fillRestCorrect(classId, sid, kind, bookName) > 0;
     }
     setCleanup(classId, sid, key, kind2, kind) {
       const g = this.gradeRow(classId, sid, kind);
-      if (g.marks[key] !== 'x') return '';
+      const m = g.marks[key];
+      // ★ v1.0: ⭕ 맞았어요에도 ⭐ 질문을 달 수 있습니다(엄마 도움받아 풀었거나 찜찜한 경우)
+      if (m !== 'x' && m !== 'o') return '';
+      // ❌ 틀린 문제는 '해결 / 질문'만, ⭕ 맞은 문제는 '질문'만
+      if (m === 'o' && kind2 !== 'star') return '';
       if (!kind2 || g.cleanup[key] === kind2) delete g.cleanup[key];
       else g.cleanup[key] = kind2;
       g.updatedAt = nowHHMM();
@@ -1655,6 +2008,7 @@ window.EMA = window.EMA || {};
       let n = 0;
       this.tiles(classId).forEach(t => {
         if (g.marks[t.key]) return;
+        if ((g.excl || {})[t.key]) return;             // 🏫 수업에서 푼 문제는 밀린문제가 아닙니다
         if (this._hasCarry(sid, this.hwDate(classId), t.key)) return;
         this._addCarry(sid, {
           book: t.book, page: t.page, num: t.num, label: (t.page + '쪽 ' + t.num + '번'),
@@ -1708,6 +2062,7 @@ window.EMA = window.EMA || {};
           const mark = g.marks[t.key];
           if (mark === 'o') return;
           if (mark === 'x' && g.cleanup[t.key] === 'fixed') return;
+          if ((g.excl || {})[t.key]) return;             // 수업에서 푼 문제는 밀린문제가 아님
           if (this._hasCarry(s.id, this.state.today, t.key)) return;
           this._addCarry(s.id, {
             book: t.book, page: t.page, num: t.num, label: (t.page + '쪽 ' + t.num + '번'),
@@ -2168,6 +2523,7 @@ window.EMA = window.EMA || {};
         else coins = 1;                              // 6개째부터는 소액
         s.coins = (s.coins || 0) + coins;
         if (xp) s.bonusXp = (s.bonusXp || 0) + xp;
+        if (!isSkip) this.addPetXp(classId, sid, 3);      // 오답을 고치면 펫이 크게 자라요
         if (!isSkip && n <= 5) join = this.purifyEgg(classId, sid, 'carry|' + id);
       }
       const killed = this.checkBossKill(classId);
@@ -2256,7 +2612,7 @@ window.EMA = window.EMA || {};
 
   /* ================= API(시트 연동) 저장소 ================= */
   /*  Code.gs 의 action 이름과 1:1로 맞춥니다 (아래 표가 곧 계약).
-      bootstrap · seed · setMark · markAll · cleanup · setTag · submitPhoto · touchSubmission
+      bootstrap · seed · setMark · markAll · fillRest · excl · exclClear · mission · cleanup · setTag · submitPhoto · touchSubmission
       stamp · stampAll · resubmit · unlock · sick · profile · regenPin · pageProblem · lesson
       setDue · closeDue · print · printLastNo · saveProgress · resolveCarried · retryCarried
       buy · feed · growCompanion · rewardsOn · useClaim · galleryMode · lateUpload · submitYesterday
@@ -2290,9 +2646,24 @@ window.EMA = window.EMA || {};
 
     /* 채점 */
     async setMark(c, s, key, mark, kind) { await this.call('setMark', { classId: c, studentId: s, key, mark, kind }); return this.markOf(c, s, key); }
-    async markAllCorrect(c, s, kind) { await this.call('markAll', { classId: c, studentId: s, kind }); return true; }
+    async markAllCorrect(c, s, kind) { const r = await this.call('markAll', { classId: c, studentId: s, kind }); return (r.count || 0) > 0; }
     async setCleanup(c, s, key, kind2, kind) { await this.call('cleanup', { classId: c, studentId: s, key, kind: kind2, source: kind }); return this.cleanupOf(c, s, key, kind); }
     async setTag(c, s, key, tag, kind) { await this.call('setTag', { classId: c, studentId: s, key, tag, kind }); return tag; }
+
+    /* v1.0 — 미션 · 수업에서 푼 문제(제외) · 나머지 전부 ⭕ */
+    async ensureMission(c, s) {
+      const info = this.missionInfo(c, s);
+      if (!info.done || info.rewarded) return null;
+      const r = await this.call('mission', { classId: c, studentId: s });
+      return r.result || null;
+    }
+    async setExcl(c, s, keys, kind, reason) { await this.call('excl', { classId: c, studentId: s, keys, kind, reason }); return true; }
+    async clearExcl(c, s, kind, onlyReason) { await this.call('exclClear', { classId: c, studentId: s, kind, only: onlyReason || '' }); return true; }
+    async fillRestCorrect(c, s, kind, bookName, keys) {
+      const r = await this.call('fillRest', { classId: c, studentId: s, kind, keys: keys || [] });
+      return r.count || 0;
+    }
+    addPetXp() { return 0; }        // 서버(setMark·markAll)가 같이 넣습니다
 
     /* 제출·도장·사진 */
     async submitPhoto(c, s, dataUrl, kind) {

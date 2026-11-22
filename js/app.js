@@ -1,4 +1,4 @@
-/* 숙제 대소동 v0.9 — 화면과 동선 (2단계: 숙제 기한 · 선생님 대시보드 · 시트 연동)
+/* 숙제 대소동 v1.0 — 화면과 동선 (3단계: 5초 컷 채점 · 하루 미션 · 펫 3단계 성장 · 선생님 질문/오답 리스트)
    ─────────────────────────────────────────────────────────────
    세계관: 〈숫자 왕국 구출 대작전〉 — 알은 하나, '펫 알'뿐
      · 못 고친 오답 → 다시 풀어 ⚔️ 해결하면 '펫 알 부화!' → 펫 합류
@@ -30,6 +30,9 @@ window.EMA = window.EMA || {};
     flow: null,               // null | grade | clean | done
     gradeSource: 'homework',  // homework | print
     gradeBook: null,
+    gradeRep: false,          // 🏫 대표문제(1,2,3…) 접기
+    gradeParity: '',          // '' | 'odd' | 'even'
+    gradeStartKey: null,      // 🏫 몇 번부터 숙제?
     pending: { photo: null, avatar: null, nickname: '', yphoto: null, tempPhoto: null, tempTarget: null, reupload: false },
     pmBook: null, pmPage: null, pmInput: '', pmNewPage: '', pmList: null,
     carryWhy: null,
@@ -124,16 +127,21 @@ window.EMA = window.EMA || {};
     }).join('')}</div>`;
   }
   function countTiles(tiles, g) {
-    let c1 = 0, c2 = 0, c3 = 0, c4 = 0, c5 = 0;
+    let c1 = 0, c2 = 0, c3 = 0, c4 = 0, c5 = 0, c6 = 0, starO = 0;
+    const excl = (g && g.excl) || {};
     tiles.forEach(t => {
       const m = g.marks[t.key];
-      if (m === 'o') c1++;
+      if (!m && excl[t.key]) { c6++; return; }      // 🏫 수업에서 푼 문제 / 안 낸 문제
+      if (m === 'o') { c1++; if (g.cleanup[t.key] === 'star') starO++; }
       else if (m === 'x') {
         const cl = g.cleanup[t.key];
         if (cl === 'fixed') c3++; else if (cl === 'star') c4++; else c2++;
       } else c5++;
     });
-    return { c1, c2, c3, c4, c5, marked: c1 + c2 + c3 + c4, total: tiles.length };
+    return {
+      c1, c2, c3, c4, c5, c6, starO,
+      marked: c1 + c2 + c3 + c4, total: c1 + c2 + c3 + c4 + c5, all: tiles.length
+    };
   }
   function oxSum(cnt) {
     const pct = cnt.total ? Math.round(cnt.marked / cnt.total * 100) : 0;
@@ -144,9 +152,20 @@ window.EMA = window.EMA || {};
         <span class="s-x">❌ ${cnt.c2 + cnt.c4}</span>
         <span class="s-f">⚔️ ${cnt.c3}</span>
         <span class="s-none">아직 ${cnt.c5}</span>
+        ${cnt.c6 ? `<span class="s-cls">🏫 ${cnt.c6}</span>` : ''}
       </div>
     </div>`;
   }
+  /** 문제 번호에서 숫자만 — '1-1' → 1 (홀/짝 판정) */
+  function tileNo(t) {
+    const m = String(t && t.num != null ? t.num : '').match(/\d+/);
+    return m ? parseInt(m[0], 10) : null;
+  }
+  /** 대표문제 = '-1' 없는 기본 번호(1, 2, 3 …). 확인1·확인2 같은 개념확인은 대표가 아닙니다 */
+  function isRepTile(t) {
+    return /^\d+$/.test(String(t && t.num != null ? t.num : '').trim());
+  }
+  function parityOf(t) { const n = tileNo(t); return n == null ? '' : (n % 2 ? 'odd' : 'even'); }
   /** [8,9,10,12] → '8-10, 12' (칸 입력창에 되돌려 보여 줄 때) */
   function pagesText(list) {
     const ps = (list || []).map(Number).filter(n => n > 0).sort((a, b) => a - b);
@@ -161,18 +180,10 @@ window.EMA = window.EMA || {};
     out.push(a === b ? String(a) : a + '-' + b);
     return out.join(', ');
   }
-  /** '1~14번, 15~28번' → ['1','2',…,'28'] · '2-1' 같은 하위 번호는 그대로 */
+  /** '1~14번, 15~28번' · '2,4,5,6' · '2，4' → ['2','4','5','6'] — 하위 번호(1-1)는 그대로 */
   function rangeList(text) {
-    const out = [];
-    const push = v => { const s = String(v).trim(); if (s && out.indexOf(s) < 0) out.push(s); };
-    String(text || '').replace(/번/g, ' ').split(/[,\s]+/).filter(Boolean).forEach(part => {
-      const m = part.match(/^(\d+)\s*[~∼〜]\s*(\d+)$/);
-      if (m) {
-        const a = +m[1], b = +m[2];
-        for (let i = Math.min(a, b); i <= Math.max(a, b); i++) push(String(i));
-      } else if (/^\d+(-\d+)*$/.test(part)) push(part);
-    });
-    return out;
+    if (EMA.util && EMA.util.parseProblemNos) return EMA.util.parseProblemNos(text);
+    return [];
   }
   /** 기한이 지나 이월된 문제 — '제출 기한이 1일 지났어요' */
   function overdueText(m) {
@@ -181,6 +192,50 @@ window.EMA = window.EMA || {};
     if (!dt) return '';
     const ms = Date.now() - dt.getTime();
     return ms > 0 ? ' · 제출 기한이 ' + EMA.util.spanText(ms) + ' 지났어요' : '';
+  }
+  /** 🎯 미션·주간·복귀 보상 알림 — 하루 한 번, 과하지 않게 */
+  function missionToast(r) {
+    if (!r || !r.awarded) return;
+    const bits = ['오늘 미션 +' + r.mission];
+    if (r.comeback) bits.push('복귀 응원 +' + r.comeback);
+    if (r.weekly) bits.push('주간 목표 +' + r.weekly);
+    EMA.ui.sound('coin');
+    EMA.ui.toast('🎯 ' + bits.join(' · ') + '코인!', 3400);
+    if (r.weekly || r.comeback) {
+      EMA.ui.fx.celebrate({
+        kind: 'title', em: r.weekly ? '🏅' : '🌈',
+        title: r.weekly ? '주간 목표 달성!' : '다시 왔구나!',
+        sub: (r.weekly ? '이번 주 ' + r.weekDays + '일 미션 완료' : '이틀 쉬었지만 다시 시작했어요') + ' · +' + r.coins + '코인',
+        ms: 2200
+      });
+      EMA.ui.fx.confetti(60);
+    }
+  }
+  /** 오늘 미션 한 줄 — ③ 제출 완료 화면용 */
+  function missionLine(cid, sid) {
+    const m = store.missionInfo(cid, sid);
+    if (m.done) return `<b>완료</b> · 이번 주 ${m.weekDays}/${m.weekNeed}일${m.weekRewarded ? ' 🏅' : ''}`;
+    return `${m.count}/${m.need} · ${m.left}문제 더 풀면 +${m.coins}코인`;
+  }
+  /** 홈의 미션 카드 — 오늘 미션 3문제 · 이번 주 5일 · 복귀 응원 */
+  function missionCard(cid, sid) {
+    const m = store.missionInfo(cid, sid);
+    const dots = (n, total, on) => Array.from({ length: total }, (_, i) => `<i class="${i < n ? 'on ' + (on || '') : ''}"></i>`).join('');
+    return `<div class="card tight mission ${m.done ? 'done' : ''}">
+      <div class="mline">
+        <span class="mt">${m.done ? '✅ 오늘 미션 완료' : '🎯 오늘 미션'}</span>
+        <span class="mdots inline">${dots(Math.min(m.count, m.need), m.need, 'big')}</span>
+        <span class="mnum">${Math.min(m.count, m.need)}/${m.need}</span>
+        <span class="grow"></span>
+        <span class="week">이번 주 <b>${m.weekDays}</b>/${m.weekNeed}일 ${m.weekRewarded ? '🏅' : '+30'}</span>
+      </div>
+      <div class="mline sub">
+        <span>${m.done ? (m.scored ? '+' + m.scored + '코인 받았어요' : '3문제 채웠어요') : `${m.left}문제 더 풀면 +${m.coins}코인`}</span>
+        <span class="grow"></span>
+        <span class="mdots wk">${dots(m.weekDays, m.weekNeed)}</span>
+      </div>
+      ${m.comeback ? `<div class="mcome">🌈 이틀 쉬었어요 · 3문제 풀면 <b>+${m.comebackCoins}코인</b> 응원 보너스!</div>` : ''}
+    </div>`;
   }
   function todayTitle(cid, sid) {
     const st = store.stats(cid, sid);
@@ -251,7 +306,7 @@ window.EMA = window.EMA || {};
       <button class="setrow" data-act="logout"><span class="se">↩️</span><span class="st">로그아웃</span><span class="chev">›</span></button>
       <button class="setrow danger" data-act="resetDemo"><span class="se">🧹</span><span class="st">연습 데이터 초기화</span></button>
       <div class="hint wrap" style="margin:6px 6px 0">초기화하면 지금 데이터를 먼저 이 기기에 백업해 두고, 이 화면에서만 새로 시작해요.</div>
-      <div class="hint center" style="margin-top:12px">숙제 대소동 v0.9 · 숫자 왕국 구출 대작전 ${demoChip()}</div>
+      <div class="hint center" style="margin-top:12px">숙제 대소동 v1.0 · 숫자 왕국 구출 대작전 ${demoChip()}</div>
     `);
   }
 
@@ -351,7 +406,7 @@ window.EMA = window.EMA || {};
         <button class="btn btn-ghost btn-block" data-act="openStory">📖 이야기 보기</button>
         <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="teacherEntry">👩‍🏫 선생님이세요? 선생님 모드</button>
         <div class="pin-hint">학생 PIN은 선생님께 물어보세요 · 내 PIN은 ⚙️ 설정에서 바꿀 수 있어요</div>
-        <div class="verline">v0.9 ${demoChip()}</div>
+        <div class="verline">v1.0 ${demoChip()}</div>
       </div>
       ${sheetHtml()}`;
     }
@@ -514,6 +569,8 @@ window.EMA = window.EMA || {};
         </div>
       </div>
 
+      ${missionCard(cid, sid)}
+
       <div class="boss">
         <div class="hd">
           <div class="boss-em">${boss.def.em || '👾'}</div>
@@ -637,6 +694,31 @@ window.EMA = window.EMA || {};
   function sourceGrade() {
     return store.gradeOf(view.classId, view.studentId, view.gradeSource === 'print' ? 'print' : 'hw');
   }
+  function sourceKind() { return view.gradeSource === 'print' ? 'print' : 'hw'; }
+  /** 화면에 보이는 타일 — 🏫 수업에서 푼 문제(제외)는 접어 둡니다 */
+  function shownTiles(tiles, g) {
+    const excl = g.excl || {};
+    return tiles.filter(t => !(excl[t.key] && !g.marks[t.key]));
+  }
+  /** 🏫 도구(몇 번부터 · 대표문제 · 홀짝)를 '제외' 표시로 반영 */
+  function applyGradeView() {
+    const cid = view.classId, sid = view.studentId, kind = sourceKind();
+    const tiles = sourceTiles();
+    const g = store.gradeOf(cid, sid, kind);
+    const startIdx = view.gradeStartKey ? tiles.findIndex(t => t.key === view.gradeStartKey) : -1;
+    const wanted = [];
+    tiles.forEach((t, i) => {
+      if (g.marks[t.key] || t.missing) return;      // 이미 채점한 문제는 절대 건드리지 않습니다
+      let reason = '';
+      if (startIdx >= 0 && i < startIdx) reason = 'class';
+      else if (view.gradeRep && isRepTile(t)) reason = 'class';
+      else if (view.gradeParity && parityOf(t) && parityOf(t) !== view.gradeParity) reason = 'filter';
+      if (reason) wanted.push({ key: t.key, reason });
+    });
+    store.clearExcl(cid, sid, kind);
+    store.setExcl(cid, sid, wanted, kind);
+    return wanted.length;
+  }
   function flowGrade() {
     const cid = view.classId, sid = view.studentId;
     const me = store.student(cid, sid);
@@ -644,9 +726,10 @@ window.EMA = window.EMA || {};
     const bs = store.books(cid);
     if (!isPrint && bs.length > 1 && !bs.find(b => b.book === view.gradeBook)) view.gradeBook = bs[0].book;
 
-    const tiles = sourceTiles();
+    const all = sourceTiles();
     const g = sourceGrade();
-    const cnt = countTiles(tiles, g);
+    const cnt = countTiles(all, g);
+    const tiles = shownTiles(all, g);
 
     let rows = '', lastPage = null;
     const tagDefs = GAME().tags || [];
@@ -657,11 +740,13 @@ window.EMA = window.EMA || {};
       }
       const m = g.marks[t.key] || '';
       const cur = g.tags[t.key] || '';
+      const cls = g.cleanup[t.key] || '';
       rows += `<div class="ox-block">
-        <div class="ox-row ${isPrint ? 'compact' : ''} ${t.missing ? 'is-missing' : ''}">
+        <div class="ox-row has-star ${isPrint ? 'compact' : ''} ${t.missing ? 'is-missing' : ''}">
           <div class="ox-label">${esc(t.label)}<span>번</span></div>
           <button class="ox o ${m === 'o' ? 'on' : ''}" data-act="mark" data-key="${t.key}" data-m="o" ${t.missing ? 'disabled' : ''} aria-label="${esc(t.label)}번 맞음">⭕ 맞음</button>
           <button class="ox x ${m === 'x' ? 'on' : ''}" data-act="mark" data-key="${t.key}" data-m="x" ${t.missing ? 'disabled' : ''} aria-label="${esc(t.label)}번 틀림">❌ 틀림</button>
+          <button class="ox-star ${m === 'o' && cls === 'star' ? 'on' : ''}" data-act="starO" data-key="${t.key}" ${m === 'o' ? '' : 'disabled'} aria-label="${esc(t.label)}번 질문" title="맞았지만 궁금해요">⭐</button>
         </div>
         ${m === 'x' ? `<div class="tagrow">
           <span class="tag-q">왜 틀렸나요?</span>
@@ -679,23 +764,41 @@ window.EMA = window.EMA || {};
       }).join('')}
     </div>` : '';
 
+    /* 🏫 5초 컷 도구 — 몇 번부터 / 대표문제 접기 / 홀수만·짝수만 */
+    const startTile = view.gradeStartKey ? all.find(t => t.key === view.gradeStartKey) : null;
+    const tools = isPrint ? '' : `
+      <div class="gtools">
+        <button class="gtool ${startTile ? 'on' : ''}" data-act="gradeStartOpen">🏫 ${startTile ? startTile.label + '번부터' : '몇 번부터 숙제?'}</button>
+        <button class="gtool ${view.gradeRep ? 'on' : ''}" data-act="gradeRep">${view.gradeRep ? '🏫 대표문제 펼치기' : '🏫 대표문제 접기'}</button>
+      </div>
+      <div class="gtools">
+        <span class="gtool-lb">번호</span>
+        <button class="gtool sm ${!view.gradeParity ? 'on' : ''}" data-act="gradeParity" data-p="">전체</button>
+        <button class="gtool sm ${view.gradeParity === 'odd' ? 'on' : ''}" data-act="gradeParity" data-p="odd">홀수만</button>
+        <button class="gtool sm ${view.gradeParity === 'even' ? 'on' : ''}" data-act="gradeParity" data-p="even">짝수만</button>
+      </div>
+      ${cnt.c6 ? `<div class="gfold">🏫 수업에서 푼 문제 <b>${cnt.c6}</b>개는 빼뒀어요<button class="linkbtn2" data-act="gradeReset">되돌리기</button></div>` : ''}`;
+
     const untagged = tiles.filter(t => g.marks[t.key] === 'x' && !(g.tags || {})[t.key]).length;
-    const missingN = tiles.filter(t => t.missing).length;
+    const missingN = all.filter(t => t.missing).length;
     const dueG = isPrint ? null : store.dueInfo(cid);
+    const restN = cnt.c5;
 
     return `<div class="screen flow">
       ${topbar({
         title: isPrint ? '① 프린트 채점' : '① 채점',
-        sub: isPrint ? `${tiles.length}문제` : `${view.gradeBook || '오늘 숙제'} · ${tiles.length}문제`,
+        sub: isPrint ? `${all.length}문제` : `${view.gradeBook || '오늘 숙제'} · ${all.length}문제`,
         back: true, backAct: 'flowBack',
         right: avatarHtml(me, 32)
       })}
       ${stepper(1)}
       ${bookTabs}
       ${missingN ? `<div class="card tight missing-note"><div class="muted wrap" style="font-size:12px;white-space:normal">❓ <b>?</b> 칸 ${missingN}개는 쪽수표에 없는 쪽이에요. 선생님 <b>⚙️ 관리 → 쪽수표</b>에서 그 쪽 문제번호를 넣으면 채점할 수 있어요.</div></div>` : ''}
+      ${tools}
       ${oxSum(cnt)}
       <div class="card oxcard">
-        <button class="btn btn-mint btn-block" data-act="markAll">⭕ 모두 맞음</button>
+        <button class="btn btn-mint btn-block" data-act="markAll">✨ 나머지 전부 ⭕</button>
+        <div class="hint center" style="margin:6px 0 0">❌ 틀린 것만 톡톡 누르고, 나머지는 이 버튼 한 번!${restN ? ` (빈칸 ${restN})` : ''}</div>
         <div class="rows ${isPrint ? 'gridrows' : ''}">${rows}</div>
       </div>
       <div class="flowfoot">
@@ -726,7 +829,8 @@ window.EMA = window.EMA || {};
     const verify = store.verifyHint(cid, sid, kindNow);
 
     const wrong = tiles.filter(t => g.marks[t.key] === 'x');
-    const rest = tiles.filter(t => !g.marks[t.key]);
+    const rest = tiles.filter(t => !g.marks[t.key] && !(g.excl || {})[t.key]);
+    const starOs = tiles.filter(t => g.marks[t.key] === 'o' && g.cleanup[t.key] === 'star');
     const starCnt = store.starCount(cid, sid, kindNow);
     const multi = store.books(cid).length > 1 && !isPrint;
     const bkLabel = t => (multi ? `<span class="bk">${esc(t.book.indexOf('응용') >= 0 ? '응용' : '발전')}</span>` : '');
@@ -781,6 +885,11 @@ window.EMA = window.EMA || {};
 
       <div class="sect-t"><span>❌ 틀린 문제 ${wrong.length}</span><span class="grow"></span><span class="hint">⭐ 질문 ${starCnt}/7</span></div>
       <div class="card clean-card">${wrongHtml}</div>
+
+      ${starOs.length ? `<div class="sect-t"><span>⭕ 맞았지만 궁금해요 ${starOs.length}</span><span class="grow"></span><span class="hint">선생님 질문 목록에 올라갔어요</span></div>
+      <div class="card tight"><div class="clean-list">${starOs.map(t => `<span class="cchip">${multi && !isPrint ? (t.book.indexOf('응용') >= 0 ? '응용 ' : '발전 ') : ''}${isPrint ? '' : t.page + '쪽 '}${esc(t.label)}번 <button class="chipx-mini" data-act="starO" data-key="${t.key}" aria-label="질문 취소">✕</button></span>`).join('')}</div></div>` : ''}
+
+      ${cnt.c6 ? `<div class="hint wrap" style="margin:0 18px 8px">🏫 수업에서 푼 문제 <b>${cnt.c6}</b>개는 채점에서 빼뒀어요.</div>` : ''}
 
       <div class="sect-t"><span>⏭️ 안 누른 문제 ${rest.length}</span></div>
       <div class="card tight carry-card">
@@ -844,6 +953,7 @@ window.EMA = window.EMA || {};
         <div class="kv"><span class="k">${boss.def.em || '👾'} 보스</span><span>${boss.hp}% 남음</span></div>
         ${r && r.join && r.join.pet ? `<div class="kv"><span class="k">🐾 새 펫</span><span>${r.join.pet.em} ${esc(r.join.pet.name)}</span></div>` : ''}
         ${r && r.join && r.join.coins ? `<div class="kv"><span class="k">🐾 펫의 힘</span><span>펫 코인 +${r.join.coins}</span></div>` : ''}
+        <div class="kv"><span class="k">🎯 오늘 미션</span><span>${missionLine(cid, sid)}</span></div>
       </div>
       ${carriedNow ? `<div class="card tight">
         <div class="row"><span class="grow muted" style="font-size:12.5px">⚔️ 밀린문제 <b>${carriedNow}개</b></span>
@@ -938,7 +1048,7 @@ window.EMA = window.EMA || {};
               <span class="rar">${r.label || ''}</span>
               <span class="pem">${mine ? p.em : '❔'}</span>
               <span class="pnm">${mine ? esc(p.name) : '???'}</span>
-              <span class="ptag">${mine ? '⭐'.repeat(Math.min(3, (my && my.lv) || 1)) : ''}</span>
+              <span class="pst">${mine ? `${store.petStageLabel(my).em}${store.petStageLabel(my).name}` : ''}</span>
             </button>`;
           }).join('')}
         </div>
@@ -1262,6 +1372,9 @@ window.EMA = window.EMA || {};
         <div class="dashrow"><span class="k">🔥 연속 숙제 수행</span><span>최고 <b>${Math.max.apply(null, d.rows.map(r => r.streak).concat([0]))}일</b> · 평균 ${Math.round(d.rows.reduce((a, r) => a + r.streak, 0) / (d.rows.length || 1))}일</span></div>
       </div>
 
+      <div class="sect-t"><span>⭐ 질문 · ❌ 많이 틀린 문제 · 📋 못 고친 오답</span><span class="grow"></span><span class="hint">선생님만 보여요</span></div>
+      ${teacherLists(cid)}
+
       <div class="sect-t"><span>학생별 현황 비교</span><span class="grow"></span><span class="hint">${rangeName}</span></div>
       <div class="card tight">
         <div class="dtable">
@@ -1294,6 +1407,44 @@ window.EMA = window.EMA || {};
       <button class="btn btn-navy btn-block" style="margin-top:4px" data-act="openLessonEdit">📘 오늘 숙제·기한 바꾸기</button>`;
   }
 
+  /** 📊 반 대시보드 — ⭐ 질문 TOP 5 · ❌ 많이 틀린 문제 TOP 5 · 📋 학생별 못 고친 오답 (선생님 전용) */
+  function teacherLists(cid) {
+    const q = store.questionTop ? store.questionTop(cid, null, 5) : [];
+    const w = store.wrongTop ? store.wrongTop(cid, null, 5) : [];
+    const open = (store.openWrongByStudent ? store.openWrongByStudent(cid) : []).filter(r => r.rows.length);
+    const nm = s => esc(s.nickname || s.name);
+    const where = t => `${t.page}쪽 ${esc(t.num)}번`;
+    return `
+      <div class="card tight tlist">
+        <div class="card-hd"><span class="t">⭐ 질문 TOP 5</span><span class="grow"></span><span class="hint">⭕ 맞은 문제 질문 포함</span></div>
+        ${q.length ? q.map((t, i) => `<div class="tlwrap">
+          <div class="tlrow"><span class="tlno">${i + 1}</span>
+            <span class="grow"><b>${where(t)}</b> <small class="muted">${esc(t.book || '')}${t.type ? ' · ' + esc(t.type) : ''}</small></span>
+            <span class="tlct">${t.count}명${t.kinds && t.kinds.o ? ` <small class="okc">⭕${t.kinds.o}</small>` : ''}${t.kinds && t.kinds.x ? ` <small class="badc">❌${t.kinds.x}</small>` : ''}</span>
+          </div>
+          <div class="tlwho">${t.students.map(nm).join(', ')}</div>
+        </div>`).join('') : '<div class="empty">오늘 올라온 질문이 없어요</div>'}
+      </div>
+      <div class="card tight tlist">
+        <div class="card-hd"><span class="t">❌ 반 전체 많이 틀린 문제 TOP 5</span><span class="grow"></span><span class="hint">질문 안 눌러도 집계</span></div>
+        ${w.length ? w.map((t, i) => `<div class="tlwrap">
+          <div class="tlrow"><span class="tlno bad">${i + 1}</span>
+            <span class="grow"><b>${where(t)}</b> <small class="muted">${esc(t.book || '')}${t.type ? ' · ' + esc(t.type) : ''}</small></span>
+            <span class="tlct">${t.count}명 틀림${t.fixed ? ` <small class="okc">고침 ${t.fixed}</small>` : ''}</span>
+          </div>
+          <div class="tlwho">${t.students.map(nm).join(', ')}</div>
+        </div>`).join('') : '<div class="empty">아직 틀린 문제가 없어요</div>'}
+      </div>
+      <div class="card tight tlist">
+        <div class="card-hd"><span class="t">📋 학생별 못 고친 오답</span><span class="grow"></span><span class="hint">${open.length}명</span></div>
+        ${open.length ? open.map(r => `<div class="tlwrap">
+          <div class="tlrow"><span class="grow"><b>${nm(r.student)}</b> <small class="muted">${r.rows.length}문제</small></span>
+            <button class="btn btn-ghost btn-sm" data-act="openReport" data-id="${r.student.id}">성취도 ›</button></div>
+          <div class="tlwho">${r.rows.slice(0, 8).map(x => `${esc(x.label)}${x.star ? '⭐' : ''}${x.carried ? ' ·밀린' : ''}`).join(', ')}${r.rows.length > 8 ? ` 외 ${r.rows.length - 8}문제` : ''}</div>
+        </div>`).join('') : '<div class="empty">못 고친 오답이 없어요 🌟</div>'}
+      </div>`;
+  }
+
   function teacherReport(c) {
     const cid = c.id;
     const rows = store.classDay(cid);
@@ -1319,10 +1470,22 @@ window.EMA = window.EMA || {};
         ${books.map(b => `<button class="${b === book ? 'on' : ''}" data-act="pmBook" data-b="${esc(b)}">${esc(b)}</button>`).join('')}
       </div>
       <div class="card">
-        ${pages.map(p => `<button class="pm-row" data-act="pmPage" data-p="${p.page}">
-          <div class="pg">${p.page}쪽<br><span style="font-size:9.5px;color:#B3A79A">${esc(p.type)}</span></div>
-          <div class="ns">${p.problems.map(n => `<span class="n">${esc(n)}</span>`).join('')}</div>
-        </button>`).join('')}
+        ${(() => {
+          // 📚 교재 전체를 단원별로 — 한눈에 보면서 고칠 쪽을 찾습니다
+          const groups = [];
+          pages.forEach(p => {
+            const last = groups[groups.length - 1];
+            if (last && last.u === p.unit) last.rows.push(p);
+            else groups.push({ u: p.unit, name: p.unitName, rows: [p] });
+          });
+          return groups.map(g => `<div class="unitblk">
+            <div class="unithd"><b>${g.u}단원</b> ${esc(g.name || '')}<span class="grow"></span><span class="hint">${g.rows.length}쪽</span></div>
+            ${g.rows.map(p => `<button class="pm-row" data-act="pmPage" data-p="${p.page}">
+              <div class="pg">${p.page}쪽<br><span style="font-size:9.5px;color:#B3A79A">${esc(p.type)}</span></div>
+              <div class="ns">${(p.problems || []).length ? p.problems.map(n => `<span class="n">${esc(n)}</span>`).join('') : '<span class="n empty">개념 설명 (문제 없음)</span>'}</div>
+            </button>`).join('')}
+          </div>`).join('');
+        })()}
       </div>
       <div class="kv" style="margin-top:10px"><span class="k">지금 숙제</span><span>${esc(l.homework)}</span></div>
       <button class="btn btn-primary btn-block" style="margin-top:10px" data-act="lessonEdit">쪽수 바꾸기</button>
@@ -1384,7 +1547,8 @@ window.EMA = window.EMA || {};
       photocopy: sheetPhotoCopy, printpick: sheetPrintPick,
       story: storySheet, photoconfirm: sheetPhotoConfirm, nextday: sheetNextDay,
       settings: sheetSettings, bigphoto: sheetBigPhoto, recovery: sheetRecovery,
-      moveStu: sheetMoveStu, copyLesson: sheetCopyLesson
+      moveStu: sheetMoveStu, copyLesson: sheetCopyLesson, startfrom: sheetStartFrom,
+      bookall: sheetBookAll
     };
     const fn = map[view.sheet];
     return fn ? fn() : '';
@@ -1602,10 +1766,14 @@ window.EMA = window.EMA || {};
         <div class="ph-rar">${r.label || ''} 등급 · ${r.rate || 0}% 확률</div>
         <div class="ph-line">${mine ? esc(p.line || '') : '오답을 고치면 펫 알이 부화해요'}</div>
         ${mine ? `<div class="ph-tag">${esc(p.tag || '')}</div>
+          <div class="ph-stage">${store.petStageLabel(mine).em} <b>${store.petStageOf(mine)}단계 ${store.petStageLabel(mine).name}</b>${store.petStageOf(mine) >= 3 ? ' 👑' : ''}</div>
+          <div class="lvlbar" style="max-width:220px;margin:8px auto 0"><i style="width:${store.petNextNeed(mine).pct}%"></i></div>
+          <div class="muted" style="margin-top:5px">${store.petStageOf(mine) >= 3 ? '완성! 칭호를 받았어요' : '다음 단계까지 ' + Math.max(0, store.petNextNeed(mine).need - store.petNextNeed(mine).have) + ' XP · 문제를 풀면 자라요'}</div>
           <div class="muted">⭐${mine.lv || 1} · ${esc(mine.at || '')}</div>` : ''}
       </div>
       ${mine ? `<div class="card tight" style="margin:12px 0 0">
         <div class="kv"><span class="k">공격력</span><span>+${store.companionPct(cid, sid)}% (전체)</span></div>
+        <div class="kv"><span class="k">성장도</span><span>${store.petStageOf(mine)}/3 단계 · XP ${Number(mine.xp || 0)}</span></div>
       </div>
       ${!egg && (mine.lv || 1) < 3 ? `<button class="btn btn-mint btn-block" style="margin-top:10px" data-act="growCompanion" data-id="${p.id}" ${coins < 20 ? 'disabled' : ''}>🍎 간식으로 키우기 (20코인)</button>` : ''}
       ${egg ? '<div class="hint center" style="margin-top:8px">지금은 펫 알을 키우는 중이에요</div>' : ''}
@@ -2040,6 +2208,7 @@ window.EMA = window.EMA || {};
       </div>
       <div class="editor"><input id="pageInput" value="${esc(view.lessonEditInput != null ? view.lessonEditInput : pagesText(pages))}" placeholder="8-10, 12쪽 · 1~14쪽"></div>
       <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="lessonRange">🔢 이 범위로 칸 만들기</button>
+      <button class="btn btn-navy btn-block btn-sm" style="margin-top:8px" data-act="bookAllOpen">📚 책 전체 보기 · 단원·쪽수 한번에 고르기</button>
       <div class="chipx">${pages.length ? pages.map(p => `<button class="chipx-item" data-act="lessonPageDel" data-p="${p}">${p}쪽 ✕</button>`).join('') : '<span class="hint">아직 쪽이 없어요 — 위에 범위를 적어 주세요</span>'}</div>
       <div class="row" style="margin-top:8px;gap:8px">
         <input id="lessonNewPage" class="tinput grow" inputmode="numeric" placeholder="쪽 하나 추가 (예: 56)">
@@ -2059,7 +2228,7 @@ window.EMA = window.EMA || {};
   }
 
   function sheetPmPage(c) {
-    const list = view.pmList != null ? view.pmList : String(view.pmInput || '').split(',').map(x => x.trim()).filter(Boolean);
+    const list = view.pmList != null ? view.pmList : rangeList(view.pmInput);
     return sheetWrap(`${esc(view.pmBook)} ${view.pmPage}쪽 문제번호`, `
       <div class="sub">범위로 적으면 <b>1~14번, 15~28번</b>처럼 자동으로 칸이 생겨요. 만든 번호는 눌러서 하나씩 뺄 수 있어요.</div>
       <div class="editor"><input id="pmInput" value="${esc(view.pmInput)}" placeholder="1-14, 15-28"></div>
@@ -2070,6 +2239,76 @@ window.EMA = window.EMA || {};
         <button class="btn btn-ghost btn-sm" data-act="pmAdd">추가</button>
       </div>
       <button class="btn btn-primary btn-block" style="margin-top:14px" data-act="pmSave">저장</button>
+    `);
+  }
+
+  /** 🏫 몇 번부터 숙제? — 수업에서 앞부분을 풀고 남은 번호부터 시작 */
+  function sheetStartFrom() {
+    const tiles = sourceTiles();
+    const g = sourceGrade();
+    const groups = [];
+    tiles.forEach(t => {
+      if (t.missing) return;
+      const last = groups[groups.length - 1];
+      if (last && last.page === t.page && last.book === t.book) last.items.push(t);
+      else groups.push({ page: t.page, book: t.book, type: t.type, items: [t] });
+    });
+    return sheetWrap('🏫 몇 번부터 숙제?', `
+      <div class="sub">수업 때 앞에서 같이 푼 번호는 빼고, <b>남은 번호부터</b> 채점해요. 시작할 번호를 하나만 누르세요.</div>
+      ${groups.map(gr => `<div class="sfgroup">
+        <div class="sfpage">${esc(gr.book.indexOf('응용') >= 0 ? '응용 ' : '')}${gr.page}쪽${gr.type && gr.type !== '표없음' ? ' · ' + esc(gr.type) : ''}</div>
+        <div class="sfgrid">${gr.items.map(t => `<button class="sfbtn ${view.gradeStartKey === t.key ? 'on' : ''} ${g.marks[t.key] ? 'done' : ''}" data-act="gradeStartPick" data-k="${t.key}">${esc(t.label)}</button>`).join('')}</div>
+      </div>`).join('')}
+      ${view.gradeStartKey ? `<button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="gradeStartClear">처음부터 다시 (빼둔 것 없이)</button>` : ''}
+      <div class="hint wrap" style="margin-top:10px">빼둔 문제는 <b>밀린문제·오답</b>로 넘어가지 않아요. ① 화면의 [되돌리기]로 언제든 살릴 수 있어요.</div>
+    `);
+  }
+
+  /** 📚 책 전체 보기 — 단원·쪽수를 한눈에 보고 숙제 범위 고르기 (선생님) */
+  function sheetBookAll() {
+    const cid = view.classId;
+    const books = store.bookList();
+    const book = view.baBook || view.lessonEditBook || books[0];
+    view.baBook = book; view.baPages = view.baPages || [];
+    const def = store.book(book) || { 단원: {} };
+    const sel = new Set(view.baPages);
+    let total = 0, concept = 0;
+    const units = Object.keys(def.단원 || {}).sort((a, b) => +a - +b).map(u => {
+      const unit = def.단원[u] || {};
+      const pages = Object.keys(unit.쪽 || {}).map(Number).sort((a, b) => a - b);
+      return { u, name: unit.이름 || (u + '단원'), pages };
+    });
+    units.forEach(un => un.pages.forEach(p => {
+      total++;
+      const info = (def.단원[un.u].쪽 || {})[String(p)] || {};
+      if (!(info.문제 || []).length) concept++;
+    }));
+    const chosen = (view.baPages || []).slice().sort((a, b) => a - b);
+    const tileN = store.tilesOf(book, chosen).length;
+    return sheetWrap('📚 ' + book + ' 전체 보기', `
+      <div class="sub">단원을 넘기며 쪽을 눌러 고르세요. <b>[단원 전체]</b> 하나면 그 단원이 통째로 들어가요.</div>
+      <div class="tabs-scroll" style="padding:0 0 10px">
+        ${books.map(b => `<button class="${b === book ? 'on' : ''}" data-act="baBook" data-b="${esc(b)}">${esc(b)}</button>`).join('')}
+      </div>
+      <div class="row" style="gap:8px;margin-bottom:8px">
+        <button class="btn btn-ghost btn-sm grow" data-act="baAll">전체 ${total}쪽 선택</button>
+        <button class="btn btn-ghost btn-sm grow" data-act="baClear">선택 비우기</button>
+      </div>
+      ${units.map(un => `<div class="baunit">
+        <div class="bahd"><span class="grow"><b>${un.u}단원</b> ${esc(un.name)}</span>
+          <button class="btn btn-ghost btn-sm" data-act="baUnit" data-u="${un.u}">단원 전체</button></div>
+        <div class="bapages">
+          ${un.pages.map(p => {
+            const info = (def.단원[un.u].쪽 || {})[String(p)] || {};
+            const n = (info.문제 || []).length;
+            return `<button class="bapage ${sel.has(p) ? 'on' : ''} ${n ? '' : 'empty'}" data-act="baToggle" data-p="${p}">
+              <b>${p}</b><small>${n ? n + '문제' : '개념'}</small></button>`;
+          }).join('')}
+        </div>
+      </div>`).join('')}
+      <div class="hint wrap" style="margin-top:10px">📖 개념 설명만 있는 쪽 ${concept}쪽은 문제가 없어서 숙제에서 자동으로 빠져요.</div>
+      <div class="bhintbar">선택 <b>${chosen.length}쪽</b> · 문제 <b>${tileN}개</b>${chosen.length ? ' · ' + esc(pagesText(chosen)) + '쪽' : ''}</div>
+      <button class="btn btn-primary btn-block" style="margin-top:10px" data-act="baApply" ${chosen.length ? '' : 'disabled'}>이 범위를 숙제로 넣기</button>
     `);
   }
 
@@ -2423,6 +2662,7 @@ window.EMA = window.EMA || {};
     startGrade() {
       view.sheet = null;
       view.gradeSource = 'homework';
+      view.gradeRep = false; view.gradeParity = ''; view.gradeStartKey = null;
       const bs = store.books(view.classId);
       view.gradeBook = bs.length > 1 ? (view.gradeBook && bs.find(b => b.book === view.gradeBook) ? view.gradeBook : bs[0].book) : (bs[0] || {}).book || null;
       if (!store.tiles(view.classId).length) { actions.noHomework(); return; }
@@ -2439,6 +2679,7 @@ window.EMA = window.EMA || {};
     startPrint() {
       if (!store.hasPrint(view.classId, view.studentId)) { view.sheet = 'printpick'; render(); return; }
       view.gradeSource = 'print';
+      view.gradeRep = false; view.gradeParity = ''; view.gradeStartKey = null;
       view.resetScroll = true; setFlow('grade');
     },
     /** 도감의 오늘 알 → 바로 ② 정리 화면으로 (⚔️ 해결하러) */
@@ -2459,6 +2700,7 @@ window.EMA = window.EMA || {};
       EMA.ui.haptic();
       EMA.ui.sound(next === 'x' ? 'wrong' : next === 'o' ? 'correct' : 'tap');
       view.resetScroll = false;
+      const mx = store.ensureMission(view.classId, view.studentId);
       render();
       const t = document.querySelector('.ox[data-key="' + d.key + '"][data-m="' + d.m + '"]');
       if (t) EMA.ui.fx.bounce(t);
@@ -2469,6 +2711,133 @@ window.EMA = window.EMA || {};
         const ok = ['⭕ 좋아! 통과', '👏 맞았어!', '✨ 정답!'];
         EMA.ui.fx.hit(t, ok[Math.floor(Math.random() * ok.length)], 'good');
       }
+      if (mx && mx.then) mx.then(r => r && missionToast(r));
+      else if (mx) missionToast(mx);
+    },
+    /** ⭐ 맞았지만 궁금해요 — ⭕ 문제에도 질문을 달 수 있습니다 (1건당 7개까지) */
+    starO(d) {
+      const kind = sourceKind();
+      const g = store.gradeOf(view.classId, view.studentId, kind);
+      if (g.marks[d.key] !== 'o') { EMA.ui.toast('⭕ 맞은 문제에만 ⭐를 달 수 있어요'); return; }
+      const before = (g.cleanup || {})[d.key] || '';
+      if (before !== 'star' && store.starCount(view.classId, view.studentId, kind) >= 7) {
+        EMA.ui.toast('질문은 7개까지! 나머지는 선생님께 직접 물어봐 😊', 3200);
+        EMA.ui.sound('wrong');
+        return;
+      }
+      store.setCleanup(view.classId, view.studentId, d.key, 'star', kind);
+      EMA.ui.haptic();
+      EMA.ui.sound('tap');
+      view.resetScroll = false;
+      const on = (store.gradeOf(view.classId, view.studentId, kind).cleanup || {})[d.key] === 'star';
+      const mx = store.ensureMission(view.classId, view.studentId);
+      render();
+      if (on) {
+        EMA.ui.toast('⭐ 선생님 질문 목록에 올렸어요');
+        const b = document.querySelector('.ox-star[data-key="' + d.key + '"]');
+        if (b) EMA.ui.fx.bounce(b);
+      }
+      if (mx && mx.then) mx.then(r => r && missionToast(r));
+      else if (mx) missionToast(mx);
+    },
+    /* ---- 🏫 5초 컷 도구 ---- */
+    gradeStartOpen() { view.sheet = 'startfrom'; EMA.ui.sound('tap'); view.resetScroll = false; render(); },
+    gradeStartPick(d) {
+      view.gradeStartKey = d.k || null;
+      view.gradeRep = false;
+      view.gradeParity = '';
+      const n = applyGradeView();
+      view.sheet = null;
+      view.resetScroll = false;
+      EMA.ui.sound('tap');
+      render();
+      const el = document.querySelector('.ox-block [data-key="' + String(d.k || '').replace(/"/g, '\\"') + '"]');
+      const box = el ? el.closest('.ox-block') : null;
+      if (box) { try { box.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { box.scrollIntoView(); } }
+      if (view.gradeStartKey && n) EMA.ui.toast(n + '문제는 수업에서 푼 걸로 빼뒀어요', 2600);
+    },
+    gradeRep() {
+      view.gradeRep = !view.gradeRep;
+      if (view.gradeRep) view.gradeStartKey = null;
+      const n = applyGradeView();
+      view.resetScroll = false;
+      EMA.ui.sound('tap');
+      render();
+      EMA.ui.toast(view.gradeRep ? (n ? '대표문제 ' + n + '개를 접었어요 · 유제만 남았어요' : '접을 대표문제가 없어요') : '대표문제를 펼쳤어요', 2600);
+    },
+    gradeParity(d) {
+      const p = d.p || '';
+      view.gradeParity = p;
+      const n = applyGradeView();
+      view.resetScroll = false;
+      EMA.ui.sound('tap');
+      render();
+      EMA.ui.toast(p === 'odd' ? '홀수 번만 보여요 (짝수 ' + n + '개는 잠시 빼뒀어요)' : p === 'even' ? '짝수 번만 보여요 (홀수 ' + n + '개는 잠시 빼뒀어요)' : '전체 번호를 다시 보여요', 2600);
+    },
+    gradeReset() {
+      view.gradeRep = false; view.gradeParity = ''; view.gradeStartKey = null;
+      applyGradeView();
+      view.resetScroll = false;
+      EMA.ui.sound('tap');
+      render();
+    },
+    gradeStartClear() {
+      view.gradeStartKey = null;
+      applyGradeView();
+      view.sheet = null;
+      view.resetScroll = false;
+      EMA.ui.sound('tap');
+      render();
+    },
+    /* ---- 📚 책 전체 보기 (선생님 숙제 범위) ---- */
+    bookAllOpen() {
+      view.baBook = view.lessonEditBook || (store.books(view.classId)[0] || {}).book || store.bookList()[0];
+      view.baPages = (view.lessonEditPages || []).slice();
+      view.sheet = 'bookall';
+      EMA.ui.sound('tap');
+      render();
+    },
+    baBook(d) {
+      view.baBook = d.b;
+      view.baPages = [];
+      EMA.ui.sound('tap');
+      render();
+    },
+    baToggle(d) {
+      const p = parseInt(d.p, 10);
+      const list = (view.baPages || []).slice();
+      const i = list.indexOf(p);
+      if (i >= 0) list.splice(i, 1); else list.push(p);
+      view.baPages = list.sort((a, b) => a - b);
+      EMA.ui.sound('tap');
+      render();
+    },
+    baUnit(d) {
+      const def = store.book(view.baBook) || { 단원: {} };
+      const unit = (def.단원 || {})[d.u] || { 쪽: {} };
+      const pages = Object.keys(unit.쪽 || {}).map(Number);
+      const list = (view.baPages || []).slice();
+      pages.forEach(p => { if (list.indexOf(p) < 0) list.push(p); });
+      view.baPages = list.sort((a, b) => a - b);
+      EMA.ui.sound('tap');
+      render();
+    },
+    baAll() {
+      view.baPages = store.pagesOfBook(view.baBook).map(p => p.page);
+      EMA.ui.sound('tap');
+      render();
+    },
+    baClear() { view.baPages = []; EMA.ui.sound('tap'); render(); },
+    baApply() {
+      const pages = (view.baPages || []).slice().sort((a, b) => a - b);
+      if (!pages.length) return;
+      view.lessonEditBook = view.baBook;
+      view.lessonEditPages = pages;
+      view.lessonEditInput = pagesText(pages);
+      view.sheet = 'lessonEdit';
+      EMA.ui.sound('coin');
+      render();
+      EMA.ui.toast(pages.length + '쪽을 골랐어요 · 문제 ' + store.tilesOf(view.baBook, pages).length + '개', 3000);
     },
     /** 1초 이유 태그 — 골라도 되고 안 골라도 된다 */
     tag(d) {
@@ -2480,9 +2849,14 @@ window.EMA = window.EMA || {};
     },
     markAll() {
       const kind = view.gradeSource === 'print' ? 'print' : 'hw';
-      store.markAllCorrect(view.classId, view.studentId, kind, view.gradeSource === 'print' ? null : view.gradeBook);
+      const n = store.fillRestCorrect
+        ? store.fillRestCorrect(view.classId, view.studentId, kind, view.gradeSource === 'print' ? null : view.gradeBook)
+        : 0;
       EMA.ui.haptic(); EMA.ui.sound('correct');
-      EMA.ui.toast('모두 ⭕로 표시했어요! 틀린 문제만 ❌를 눌러 주세요');
+      EMA.ui.toast(n ? n + '문제를 한 번에 ⭕ 했어요! 틀린 문제만 ❌를 눌러 주세요' : '채울 빈칸이 없어요', 2600);
+      const mx = store.ensureMission(view.classId, view.studentId);
+      if (mx && mx.then) mx.then(r => r && missionToast(r));
+      else if (mx) missionToast(mx);
       render();
     },
     toClean() {
@@ -2785,6 +3159,7 @@ window.EMA = window.EMA || {};
       if (!r) return;
       view.carryWhy = null;
       EMA.ui.sound(r.skip ? 'coin' : 'crit');
+      const mx = store.ensureMission(view.classId, view.studentId);
       render();
       const sub = r.skip
         ? '안 푼 문제라 코인 +1만 들어요'
@@ -2793,6 +3168,8 @@ window.EMA = window.EMA || {};
       if (r.join && r.join.pet) EMA.ui.sound('hatch');
       EMA.ui.toast(r.capped ? '해결! 오늘 정식 보상 5개를 넘어 코인 1개만 들어요' : r.skip ? '해결! 안 푼 문제는 코인 1개만 들어요' : '밀린문제 하나 해결! ⚔️');
       if (r.killed && r.killed.boss) setTimeout(() => { EMA.ui.fx.celebrate({ kind: 'boss', em: '🏆', title: '보스 처치!', sub: '반 전원 보너스 코인 30개', ms: 2200 }); EMA.ui.sound('bossdown'); }, 1800);
+      if (mx && mx.then) mx.then(x => x && missionToast(x));
+      else if (mx) missionToast(mx);
     },
     /* ❌ 틀렸어요 → 이유를 골라야 하고, 문제는 목록에 그대로 남습니다 */
     carryWrong(d) {
@@ -3085,12 +3462,21 @@ window.EMA = window.EMA || {};
     pmAdd() {
       const v = String((document.querySelector('#pmNewNo') || {}).value || '').trim();
       if (!v) { EMA.ui.toast('번호를 넣어 주세요'); return; }
-      view.pmList = (view.pmList || []).concat([v]);
+      // ★ '2,4,5,6' 처럼 쉼표로 여러 개를 넣어도 각각 따로 들어갑니다
+      const add = rangeList(v);
+      if (!add.length) { EMA.ui.toast('번호를 숫자로 넣어 주세요 (예: 2-1)'); return; }
+      view.pmList = (view.pmList || []).concat(add);
       view.pmInput = view.pmList.join(', ');
       render();
     },
     pmSave() {
-      const list = (view.pmList && view.pmList.length) ? view.pmList.slice() : rangeList(view.pmInput);
+      const typed = (document.querySelector('#pmInput') || {}).value;
+      let list = typed != null && rangeList(typed).length ? rangeList(typed)
+        : (view.pmList && view.pmList.length) ? view.pmList.slice() : rangeList(view.pmInput);
+      // 저장 전에 한 번 더 — 혹시 한 칸에 '2,4,5,6'이 통째로 들어갔으면 쪼개 줍니다
+      const flat = [];
+      list.forEach(n => rangeList(n).forEach(x => { if (flat.indexOf(x) < 0) flat.push(x); }));
+      list = flat;
       if (!list.length) { EMA.ui.toast('문제 번호를 적어 주세요'); return; }
       const book = view.pmBook || (store.lesson(view.classId) || {}).book || store.bookList()[0];
       store.setPageProblem(book, view.pmPage, list);
