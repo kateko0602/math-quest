@@ -362,7 +362,7 @@ window.EMA = window.EMA || {};
         <div class="step" style="margin-top:6px">
           <div class="step-t">2단계 · 내 이름을 골라요</div>
           <div class="student-grid">
-            ${c.students.map(s => `
+            ${store.activeStudents(c.id).map(s => `
               <button class="student-btn" data-act="pickStudent" data-id="${s.id}">
                 <span class="av">${esc(s.avatar || '🙂')}</span>
                 <span class="nm">${esc(s.name)}</span>
@@ -946,6 +946,7 @@ window.EMA = window.EMA || {};
       </div>
 
       <div class="sect-t"><span>❌ 못 고친 오답 ${eggs.length}</span><span class="grow"></span><span class="hint">고치면 펫 알 부화!</span></div>
+      <div class="hint wrap" style="margin:-2px 18px 8px">오늘 숙제에서 틀린 문제는 <b>② 정리 화면</b>에서, 지난 오답은 <b>⚔️ 밀린문제</b>에서 고쳐요.</div>
       <div class="card tight">
         ${eggs.length ? eggs.slice(0, 6).map(m => `
           <div class="eggrow">
@@ -1141,7 +1142,7 @@ window.EMA = window.EMA || {};
       </div>`;
     };
 
-    const l = store.lesson(cid);
+    const l = store.lesson(cid) || {};
     const due = store.dueInfo(cid);
     return `
       ${tg('lesson', '📘', '오늘 진도 · 숙제', `
@@ -1253,8 +1254,8 @@ window.EMA = window.EMA || {};
           <div class="kpi"><b>${d.avgHw}%</b><span>숙제 수행률</span><small>${rangeName}</small></div>
         </div>
         <div class="divider"></div>
-        <div class="dashrow"><span class="k">📘 숙제 기한</span><b>${esc(due.label)}까지</b></div>
-        <div class="dashrow"><span class="k">${due.passed ? '⏰' : '⏳'} 기한</span><span class="${due.passed ? 'neg' : 'pos'}">${esc(due.passed ? due.lateText : due.leftText)}</span></div>
+        <div class="dashrow"><span class="k">📘 숙제 기한</span><b>${due.has ? esc(due.label) + '까지' : '오늘 숙제 없음'}</b></div>
+        <div class="dashrow"><span class="k">${due.passed ? '⏰' : '⏳'} 기한</span><span class="${due.passed ? 'neg' : 'pos'}">${esc(due.has ? (due.passed ? due.lateText : due.leftText) : '선생님이 숙제를 내면 기한이 생겨요')}</span></div>
         <div class="dashrow"><span class="k">❌ 미제출</span><b>${d.missing.length}명</b><span class="grow"></span>${d.missing.length ? `<span class="hint">${d.missing.map(r => nm(r.student)).join(', ')}</span>` : '<span class="pos">전원 제출 🎉</span>'}</div>
         <div class="dashrow"><span class="k">오답 3단</span><span>전체 <b>${d.wrongTotal}</b> · 아직 <b class="neg">${d.wrongOpen}</b> · 고침 <b class="pos">${d.wrongFixed}</b></span></div>
         <div class="dashrow"><span class="k">✅ 도장</span><span>${d.stamped}/${d.total}명</span></div>
@@ -3303,15 +3304,21 @@ window.EMA = window.EMA || {};
     // v0.9 — 숙제 기한이 지난 반의 미푼 문제를 한 번만 밀린문제로 이월
     try { store.sweepDue(); } catch (e) { }
     if (s && s.role === 'student' && store.student(s.classId, s.studentId)) {
-      view.role = 'student'; view.classId = s.classId; view.studentId = s.studentId;
-      const d = readDraft();
-      if (d && d.classId === s.classId && d.studentId === s.studentId) {
-        if (d.flow) view.flow = d.flow;
-        if (d.tab) view.tab = d.tab;
-        if (d.homeTab) view.homeTab = d.homeTab;
-        if (d.gradeSource) view.gradeSource = d.gradeSource;
-        if (d.gradeBook) view.gradeBook = d.gradeBook;
-        view.pending.photo = readDraftPhoto();
+      const stu = store.student(s.classId, s.studentId);
+      if (stu.status === 'left') {          // 퇴원(보관)된 학생의 기기는 로그인 화면으로
+        store.setSession(null);
+        view.role = 'login'; view.step = 'class'; view.pin = '';
+      } else {
+        view.role = 'student'; view.classId = s.classId; view.studentId = s.studentId;
+        const d = readDraft();
+        if (d && d.classId === s.classId && d.studentId === s.studentId) {
+          if (d.flow) view.flow = d.flow;
+          if (d.tab) view.tab = d.tab;
+          if (d.homeTab) view.homeTab = d.homeTab;
+          if (d.gradeSource) view.gradeSource = d.gradeSource;
+          if (d.gradeBook) view.gradeBook = d.gradeBook;
+          view.pending.photo = readDraftPhoto();
+        }
       }
     } else if (s && s.role === 'teacher') {
       view.role = 'teacher'; view.classId = s.classId || 'c4m2'; view.teacherTab = 'today';
