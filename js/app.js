@@ -480,10 +480,11 @@ window.EMA = window.EMA || {};
       </div>` : '';
 
     const hasHw = tiles.length > 0;
+    const hasHwText = !!(l && String(l.homework || '').trim());
     const up = store.reuploadInfo(cid, sid, 'hw');
     let cta, ctaAct = 'startGrade';
     if (!hasHw) {
-      cta = '📭 오늘은 숙제가 없어요';
+      cta = hasHwText ? '📘 숙제 쪽수를 선생님이 정하면 채점할 수 있어요' : '📭 오늘은 숙제가 없어요';
       ctaAct = 'noHomework';
     } else if (sub && sub.stampAt) {
       cta = '✅ 도장 완료 · 채점 보기';
@@ -1257,6 +1258,7 @@ window.EMA = window.EMA || {};
         <div class="dashrow"><span class="k">❌ 미제출</span><b>${d.missing.length}명</b><span class="grow"></span>${d.missing.length ? `<span class="hint">${d.missing.map(r => nm(r.student)).join(', ')}</span>` : '<span class="pos">전원 제출 🎉</span>'}</div>
         <div class="dashrow"><span class="k">오답 3단</span><span>전체 <b>${d.wrongTotal}</b> · 아직 <b class="neg">${d.wrongOpen}</b> · 고침 <b class="pos">${d.wrongFixed}</b></span></div>
         <div class="dashrow"><span class="k">✅ 도장</span><span>${d.stamped}/${d.total}명</span></div>
+        <div class="dashrow"><span class="k">🔥 연속 숙제 수행</span><span>최고 <b>${Math.max.apply(null, d.rows.map(r => r.streak).concat([0]))}일</b> · 평균 ${Math.round(d.rows.reduce((a, r) => a + r.streak, 0) / (d.rows.length || 1))}일</span></div>
       </div>
 
       <div class="sect-t"><span>학생별 현황 비교</span><span class="grow"></span><span class="hint">${rangeName}</span></div>

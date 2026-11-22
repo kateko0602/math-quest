@@ -2227,8 +2227,16 @@ window.EMA = window.EMA || {};
       this.save();
     }
     saveLesson(classId, patch) {
+      const old = this.state.lessons[classId];
+      const newAssignment = !!(old && old.date && patch && patch.date && old.date !== patch.date);
+      // 새 숙제로 넘어가면? 이전 숙제는 그 자리에서 마감되고 미푼 문제만 밀린문제로 (v0.9)
+      if (newAssignment) {
+        old.dueClosed = true;
+        try { this.sweepDueOne(classId); } catch (e) { }
+      }
       const l = this.state.lessons[classId] || (this.state.lessons[classId] = {});
       Object.assign(l, patch);
+      if (newAssignment) { delete l.dueClosed; delete l.carriedFor; }
       // 날짜별 진도 기록 — 어머님 리포트의 '일자별 진도·숙제'에 쓰입니다
       const date = l.date || this.state.today;
       if (!this.state.dayLessons) this.state.dayLessons = {};
