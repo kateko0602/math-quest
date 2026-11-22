@@ -470,11 +470,10 @@ window.EMA = window.EMA || {};
       const l = this.state.lessons[classId] || (this.state.lessons[classId] = {});
       const date = l.date || this.state.today;
       if (!l.classExcl || l.classExcl.date !== date) l.classExcl = { date, keys: {} };
-      if (on) l.classExcl.keys[key] = true;
-      else {
-        delete l.classExcl.keys[key];
+      if (on) {
+        l.classExcl.keys[key] = true;
         this._dropClassCarry(classId, key);        // 이미 넘어간 밀린문제도 같이 뺍니다
-      }
+      } else delete l.classExcl.keys[key];
       this.save();
       return this.classExclCount(classId);
     }
