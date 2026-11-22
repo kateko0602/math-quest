@@ -1504,3 +1504,27 @@ body.sheet-open .undobar{display:none}
   .bc-t{font-size:22px}
 }
 .weakcard{margin:13px 16px 10px}
+/* v1.1 — 하단 탭을 완전 불투명하게 (뒤 내용이 비쳐 두 줄로 보이던 문제) */
+.nav{background:#FFFFFF;box-shadow:0 -8px 22px rgba(30,41,59,.08)}
+.screen{padding-bottom:112px}
+/* v1.1 — 첫 화면에서 보조 버튼 줄까지 한 번에 보이게 여백 압축 */
+.card{margin-bottom:8px}
+.lesson-card{padding:12px 14px}
+.lesson-card .ln{margin-top:0}
+.lesson-card .booklist{margin-top:6px}
+.maprow{padding:5px 0}
+.mapcard{padding-bottom:8px}
+.duecard{padding-bottom:10px}
+.cta-wrap{padding:4px 16px 10px}
+.quickrow{gap:6px}
+/* v1.1 — 채점 상단 요약이 topbar에 가리지 않게 · 고정 바 버튼 글씨 넘침 방지 */
+.topbar{background:#FFF7EF;box-shadow:0 1px 0 rgba(30,41,59,.05)}
+.oxsum{top:70px;background:#FFF7EF}
+.ffrow .btn{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:14px 6px}
+.ffrow .ff-next{font-size:15.5px}
+/* v1.1 — 토스트가 되돌리기 배너·버튼 터치를 막지 않게, 채점 중에는 고정 바 위로 */
+.toast{pointer-events:none}
+.app.in-flow .toast{bottom:206px}
+.oxsum{top:76px}
+.ffrow{grid-template-columns:1.18fr 1fr}
+.ffrow .ff-mint{font-size:13.5px}
