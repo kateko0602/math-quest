@@ -109,6 +109,199 @@ window.EMA = window.EMA || {};
   function coinChip(cid, sid) {
     return `<button class="chip coin" data-act="openShop" aria-label="상점 열기">🪙 ${store.coins(cid, sid)}코인<i>상점</i></button>`;
   }
+
+  /* =========================================================
+     v2.0 — 세계관 그림
+     · 몬스터 수학 아카데미 마스코트: 100% 직접 그린 SVG(저작권 걱정 없음)
+     · 펠트/천 느낌은 feTurbulence 변위(보송보송한 가장자리)로 냅니다.
+  ========================================================= */
+  function mascotSvg() {
+    return `<svg class="hero-mascot" viewBox="0 0 120 136" role="img" aria-label="몬스터 수학 아카데미 마스코트">
+  <defs>
+    <linearGradient id="mcFur" x1="0.2" y1="0.05" x2="0.62" y2="1">
+      <stop offset="0" stop-color="#5AA0FF"/><stop offset="0.45" stop-color="#3B7DE8"/><stop offset="1" stop-color="#2358BE"/>
+    </linearGradient>
+    <radialGradient id="mcHi" cx="0.32" cy="0.16" r="0.62">
+      <stop offset="0" stop-color="#DDEEFF" stop-opacity="0.62"/><stop offset="1" stop-color="#DDEEFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="mcHorn" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#FFF3D6"/><stop offset="0.55" stop-color="#F7D489"/><stop offset="1" stop-color="#DBA046"/>
+    </linearGradient>
+    <linearGradient id="mcPen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFE08A"/><stop offset="1" stop-color="#F2B233"/>
+    </linearGradient>
+    <filter id="mcFuzz" x="-25%" y="-25%" width="150%" height="150%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="2" seed="11" result="t"/>
+      <feDisplacementMap in="SourceGraphic" in2="t" scale="2.6" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="mcEye" x="-60%" y="-60%" width="220%" height="220%">
+      <feDropShadow dx="0" dy="1" stdDeviation="0.8" flood-color="#0B2A63" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <g class="bob">
+    <ellipse cx="60" cy="131" rx="30" ry="4.2" fill="#0B2A63" opacity="0.24"/>
+    <path d="M26 52 C14 40 13 22 24 10 C30 23 37 36 48 46 Z" fill="url(#mcHorn)" stroke="#C08A33" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M94 52 C106 40 107 22 96 10 C90 23 83 36 72 46 Z" fill="url(#mcHorn)" stroke="#C08A33" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M60 15 C90 15 107 37 107 68 C107 99 86 121 60 121 C34 121 13 99 13 68 C13 37 30 15 60 15 Z" fill="#2A64C9" opacity="0.75" filter="url(#mcFuzz)"/>
+    <path d="M60 18 C88 18 104 39 104 68 C104 97 84 118 60 118 C36 118 16 97 16 68 C16 39 32 18 60 18 Z" fill="url(#mcFur)" stroke="#1B4AA8" stroke-width="1.1" filter="url(#mcFuzz)"/>
+    <path d="M60 18 C88 18 104 39 104 68 C104 97 84 118 60 118 C36 118 16 97 16 68 C16 39 32 18 60 18 Z" fill="url(#mcHi)"/>
+    <ellipse cx="60" cy="94" rx="25" ry="20" fill="#CFE5FF" opacity="0.32"/>
+    <g filter="url(#mcEye)">
+      <ellipse cx="44" cy="62" rx="13.5" ry="14.5" fill="#FFFFFF"/>
+      <ellipse cx="76" cy="62" rx="13.5" ry="14.5" fill="#FFFFFF"/>
+    </g>
+    <ellipse cx="45.6" cy="64" rx="7.2" ry="8.2" fill="#0F2544"/>
+    <ellipse cx="77.6" cy="64" rx="7.2" ry="8.2" fill="#0F2544"/>
+    <circle cx="48.2" cy="60.6" r="2.6" fill="#FFFFFF"/>
+    <circle cx="80.2" cy="60.6" r="2.6" fill="#FFFFFF"/>
+    <circle cx="43.6" cy="68" r="1.2" fill="#FFFFFF" opacity="0.85"/>
+    <circle cx="75.6" cy="68" r="1.2" fill="#FFFFFF" opacity="0.85"/>
+    <path d="M31 74 C35 72 39 72 42 74" stroke="#17427F" stroke-width="1.6" fill="none" stroke-linecap="round" opacity="0.5"/>
+    <path d="M78 74 C81 72 85 72 89 74" stroke="#17427F" stroke-width="1.6" fill="none" stroke-linecap="round" opacity="0.5"/>
+    <ellipse cx="29" cy="79" rx="6.6" ry="4" fill="#FF9E86" opacity="0.5"/>
+    <ellipse cx="91" cy="79" rx="6.6" ry="4" fill="#FF9E86" opacity="0.5"/>
+    <path d="M50 83 C54 90 66 90 70 83 C70 91 66 96 60 96 C54 96 50 91 50 83 Z" fill="#12305C"/>
+    <path d="M54 86 L58 86 L58 90.6 Z" fill="#FFFFFF"/>
+    <path d="M62 86 L66 86 L62 90.6 Z" fill="#FFFFFF"/>
+    <g transform="rotate(9 22 100)">
+      <path d="M27 92 C20 91 15 95 16 100 C17 105 23 106 28 103" fill="url(#mcFur)" stroke="#1B4AA8" stroke-width="1.1"/>
+      <g transform="rotate(-26 24 103)">
+        <rect x="6" y="99" width="30" height="8.6" rx="2.2" fill="url(#mcPen)" stroke="#C08A33" stroke-width="1"/>
+        <path d="M36 99 L43 103.3 L36 107.6 Z" fill="#F8E7C4" stroke="#C08A33" stroke-width="1"/>
+        <path d="M40.6 101.5 L43 103.3 L40.6 105.1 Z" fill="#334155"/>
+        <rect x="6" y="99" width="3.6" height="8.6" rx="1.1" fill="#FF8E7A"/>
+      </g>
+    </g>
+    <path d="M93 92 C100 90 105 94 104 99 C103 104 97 106 92 103" fill="url(#mcFur)" stroke="#1B4AA8" stroke-width="1.1"/>
+    <circle cx="103" cy="93" r="4.4" fill="#4E93F2" stroke="#1B4AA8" stroke-width="1.1"/>
+    <g fill="#FFE9A8">
+      <path d="M15 30 l1.6 4 4 1.6 -4 1.6 -1.6 4 -1.6 -4 -4 -1.6 4 -1.6 Z" opacity="0.95"/>
+      <path d="M104 26 l1.2 3 3 1.2 -3 1.2 -1.2 3 -1.2 -3 -3 -1.2 3 -1.2 Z" opacity="0.75"/>
+    </g>
+  </g></svg>`;
+  }
+
+  /** 원형 진행 링 — 오늘의 학습맵·진행 중인 숙제에 */
+  function ringSvg(pct, opt) {
+    const o = opt || {};
+    const size = o.size || 56, sw = o.sw || 6;
+    const r = (size - sw) / 2, c = 2 * Math.PI * r;
+    const p = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+    const col = o.color || 'var(--cobalt)';
+    return `<div class="ring ${o.cls || ''}" style="width:${size}px;height:${size}px" aria-hidden="true">
+      <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="#E7EDF7" stroke-width="${sw}"/>
+        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${col}" stroke-width="${sw}"
+          stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${(c * (1 - p / 100)).toFixed(1)}"/>
+      </svg>
+      <div class="rc"><b>${o.text != null ? o.text : p + '%'}</b>${o.sub ? `<small>${esc(o.sub)}</small>` : ''}</div>
+    </div>`;
+  }
+
+  /** 홈 히어로 — 몬스터 아카데미 아치 창 + 이번 주 목표 */
+  function heroBanner(cid, sid) {
+    const m = store.missionInfo(cid, sid);
+    const pct = Math.round(Math.min(1, m.weekDays / Math.max(1, m.weekNeed)) * 100);
+    const dots = Array.from({ length: m.weekNeed }, (_, i) => `<i class="${i < m.weekDays ? 'on' : ''}"></i>`).join('');
+    return `<div class="hero">
+      <div class="hero-in">
+        <div class="hero-tx">
+          <span class="hero-kicker">🐾 몬스터 수학 아카데미</span>
+          <div class="hero-title">오늘도 <em>한 걸음</em><br>더 나아가요 👊</div>
+          <div class="hero-sub">못 고친 오답을 고치면 펫이 진화해요</div>
+          <div class="hero-goal">
+            <div class="gl"><span>이번 주 목표</span><span class="grow"></span><b>${m.weekDays}/${m.weekNeed}일</b><span class="pct">${pct}%</span></div>
+            <div class="hero-track"><i style="width:${pct}%"></i></div>
+            <div class="hero-dots">${dots}</div>
+          </div>
+        </div>
+        <div class="hero-art"><div class="hero-arch"></div>${mascotSvg()}</div>
+      </div>
+    </div>`;
+  }
+
+  /** 펫 진화 카드 — 대표 펫(가장 자란 펫)의 단계·게이지 + 펫 알 진행 */
+  function petEvo(cid, sid) {
+    const pets = store.myPets(cid, sid);
+    const egg = store.eggOf(cid, sid);
+    const best = pets.slice().sort((a, b) => {
+      const sa = store.petStageOf(a), sb = store.petStageOf(b);
+      if (sb !== sa) return sb - sa;
+      return Number(b.xp || b.lv || 0) - Number(a.xp || a.lv || 0);
+    })[0];
+    const eggLine = egg
+      ? `<div class="pe-egg">
+          <span class="eggwig" style="font-size:19px">🥚</span>
+          <span class="grow"><b style="font-size:11px;color:#5B6B80">펫 알 ${egg.pct}%</b>
+            <span class="ebar"><i style="width:${Math.min(100, egg.pct)}%"></i></span></span>
+          <span class="go">간식 주기 →</span></div>`
+      : pets.length ? '' : `<div class="pe-egg"><span style="font-size:19px">🥚</span><span class="grow"><b style="font-size:11px;color:#5B6B80">펫 알이 없어요</b><span class="ebar"><i style="width:0%"></i></span></span><span class="go">상점 60코인</span></div>`;
+
+    if (!best) {
+      return `<button class="petevo" data-act="openShop" aria-label="펫 알 키우기">
+        <div class="pe-hd"><span class="t">🐾 내 펫 진화</span><span class="stg">1단계부터</span><span class="grow"></span><span class="more">펫 만나기 →</span></div>
+        <div class="pe-main">
+          <span class="petorb" style="filter:grayscale(.2)">🥚</span>
+          <div class="pe-info">
+            <div class="pe-nm">아직 펫이 없어요</div>
+            <div class="pe-sub">오답을 고치거나 펫 알을 키우면 <b>펫이 태어나요</b></div>
+          </div>
+        </div>
+        ${eggLine}
+      </button>`;
+    }
+
+    const stage = store.petStageOf(best);
+    const lab = store.petStageLabel(best);
+    const next = store.petNextNeed(best);
+    const def = store.petDef(best.id) || {};
+    const rar = (GAME().rarity || {})[best.rarity || (def && def.rarity)] || {};
+    const left = next.need == null ? 0 : Math.max(0, next.need - next.have);
+    return `<button class="petevo" data-act="petDetail" data-id="${best.id}" aria-label="내 펫 진화 보기">
+      <div class="pe-hd"><span class="t">🐾 내 펫 진화</span>
+        <span class="stg">${lab.em} ${stage}단계 ${lab.name}</span><span class="grow"></span><span class="more">도감 →</span></div>
+      <div class="pe-main">
+        <span class="petorb s${stage}">${best.em || def.em || '🐾'}</span>
+        <div class="pe-info">
+          <div class="pe-nm">${esc(best.name || def.name || '내 펫')}${rar.label ? `<span class="rar">${rar.label}</span>` : ''}</div>
+          <div class="pe-stage">
+            <i class="${stage >= 1 ? 'on' : ''}">🐣 아기</i><i class="${stage >= 2 ? 'on s2' : ''}">🌱 성장</i><i class="${stage >= 3 ? 'on s3' : ''}">👑 완전체</i>
+          </div>
+          <div class="pe-xp"><i style="width:${next.pct}%"></i></div>
+          <div class="pe-sub">${stage >= 3 ? '완성! 칭호를 받았어요 👑' : `다음 단계까지 <b>${left} XP</b> · 문제를 풀면 자라요`}</div>
+        </div>
+      </div>
+      ${eggLine}
+    </button>`;
+  }
+
+  /** 🏰 나의 숫자 왕국 — 12월 오픈 예고 (한 곳에만) */
+  function kingdomCard(coins) {
+    return `<button class="kingdom" data-act="kingdom" aria-label="나의 숫자 왕국 미리보기">
+      <span class="kcast">🏰</span>
+      <span class="ktx">
+        <span class="kt">나의 숫자 왕국 <span class="soon">12월 오픈</span></span>
+        <span class="ks">지금 모은 <b>${coins}코인</b>이 건축 재료가 돼요</span>
+      </span>
+      <span class="kg">›</span>
+    </button>`;
+  }
+
+  function sheetKingdom() {
+    const cid = view.classId, sid = view.studentId;
+    const coins = store.coins(cid, sid);
+    const lv = store.level(cid, sid);
+    return sheetWrap('🏰 나의 숫자 왕국', `
+      <div class="kdm">
+        <div class="kart">🏰</div>
+        <div class="kt">아직 공사 중이에요</div>
+        <div class="ks">왕국 건설은 <b>12월에 열려요!</b><br>지금 모은 코인이 그대로 건축 재료가 돼요.<br>오늘 숙제하고 코인을 모아 두면<br>왕국이 더 크게 지어져요.</div>
+        <div class="kpill">곧 열려요</div>
+        <div class="kcoins">🪙 내 코인 <b>${coins}</b>개 · Lv.${lv.lv}</div>
+        <button class="btn btn-primary btn-block" style="margin-top:14px" data-act="closeSheet">알겠어요!</button>
+      </div>
+    `);
+  }
   function nav(items, active, act) {
     const kind = act || 'tab';
     return `<div class="nav ${items.length === 5 ? 'nav5' : ''}" style="grid-template-columns:repeat(${items.length},1fr)">${items.map(it =>
@@ -275,8 +468,16 @@ window.EMA = window.EMA || {};
       .filter(r => r.total > 0)
       .sort((a, b) => String(a.u).localeCompare(String(b.u), 'ko', { numeric: true }));
     if (!rows.length) return '';
+    /* ★ v2.0 — 전체 진행을 원형 링으로 한눈에 (줄은 그대로) */
+    const done = rows.reduce((n, r) => n + r.done, 0);
+    const total = rows.reduce((n, r) => n + r.total, 0);
+    const pct = total ? Math.round(done / total * 100) : 0;
     return `<div class="card tight mapcard">
-      <div class="card-hd"><span class="t">🗺️ 오늘의 학습맵</span><span class="grow"></span><span class="hint">채점하면 채워져요</span></div>
+      <div class="card-hd"><span class="t">🗺️ 오늘의 학습맵</span><span class="grow"></span><span class="hint">${done >= total && total ? '오늘 몫 완료! 🎉' : '채점하면 채워져요'}</span></div>
+      <div class="maphead">
+        ${ringSvg(pct, { size: 58, sw: 6, text: done + '/' + total, sub: '문제' })}
+        <div class="mtx"><b>${rows.length}단원 · ${total}문제</b><span>${rows.map(x => x.u + '단원').join(' · ')} · 링이 다 차면 오늘 몫 완료!</span></div>
+      </div>
       ${rows.map(x => `<div class="maprow ${x.done >= x.total ? 'done' : ''}">
         <span class="mn">${x.u}단원 <small>${esc(x.name)}</small></span>
         <span class="mbar"><i style="width:${Math.round(x.done / x.total * 100)}%"></i></span>
@@ -482,7 +683,7 @@ window.EMA = window.EMA || {};
         <button class="btn btn-ghost btn-block" data-act="openStory">📖 이야기 보기</button>
         <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="teacherEntry">👩‍🏫 선생님이세요? 선생님 모드</button>
         <div class="pin-hint">학생 PIN은 선생님께 물어보세요 · 내 PIN은 ⚙️ 설정에서 바꿀 수 있어요</div>
-        <div class="verline">v1.2 ${demoChip()}</div>
+        <div class="verline">v2.0 ${demoChip()}</div>
       </div>
       ${sheetHtml()}`;
     }
@@ -553,7 +754,7 @@ window.EMA = window.EMA || {};
         right: `${coinChip(cid, sid)}${gearBtn()}`
       })}
       <div class="hello">
-        <div class="who">${esc(me.nickname || me.name)} <span class="lv">Lv.${lv.lv}</span></div>
+        <div class="who"><span class="hi">안녕하세요!</span> ${esc(me.nickname || me.name)} <span class="lv">Lv.${lv.lv}</span></div>
         <div class="chips">
           <span class="chip streak">🔥 ${streak}일</span>
           <span class="chip xp">✨ ${st.xp}</span>
@@ -629,8 +830,13 @@ window.EMA = window.EMA || {};
       <div class="card tight duecard ${due.passed ? 'late' : 'open'}">
         <div class="card-hd"><span class="t">${due.passed ? '⏰ 기한 지난 숙제' : '📘 진행 중인 숙제'}</span><span class="grow"></span>
           <span class="hint">${prog.hwMarked}/${prog.hwTotal}문제</span></div>
-        <div class="dueline">${esc(due.label)}까지</div>
-        <div class="duesub ${due.passed ? 'late' : 'left'}">${due.passed ? esc(due.lateText) : esc(due.leftText)}</div>
+        <div class="dueflex">
+          <div class="duetx">
+            <div class="dueline">${esc(due.label)}까지</div>
+            <div class="duesub ${due.passed ? 'late' : 'left'}">${due.passed ? esc(due.lateText) : esc(due.leftText)}</div>
+          </div>
+          ${ringSvg(prog.pct, { size: 62, sw: 6, text: prog.pct + '%', sub: '진행', cls: due.passed ? 'late' : '' })}
+        </div>
         <div class="pbar"><i style="width:${prog.pct}%"></i></div>
         <div class="hint" style="margin-top:6px">${due.passed ? '기한 전에 못 푼 문제는 ⚔️ 밀린문제로 넘어갔어요' : '기한 전에는 못 푼 문제가 밀린문제로 넘어가지 않아요'}</div>
       </div>` : '';
@@ -653,6 +859,7 @@ window.EMA = window.EMA || {};
     }
 
     return `
+      ${heroBanner(cid, sid)}
       ${missingY ? `<button class="yflame" data-act="yesterday">
         <span class="em">🔥</span>
         <span class="grow"><b>어제 불꽃 살리기</b><small>어제 푼 사진을 올리면 살아나요</small></span>
@@ -693,7 +900,9 @@ window.EMA = window.EMA || {};
         ${boss.killed ? '<div class="bosskill">🏆 우리 반이 보스를 잡았어요!</div>' : ''}
       </div>
 
-      ${eggStrip(cid, sid)}
+      ${petEvo(cid, sid)}
+
+      ${kingdomCard(store.coins(cid, sid))}
 
       ${st.marked ? `<div class="card tight sumcard">
         <div class="sumline">
@@ -1180,6 +1389,52 @@ window.EMA = window.EMA || {};
     </div>`;
   }
 
+  /** ★ v2.0 — 대표 펫 쇼케이스: 진화 3단계를 크게 보여 주는 카드 */
+  function petShowcase(cid, sid) {
+    const pets = store.myPets(cid, sid);
+    if (!pets.length) {
+      const egg = store.eggOf(cid, sid);
+      return `<div class="petshow">
+        <div class="ps-hd"><span class="t">🐾 대표 펫 · 진화</span><span class="grow"></span><span class="pill">아직 없음</span></div>
+        <div class="ps-body">
+          <div class="petshow-orb" style="filter:grayscale(.25)">🥚</div>
+          <div class="grow">
+            <div class="ps-nm">펫을 만나러 가 볼까요?</div>
+            <div class="ps-empty" style="margin-top:6px">오답을 고치면 펫 알이 부화해요.${egg ? ` 지금 알 ${egg.pct}%.` : ''}<br>1단계 아기 → 2단계 성장 → 3단계 완전체!</div>
+            <div class="ps-steps"><span class="cur">🐣 아기</span><span>🌱 성장</span><span>👑 완전체</span></div>
+          </div>
+        </div>
+      </div>`;
+    }
+    const best = pets.slice().sort((a, b) => {
+      const sa = store.petStageOf(a), sb = store.petStageOf(b);
+      if (sb !== sa) return sb - sa;
+      return Number(b.xp || b.lv || 0) - Number(a.xp || a.lv || 0);
+    })[0];
+    const stage = store.petStageOf(best);
+    const lab = store.petStageLabel(best);
+    const next = store.petNextNeed(best);
+    const def = store.petDef(best.id) || {};
+    const left = next.need == null ? 0 : Math.max(0, next.need - next.have);
+    return `<div class="petshow">
+      <div class="ps-hd"><span class="t">🐾 대표 펫 · 진화</span><span class="grow"></span>
+        <span class="ps-badge s${stage}">${lab.em} ${stage}단계 ${lab.name}</span></div>
+      <div class="ps-body">
+        <div class="petshow-orb s${stage}">${best.em || def.em || '🐾'}</div>
+        <div class="grow" style="min-width:0">
+          <div class="ps-nm">${esc(best.name || def.name || '내 펫')}</div>
+          <div class="ps-steps">
+            <span class="${stage === 1 ? 'cur' : ''}">🐣 아기</span>
+            <span class="${stage === 2 ? 'cur s2' : ''}">🌱 성장</span>
+            <span class="${stage === 3 ? 'cur s3' : ''}">👑 완전체</span>
+          </div>
+          <div class="ps-track s${stage}"><i style="width:${next.pct}%"></i></div>
+          <div class="ps-next">${stage >= 3 ? '완성! <b>칭호</b>를 받았어요 · 보스 공격력 +' + store.companionPct(cid, sid) + '%' : `다음 단계까지 <b>${left} XP</b> · 문제를 풀면 자라요`}</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
   function renderRecord() {
     const cid = view.classId, sid = view.studentId;
     const me = store.student(cid, sid), c = store.getClass(cid);
@@ -1222,6 +1477,7 @@ window.EMA = window.EMA || {};
       ${growthCard(cid, sid)}
 
       <div class="sect-t" id="companionDex"><span>🐾 펫 도감</span><span class="grow"></span><span class="hint">${pets.length}/${cat.length}</span></div>
+      ${petShowcase(cid, sid)}
       <div class="card">
         ${egg ? `<button class="eggline" data-act="openShop"><span class="em eggwig">🥚</span><span class="grow">펫 알 ${egg.pct}%</span><span class="go">간식 →</span></button>` : ''}
         <div class="petgrid">
@@ -1229,8 +1485,10 @@ window.EMA = window.EMA || {};
             const mine = owned.has(p.id);
             const r = (GAME().rarity || {})[p.rarity] || {};
             const my = pets.find(x => x.id === p.id);
-            return `<button class="petcard ${mine ? 'got' : 'locked'} r-${p.rarity}" data-act="petDetail" data-id="${p.id}">
+            const stg = mine ? store.petStageOf(my) : 0;
+            return `<button class="petcard ${mine ? 'got' : 'locked'} r-${p.rarity} ${stg ? 'st' + stg : ''}" data-act="petDetail" data-id="${p.id}">
               <span class="rar">${r.label || ''}</span>
+              ${stg >= 2 ? `<span class="stagepin">${stg >= 3 ? '👑' : '🌱'}</span>` : ''}
               <span class="pem">${mine ? p.em : '❔'}</span>
               <span class="pnm">${mine ? esc(p.name) : '???'}</span>
               <span class="pst">${mine ? `${store.petStageLabel(my).em}${store.petStageLabel(my).name}` : ''}</span>
@@ -1316,7 +1574,7 @@ window.EMA = window.EMA || {};
       </div>
       <div class="card tight">
         <div class="card-hd"><span class="t">${boss.def.em || '👾'} 우리 반 보스전</span><span class="grow"></span><span class="pill ${boss.left === 0 ? 'ok' : 'warn'}">${boss.left === 0 ? '클리어!' : '남은 ' + boss.left + '명'}</span></div>
-        <div class="hpbar" style="background:#F1ECE6"><div class="fill" style="width:${boss.hp}%"></div></div>
+        <div class="hpbar" style="background:#E9EEF6"><div class="fill" style="width:${boss.hp}%"></div></div>
         <div class="muted" style="margin-top:8px;font-size:12px">보스 HP ${boss.hp}% · 도장 ${boss.stamped}/${boss.total}</div>
         <div class="hint" style="margin-top:6px">닉네임으로만 보여요</div>
       </div>
@@ -1533,7 +1791,7 @@ window.EMA = window.EMA || {};
           return `<div class="kv" style="align-items:flex-start">
             <span class="k">${esc(r.student.nickname || r.student.name)}<br>
               <span class="muted" style="font-size:11px">❌ ${wrong.length ? wrong.map(t => t.page + '쪽 ' + t.num + '번').join(', ') : '없음'}</span></span>
-            <span class="muted" style="font-size:11px;text-align:right">${stars.length ? '⭐ ' + stars.join('<br>⭐ ') : '<span style="color:#B3A79A">없음</span>'}</span>
+            <span class="muted" style="font-size:11px;text-align:right">${stars.length ? '⭐ ' + stars.join('<br>⭐ ') : '<span style="color:#96A4B8">없음</span>'}</span>
           </div>`;
         }).join('')}
       </div>`;
@@ -1699,7 +1957,7 @@ window.EMA = window.EMA || {};
           return groups.map(g => `<div class="unitblk">
             <div class="unithd"><b>${g.u}단원</b> ${esc(g.name || '')}<span class="grow"></span><span class="hint">${g.rows.length}쪽</span></div>
             ${g.rows.map(p => `<button class="pm-row" data-act="pmPage" data-p="${p.page}">
-              <div class="pg">${p.page}쪽<br><span style="font-size:9.5px;color:#B3A79A">${esc(p.type)}</span></div>
+              <div class="pg">${p.page}쪽<br><span style="font-size:9.5px;color:#96A4B8">${esc(p.type)}</span></div>
               <div class="ns">${(p.problems || []).length ? p.problems.map(n => `<span class="n">${esc(n)}</span>`).join('') : '<span class="n empty">개념 설명 (문제 없음)</span>'}</div>
             </button>`).join('')}
           </div>`).join('');
@@ -1767,7 +2025,8 @@ window.EMA = window.EMA || {};
       story: storySheet, photoconfirm: sheetPhotoConfirm, nextday: sheetNextDay,
       settings: sheetSettings, bigphoto: sheetBigPhoto, recovery: sheetRecovery,
       moveStu: sheetMoveStu, copyLesson: sheetCopyLesson, startfrom: sheetStartFrom,
-      bookall: sheetBookAll, apphelp: sheetAppHelp, stuReset: sheetStuReset
+      bookall: sheetBookAll, apphelp: sheetAppHelp, stuReset: sheetStuReset,
+      kingdom: sheetKingdom
     };
     const fn = map[view.sheet];
     return fn ? fn() : '';
@@ -2051,8 +2310,11 @@ window.EMA = window.EMA || {};
   function growthBars(g, opt) {
     const list = g || [];
     const max = Math.max(1, list.reduce((a, d) => Math.max(a, d.solved, d.fixed), 1));
+    /* ★ v2.0 — 높이를 %가 아니라 px로 (막대가 바닥에 붙어 안 보이던 문제) */
+    const H = opt && opt.small ? 44 : 56;
+    const px = v => (Number(v) > 0 ? Math.max(5, Math.round(Number(v) / max * H)) : 2);
     return `<div class="gbars ${opt && opt.small ? 'small' : ''}">${list.map(d => `<div class="gcol ${d.today ? 'today' : ''}">
-      <div class="gbar"><i style="height:${Math.round(d.solved / max * 100)}%"></i><b style="height:${Math.round(d.fixed / max * 100)}%"></b></div>
+      <div class="gbar"><i style="height:${px(d.solved)}px"></i><b style="height:${px(d.fixed)}px"></b></div>
       <span class="gd">${d.dow}</span></div>`).join('')}</div>`;
   }
   function growthCard(cid, sid) {
@@ -2764,6 +3026,14 @@ window.EMA = window.EMA || {};
     }
     const sheetSc = app.querySelector('.sheet-scroll');
     if (sheetSc && sy) sheetSc.scrollTop = sy;
+    /* ★ v2.0 — 선생님 탭 줄: 고른 탭이 화면 밖으로 잘리지 않게 가로로 맞춰 줍니다 */
+    const tstrip = app.querySelector('.tabs-scroll');
+    const ton = tstrip ? tstrip.querySelector('button.on') : null;
+    if (tstrip && ton) {
+      const tr = tstrip.getBoundingClientRect(), br = ton.getBoundingClientRect();
+      if (br.right > tr.right - 8) tstrip.scrollLeft += (br.right - tr.right) + 12;
+      else if (br.left < tr.left + 8) tstrip.scrollLeft -= (tr.left - br.left) + 12;
+    }
     if (document.body.classList.contains('sheet-open')) document.body.classList.remove('sheet-open');
     if (view.sheet) document.body.classList.add('sheet-open');
 
@@ -2896,6 +3166,11 @@ window.EMA = window.EMA || {};
      동작
   ========================================================= */
   const actions = {
+    kingdom() {
+      view.sheet = 'kingdom';
+      EMA.ui.sound('tap');
+      render();
+    },
     class(d) {
       const c = store.getClass(d.id);
       if (!c || !c.active) return;
