@@ -1413,7 +1413,9 @@ window.EMA = window.EMA || {};
     const w = store.wrongTop ? store.wrongTop(cid, null, 5) : [];
     const open = (store.openWrongByStudent ? store.openWrongByStudent(cid) : []).filter(r => r.rows.length);
     const nm = s => esc(s.nickname || s.name);
-    const where = t => `${t.page}쪽 ${esc(t.num)}번`;
+    const where = t => t.num === '?'
+      ? `${t.page}쪽 <small class="muted">(번호 확인 필요)</small>`
+      : `${t.page}쪽 ${esc(t.num)}번`;
     return `
       <div class="card tight tlist">
         <div class="card-hd"><span class="t">⭐ 질문 TOP 5</span><span class="grow"></span><span class="hint">⭕ 맞은 문제 질문 포함</span></div>

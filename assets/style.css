@@ -1243,8 +1243,9 @@ button,input,select,textarea{font-family:var(--font)}
 .gfold .linkbtn2{padding:2px 6px}
 
 /* ⭐ 맞은 문제 질문 버튼 (한 줄 4칸) */
-.ox-row.has-star{grid-template-columns:52px 1fr 1fr 38px;gap:6px}
-.ox-row.has-star .ox-label{font-size:16px}
+.ox-row.has-star{grid-template-columns:72px 1fr 1fr 38px;gap:6px}
+.ox-row.has-star .ox-label{font-size:16px;white-space:nowrap;overflow:visible;padding:12px 1px}
+.ox-row.has-star .ox-label span{font-size:9px}
 .ox-star{
   border:2.5px solid #F3E6C4;background:#FFFDF6;border-radius:12px;cursor:pointer;
   font-size:15px;line-height:1;color:#C9A227;box-shadow:0 2px 0 #F1E6CB;padding:0;
