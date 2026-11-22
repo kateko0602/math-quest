@@ -44,6 +44,8 @@ window.EMA = window.EMA || {};
     pending: { photo: null, avatar: null, nickname: '', yphoto: null, tempPhoto: null, tempTarget: null, reupload: false },
     pmBook: null, pmPage: null, pmInput: '', pmNewPage: '', pmList: null,
     carryWhy: null,
+    carryMode: 'list',       // v1.2 — 밀린문제 [📋 목록으로 | 🎯 한 문제씩] (기본값 = 목록으로)
+    carryOne: null,          // 🎯 한 문제씩 이번 판 대기열 { sid, ids:[…], idx }
     lessonEditBook: null, lessonEditPages: null, lessonEditInput: '', lessonEditDue: '', lessonEditMode: '',
     baBook: null, baPages: null,
     dashRange: 'month', dashOpen: {},
@@ -723,6 +725,76 @@ window.EMA = window.EMA || {};
       ${sub && store.photo(sub.photoId) ? `<div class="card tight"><button class="photo-open" data-act="photoBig" data-sid="${sid}" data-at="${esc(sub.at)}"><img src="${store.photo(sub.photoId).data}" alt="프린트 사진"><span class="zoom">확대</span></button></div>` : ''}`;
   }
 
+  /** v1.2 — ⚔️ 밀린문제 [📋 목록으로 | 🎯 한 문제씩] 전환 스위치 (기본값 = 목록으로, 기존 화면 그대로) */
+  function carryModeSw() {
+    const mode = view.carryMode === 'one' ? 'one' : 'list';
+    return `<div class="segmented carry-mode">
+      <button class="${mode === 'list' ? 'on' : ''}" data-act="carryMode" data-m="list">📋 목록으로</button>
+      <button class="${mode === 'one' ? 'on' : ''}" data-act="carryMode" data-m="one">🎯 한 문제씩</button>
+    </div>`;
+  }
+
+  /** 🎯 한 문제씩 — 이번 판 대기열을 지금 남은 문제로 잡습니다 (⭕/❌ 로 하나씩 넘어감) */
+  function carryQueue(sid, list) {
+    if (!view.carryOne || view.carryOne.sid !== sid) {
+      view.carryOne = { sid: sid, ids: list.map(m => m.id), idx: 0 };
+    }
+    const q = view.carryOne;
+    // 새로 생긴 밀린문제는 대기열 뒤에 붙입니다
+    list.forEach(m => { if (q.ids.indexOf(m.id) < 0) q.ids.push(m.id); });
+    // 이미 해결한 문제는 건너뜁니다 → ⭕ 맞았어요 뒤에 다음 문제가 자연스럽게 나옵니다
+    const alive = id => list.some(m => m.id === id);
+    while (q.idx < q.ids.length && !alive(q.ids[q.idx])) q.idx++;
+    return q;
+  }
+
+  /** 🎯 한 문제씩 — 이번 판이 끝났을 때 (완료 안내 + 목록/홈으로) */
+  function carryOneDone(list, solved, q) {
+    const left = q.ids.filter(id => list.some(m => m.id === id)).length;
+    const done = q.ids.length - left;
+    return `${carryModeSw()}
+      <div class="card"><div class="empty">🎉 ${left ? '이번 판은 다 봤어요!' : '밀린 문제를 모두 해결했어요!'}
+        <br><small>${left ? `해결 ${done}개 · 다시 도전 ${left}개는 목록에 남겨 뒀어요` : `해결 ${done}개${solved.length ? ` · 지금까지 ${solved.length}개 고쳤어요` : ''}`}</small></div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn btn-ghost grow" data-act="carryMode" data-m="list">📋 목록으로 보기</button>
+          <button class="btn btn-primary grow" data-act="goHome">🏠 홈으로</button>
+        </div>
+      </div>`;
+  }
+
+  /** 🎯 한 문제씩 — 남은 문제 1개만 크게 */
+  function carryOneCard(cid, sid, list, solved, doneToday, reasonTxt, tagDefs) {
+    const q = carryQueue(sid, list);
+    if (q.idx >= q.ids.length) return carryOneDone(list, solved, q);
+    const m = list.find(x => x.id === q.ids[q.idx]);
+    if (!m) return carryOneDone(list, solved, q);
+    const open = view.carryWhy === m.id;
+    const tries = (m.tries || 0) > 0 ? ` · ${m.tries}번 다시 풀었어요` : '';
+    const whyDef = tagDefs.find(td => td.id === m.why);
+    return `${carryModeSw()}
+      <div class="carryone">
+        <div class="co-bar">
+          <span class="co-step">${q.idx + 1} / ${q.ids.length}</span>
+          <span class="co-left">남은 ${list.length}개</span>
+        </div>
+        <div class="co-em">${m.em || '👾'}</div>
+        <div class="co-nm">${esc(m.name || '못 고친 오답')}${whyDef ? `<span class="whybadge">${whyDef.em} ${esc(whyDef.label)}</span>` : ''}</div>
+        <div class="co-lb">${esc(m.book === '프린트' ? '' : m.book + ' ')}<b>${m.page}쪽 ${esc(m.num)}번</b></div>
+        <div class="co-meta">${esc(m.date.slice(5))} · ${reasonTxt[m.reason] || '❌'}${tries}</div>
+        ${overdueText(m) ? `<div class="co-late">⏰ ${esc(overdueText(m).replace(' · ', ''))}</div>` : ''}
+        ${open
+          ? `<div class="co-why">
+            <div class="hint" style="margin-bottom:8px">왜 틀렸는지 하나 고르면 <b>다음 문제</b>로 넘어가요</div>
+            <div class="tagrow co-tags" style="margin:0">
+              ${tagDefs.map(td => `<button class="tag ${m.why === td.id ? 'on' : ''}" data-act="carryWhySet" data-id="${m.id}" data-t="${td.id}">${td.em} ${esc(td.label)}</button>`).join('')}
+            </div>
+          </div>`
+          : `<button class="btn btn-mint btn-block btn-lg co-ok" data-act="resolveCarry" data-id="${m.id}">⭕ 맞았어요</button>
+        <button class="btn btn-ghost btn-block co-no" data-act="carryWrong" data-id="${m.id}">❌ 또 틀림</button>`}
+      </div>
+      <div class="hint center" style="margin:0 16px 10px">다시 풀어 <b>⭕ 맞았어요</b>를 누르면 해결! · 오늘 정식 보상 <b>${Math.min(doneToday, 5)}/5</b>개</div>`;
+  }
+
   function homeCarry(cid, sid) {
     const list = store.carried(cid, sid);
     const solved = store.solvedCarried(sid);
@@ -730,11 +802,18 @@ window.EMA = window.EMA || {};
     const tagDefs = GAME().tags || [];
     const todayKey = store.state.today;
     const doneToday = ((store.state.carryResolve || {})[todayKey + '|' + sid]) || 0;
+    const one = view.carryMode === 'one';
     if (!list.length) {
+      if (one && view.carryOne && view.carryOne.sid === sid && view.carryOne.ids.length) {
+        // 🎯 한 문제씩으로 끝까지 본 직후 — 완료 안내 + 목록/홈
+        return carryOneDone(list, solved, view.carryOne);
+      }
+      view.carryOne = null;
       return `<div class="card"><div class="empty">🎉 밀린 문제가 없어요!${solved.length ? `<br><small>지금까지 ${solved.length}개를 스스로 고쳤어요</small>` : ''}</div></div>`;
     }
-    return `
-      <div class="card tight" style="margin-bottom:10px">
+    if (one) return carryOneCard(cid, sid, list, solved, doneToday, reasonTxt, tagDefs);
+    return `${carryModeSw()}` +
+      `<div class="card tight" style="margin-bottom:10px">
         <div class="muted wrap" style="font-size:12px;white-space:normal">다시 풀어 <b>⭕ 맞았어요</b>를 누르면 해결! · 오늘 정식 보상 <b>${Math.min(doneToday, 5)}/5</b>개</div>
       </div>
       ${list.map(m => {
@@ -950,7 +1029,7 @@ window.EMA = window.EMA || {};
         ? `<div class="verify big"><div class="v-em">📝</div><div class="grow"><div class="v-k">오늘 찍을 것</div><div class="v-t">프린트 <b>1장</b></div></div></div>`
         : '';
 
-    const btnLabel = stamped ? '✅ 선생님 확인 완료'
+    const btnLabel = stamped ? '💾 고친 내용 저장하고 홈으로'
       : locked ? '✅ 고친 내용 저장'
         : view.pending.photo && sub ? '📸 새 사진으로 다시 내기'
           : '📸 사진 올리고 제출';
@@ -982,8 +1061,10 @@ window.EMA = window.EMA || {};
       </div>
 
       <div class="flowfoot">
-        <button class="btn btn-primary btn-block btn-lg" data-act="submit" ${stamped ? 'disabled' : ''}>${btnLabel}</button>
-        ${stamped ? '<div class="hint center" style="margin-top:8px">선생님이 도장을 찍은 제출은 저장해도 도장이 유지돼요.</div>' : ''}
+        ${stamped
+          ? `<button class="btn btn-primary btn-block btn-lg" data-act="saveStamped">${btnLabel}</button>
+        <div class="hint center" style="margin-top:8px">선생님 도장은 그대로예요 · 고친 해결·질문만 저장돼요</div>`
+          : `<button class="btn btn-primary btn-block btn-lg" data-act="submit">${btnLabel}</button>`}
         ${(!isPrint && store.dueInfo(cid).has && !store.dueInfo(cid).passed && !stamped) ? `<button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="saveTemp">💾 사진 없이 임시 저장 (기한까지 이어서)</button>` : ''}
       </div>
       <input type="file" class="photo-input" data-target="clean" accept="image/*" aria-hidden="true">
@@ -3321,6 +3402,27 @@ window.EMA = window.EMA || {};
       EMA.ui.sound('fanfare');
       if (view.lastResult && view.lastResult.reupload) EMA.ui.toast('사진을 새로 올렸어요! 남은 시간 동안 한 번 더 바꿀 수 있어요');
     },
+    /** 💾 고친 내용 저장하고 홈으로 — 선생님 도장이 찍힌 제출이어도 막다른 길 없이 저장하고 나갑니다.
+        도장·사진·제출 시각은 건드리지 않고, 고친 해결(⚔️)·질문(⭐) 내용만 저장합니다. */
+    saveStamped() {
+      const cid = view.classId, sid = view.studentId;
+      const kind = view.gradeSource === 'print' ? 'print' : 'hw';
+      const sub = store.submission(cid, sid, null, kind);
+      const stampAt = sub ? sub.stampAt : null;
+      if (store.saveProgress) store.saveProgress(cid, sid, kind);
+      else store.save();
+      const after = store.submission(cid, sid, null, kind);
+      if (stampAt && after && after.stampAt !== stampAt) {
+        // 있을 수 없는 일이지만, 도장이 사라졌다면 되돌리고 알립니다
+        after.stampAt = stampAt; after.status = 'stamped'; store.save();
+      }
+      view.flow = null; view.tab = 'home'; view.homeTab = 'today'; view.sheet = null;
+      view.pending.photo = null; view.pending.tempPhoto = null; view.resetScroll = true;
+      saveDraft();
+      EMA.ui.sound('coin');
+      EMA.ui.toast('💾 고친 내용을 저장했어요 · 선생님 도장은 그대로예요', 3400);
+      render();
+    },
     gallery() { view.sheet = 'gallery'; EMA.ui.sound('tap'); render(); },
     closeSheet() {
       if (view.sheet === 'reportimg') { view.reportImg = null; view.sheet = 'report'; render(); return; }
@@ -3460,7 +3562,8 @@ window.EMA = window.EMA || {};
         : `+${r.coins}코인 · +${r.xp} XP${r.join && r.join.pet ? ' · 🥚→🐾 펫 알 부화!' : ''}`;
       EMA.ui.fx.celebrate({ kind: 'title', em: r.skip ? '✅' : '⚔️', title: '해결!', sub, ms: 1700 });
       if (r.join && r.join.pet) EMA.ui.sound('hatch');
-      EMA.ui.toast(r.capped ? '해결! 오늘 정식 보상 5개를 넘어 코인 1개만 들어요' : r.skip ? '해결! 안 푼 문제는 코인 1개만 들어요' : '밀린문제 하나 해결! ⚔️');
+      const nextHint = (view.carryMode === 'one' && store.carried(view.classId, view.studentId).length) ? ' · 다음 문제 →' : '';
+      EMA.ui.toast((r.capped ? '해결! 오늘 정식 보상 5개를 넘어 코인 1개만 들어요' : r.skip ? '해결! 안 푼 문제는 코인 1개만 들어요' : '밀린문제 하나 해결! ⚔️') + nextHint);
       if (r.killed && r.killed.boss) setTimeout(() => bigCeleb({ kind: 'boss', em: '🏆', title: '보스 처치!', sub: '반 전원 보너스 코인 30개', sfx: 'bossdown' }), 1800);
       if (r.effort && !r.skip) EMA.ui.fx.banner('📣 선생님께 \'오늘 열심히 했어요!\' 알림이 전달됐어요!', 'effort', 3400);
       if (mx && mx.then) mx.then(x => x && missionToast(x));
@@ -3471,14 +3574,36 @@ window.EMA = window.EMA || {};
       view.carryWhy = view.carryWhy === d.id ? null : d.id;
       EMA.ui.sound('tap');
       render();
-      if (view.carryWhy) EMA.ui.toast('왜 틀렸는지 하나 골라 주세요 (문제는 다시 도전 목록에 남아요)');
+      if (view.carryWhy) {
+        EMA.ui.toast(view.carryMode === 'one'
+          ? '왜 틀렸는지 하나 고르면 다음 문제로 넘어가요'
+          : '왜 틀렸는지 하나 골라 주세요 (문제는 다시 도전 목록에 남아요)');
+      }
     },
     carryWhySet(d) {
       const item = store.retryCarried(view.classId, view.studentId, d.id, d.t);
+      const one = view.carryMode === 'one';
       view.carryWhy = null;
+      if (one && view.carryOne && view.carryOne.sid === view.studentId) {
+        // 🎯 한 문제씩 — 이유를 고르면 다음 문제로 넘어갑니다 (문제는 다시 도전 목록에 남아요)
+        const q = view.carryOne;
+        if (q.ids[q.idx] === d.id) q.idx++;
+      }
+      EMA.ui.sound('tap');
+      view.resetScroll = true;
+      render();
+      if (item) EMA.ui.toast(one ? '이유를 적어 두고 다음 문제로 넘어갈게요 · 이 문제는 다시 도전 목록에 남아요 💪' : '이유를 적어 두고 다시 도전 목록에 남겼어요 · 다음에 또 풀어 봐요 💪');
+    },
+    /** [📋 목록으로 | 🎯 한 문제씩] 전환 — 한 문제씩으로 새로 들어갈 때는 지금 남은 문제부터 1/N */
+    carryMode(d) {
+      const m = d.m === 'one' ? 'one' : 'list';
+      const changed = view.carryMode !== m;
+      view.carryMode = m;
+      view.carryWhy = null;
+      if (m === 'one' && changed) view.carryOne = null;
+      view.resetScroll = true;
       EMA.ui.sound('tap');
       render();
-      if (item) EMA.ui.toast('이유를 적어 두고 다시 도전 목록에 남겼어요 · 다음에 또 풀어 봐요 💪');
     },
 
     /* ---- 프로필 ---- */
