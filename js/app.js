@@ -1282,7 +1282,7 @@ window.EMA = window.EMA || {};
       return `<div class="clean-row">
         <div class="cl-label">${bkLabel(t)}${isPrint ? '' : t.page + '쪽 '}<b>${esc(t.label)}</b>번</div>
         <div class="cl-btns">
-          <button class="clb fix ${cl === 'fixed' ? 'on' : ''}" data-act="cleanup" data-key="${t.key}" data-k="fixed">⚔️ 해결!</button>
+          <button class="clb fix ${cl === 'fixed' ? 'on' : ''}" data-act="cleanup" data-key="${t.key}" data-k="fixed">🔁 해결!</button>
           <button class="clb star ${((g.stars || {})[t.key] || cl === 'star') ? 'on' : ''} ${starCnt >= STAR_MAX && !((g.stars || {})[t.key] || cl === 'star') ? 'is-full' : ''}" data-act="cleanup" data-key="${t.key}" data-k="star">⭐ 질문</button>
         </div>
       </div>`;
