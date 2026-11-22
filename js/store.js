@@ -1500,6 +1500,17 @@ window.EMA = window.EMA || {};
       if (sub.stampAt || sub.status === 'stamped') return false;   // ⛔ 도장 보호
       sub.at = nowHHMM();
       if (sub.status === 'resubmit') sub.status = 'submitted';
+      // 사진 없이 '고친 내용 저장'만 해도 그날 받은 XP를 확정 (날짜가 바뀌어도 사라지지 않게)
+      const s = this.student(classId, sid);
+      if (s && sub.rewarded) {
+        const rw = this.previewReward(classId, sid, kind);
+        const prev = Number(sub.xp || 0);
+        if (rw.xp > prev) {
+          s.xp = (s.xp || 0) + (rw.xp - prev);
+          sub.xp = rw.xp;
+          sub.xpBanked = true;
+        }
+      }
       this.save();
       return true;
     }

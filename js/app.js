@@ -213,7 +213,7 @@ window.EMA = window.EMA || {};
       <div class="sethd">계정</div>
       <button class="setrow" data-act="logout"><span class="se">↩️</span><span class="st">로그아웃</span><span class="chev">›</span></button>
       <button class="setrow danger" data-act="resetDemo"><span class="se">🧹</span><span class="st">연습 데이터 초기화</span></button>
-      <div class="hint" style="margin:6px 6px 0">초기화하면 지금 데이터를 먼저 이 기기에 백업해 두고, 이 화면에서만 새로 시작해요.</div>
+      <div class="hint wrap" style="margin:6px 6px 0">초기화하면 지금 데이터를 먼저 이 기기에 백업해 두고, 이 화면에서만 새로 시작해요.</div>
       <div class="hint center" style="margin-top:12px">숙제 대소동 v0.8 · 숫자 왕국 구출 대작전 ${demoChip()}</div>
     `);
   }
@@ -225,7 +225,7 @@ window.EMA = window.EMA || {};
       <div class="sub">PIN을 잊었을 때 쓰는 <b>한 번만 보여 주는 키</b>예요. 지금 적어 두세요.</div>
       <div class="recovery-code" id="recoveryCode">${esc(code)}</div>
       <button class="btn btn-primary btn-block" style="margin-top:12px" data-act="copyRecovery">📋 복구 키 복사</button>
-      <div class="hint" style="margin-top:12px">· 이 화면을 닫으면 다시 볼 수 없어요.<br>· PIN을 잊으면 첫 화면 → [선생님 모드] → [PIN을 잊었어요]에서 이 키로 다시 정할 수 있어요.<br>· 이 기기(브라우저)에만 저장되니, 기록을 지우거나 폰을 바꾸면 새로 정해야 해요.</div>
+      <div class="hint wrap" style="margin-top:12px;white-space:normal">· 이 화면을 닫으면 다시 볼 수 없어요.<br>· PIN을 잊으면 첫 화면 → [선생님 모드] → [PIN을 잊었어요]에서 이 키로 다시 정할 수 있어요.<br>· 이 기기(브라우저)에만 저장되니, 기록을 지우거나 폰을 바꾸면 새로 정해야 해요.</div>
       <button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="closeRecovery">적어 두었어요</button>
     `);
   }
@@ -493,7 +493,7 @@ window.EMA = window.EMA || {};
           ${sub.stampAt ? `<span class="pill ok">✅ 도장 ${esc(sub.stampAt)}</span>` : sub.status === 'resubmit' ? `<span class="pill bad">재제출</span>` : sub.status === 'unlocked' ? `<span class="pill warn">🔓 다시 내기</span>` : `<span class="pill warn">🕒 도장 대기</span>`}
         </div>
         ${store.photo(sub.photoId) ? `<button class="photo-open" data-act="photoBig" data-sid="${sid}" data-at="${esc(sub.at)}"><img src="${store.photo(sub.photoId).data}" alt="내가 낸 사진"><span class="zoom">확대</span></button>`
-          : `<div class="muted" style="font-size:12px">🗑 사진은 보관 기간(7일)이 지나 앱에서 지웠어요 · 제출·채점 기록은 그대로 있어요</div>`}
+          : `<div class="muted wrap" style="font-size:12px;white-space:normal">🗑 사진은 보관 기간(7일)이 지나 앱에서 지웠어요 · 제출·채점 기록은 그대로 있어요</div>`}
         <div class="row" style="margin-top:10px">
           <button class="btn btn-ghost grow" data-act="gallery">👀 친구들 풀이</button>
           ${up.ok ? `<button class="btn btn-primary grow" data-act="reupload">📸 사진 다시 (${up.mins}분)</button>`
@@ -545,7 +545,7 @@ window.EMA = window.EMA || {};
     }
     return `
       <div class="card tight" style="margin-bottom:10px">
-        <div class="muted" style="font-size:12px">다시 풀어 <b>⭕ 맞았어요</b>를 누르면 해결! · 오늘 정식 보상 <b>${Math.min(doneToday, 5)}/5</b>개</div>
+        <div class="muted wrap" style="font-size:12px;white-space:normal">다시 풀어 <b>⭕ 맞았어요</b>를 누르면 해결! · 오늘 정식 보상 <b>${Math.min(doneToday, 5)}/5</b>개</div>
       </div>
       ${list.map(m => {
         const open = view.carryWhy === m.id;
@@ -638,7 +638,7 @@ window.EMA = window.EMA || {};
       })}
       ${stepper(1)}
       ${bookTabs}
-      ${missingN ? `<div class="card tight missing-note"><div class="muted" style="font-size:12px">❓ <b>?</b> 칸 ${missingN}개는 쪽수표에 없는 쪽이에요. 선생님 <b>⚙️ 관리 → 쪽수표</b>에서 그 쪽 문제번호를 넣으면 채점할 수 있어요.</div></div>` : ''}
+      ${missingN ? `<div class="card tight missing-note"><div class="muted wrap" style="font-size:12px;white-space:normal">❓ <b>?</b> 칸 ${missingN}개는 쪽수표에 없는 쪽이에요. 선생님 <b>⚙️ 관리 → 쪽수표</b>에서 그 쪽 문제번호를 넣으면 채점할 수 있어요.</div></div>` : ''}
       ${oxSum(cnt)}
       <div class="card oxcard">
         <button class="btn btn-mint btn-block" data-act="markAll">⭕ 모두 맞음</button>
@@ -1207,7 +1207,9 @@ window.EMA = window.EMA || {};
           <button class="btn btn-ghost btn-sm" data-act="resetStudentPin" data-id="${s.id}">PIN 초기화</button>
         </div>`).join('')}
       </div>
-      <div class="hint" style="margin:6px 4px 10px">PIN 초기화 = 한 번에 <b>1234</b>로 바꿉니다. 아이가 ⚙️ 설정에서 직접 바꿀 수도 있어요.</div>
+      <div class="hint wrap" style="margin:6px 4px 10px">PIN 초기화 = 한 번에 <b>1234</b>로 바꿉니다. 아이가 ⚙️ 설정에서 직접 바꿀 수도 있어요.</div>
+      <button class="btn btn-ghost btn-block btn-sm" data-act="reissueRecovery">🔑 선생님 비상 복구 키 다시 만들기</button>
+      <div class="hint wrap" style="margin:6px 4px 0">복구 키를 잃어버렸을 때만 누르세요. 새 키가 나오고 예전 키는 쓸 수 없어요.</div>
       <div class="kv"><span class="k">반</span><span>${esc(c.name)} · ${esc(c.semester)}</span></div>
       <div class="kv"><span class="k">수업</span><span>${esc(c.days)} ${esc(c.time)}</span></div>
       <div class="kv"><span class="k">교재</span><span>${esc((c.textbooks || []).join(' · '))}</span></div>`;
@@ -1876,7 +1878,7 @@ window.EMA = window.EMA || {};
       <div class="editor"><input id="pageInput" value="${esc(String(pages))}" placeholder="예: 8,9,10 또는 8-10쪽"></div>
       <div class="muted" style="margin-top:8px">→ ${tiles.length}개: ${tiles.map(t => t.label).join(', ')}</div>
       <div class="preview-tiles">${tiles.map(t => `<div class="pt">${esc(t.label)}</div>`).join('')}</div>
-      ${missing.length ? `<div class="card tight missing-note" style="margin-top:10px"><div class="muted" style="font-size:12px">⚠️ <b>${missing.join(', ')}쪽</b>은 쪽수표에 없어요. 저장은 되지만 채점하려면 <b>⚙️ 관리 → 쪽수표 → 쪽 추가</b>에서 그 쪽 문제번호를 넣어 주세요.</div></div>` : ''}
+      ${missing.length ? `<div class="card tight missing-note" style="margin-top:10px"><div class="muted wrap" style="font-size:12px;white-space:normal">⚠️ <b>${missing.join(', ')}쪽</b>은 쪽수표에 없어요. 저장은 되지만 채점하려면 <b>⚙️ 관리 → 쪽수표 → 쪽 추가</b>에서 그 쪽 문제번호를 넣어 주세요.</div></div>` : ''}
       <button class="btn btn-primary btn-block" style="margin-top:14px" data-act="saveLesson">이 쪽수로 저장</button>
     `);
   }
@@ -1943,7 +1945,7 @@ window.EMA = window.EMA || {};
         ${sub && sub.stampAt ? `<div class="fp-nm">✅ 도장 ${esc(sub.stampAt)}</div>` : ''}
       </div>
       ${teacher ? `<button class="btn btn-danger btn-block" style="margin-top:12px" data-act="deletePhoto" data-sid="${esc(sid)}">🗑 이 사진 지우기 (선생님 확인 후)</button>
-        <div class="hint center" style="margin-top:8px">확인 후 지우면 다시 볼 수 없어요. 제출·채점 기록은 남습니다. 7일이 지나면 자동으로 지워집니다.</div>` : ''}
+        <div class="hint center wrap" style="margin-top:8px">확인 후 지우면 다시 볼 수 없어요. 제출·채점 기록은 남습니다. 7일이 지나면 자동으로 지워집니다.</div>` : ''}
     `, { full: true });
   }
 
@@ -2790,6 +2792,14 @@ window.EMA = window.EMA || {};
       store.save();
       view.sheet = null;
       EMA.ui.toast('사진을 지웠어요 · 제출 기록은 그대로예요');
+      render();
+    },
+    /** 비상 복구 키 다시 만들기 (선생님이 로그인한 상태에서) */
+    async reissueRecovery() {
+      if (!confirm('새 복구 키를 만들까요? 예전 키는 쓸 수 없게 됩니다.')) return;
+      view.recoveryCode = await EMA.auth.issueRecovery();
+      view.sheet = 'recovery';
+      EMA.ui.sound('coin');
       render();
     },
     pmAddPage() {

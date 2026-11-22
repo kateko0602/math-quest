@@ -1136,3 +1136,5 @@ button,input,select,textarea{font-family:var(--font)}
 .missing-note{background:#FFF6E5;border:1px solid #F4DFB4}
 /* ② 정리 화면 교재 표시 */
 .clean-row .cl-label .bk{display:inline-block;font-size:10px;font-weight:800;color:#8B7A67;background:#F3EDE6;border-radius:6px;padding:1px 5px;margin-right:5px;vertical-align:1px}
+/* 긴 안내 문구는 줄바꿈 (전역 .hint/.muted 는 한 줄 유지) */
+.wrap{white-space:normal !important;line-height:1.6}

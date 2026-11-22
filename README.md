@@ -65,4 +65,4 @@ data/page-maps.js     쪽수 → 문제번호표
 
 ## 확인 방법
 
-`tools/v08_check.py` — 로컬 HTTP 서버 + Playwright로 87개 항목(날짜 변경 보존, PIN 설정/초기화/만료, 사진 IndexedDB·7일 삭제, 밀린문제 ⭕/❌, 도장 보호, 카톡 `-`, 마이그레이션)을 확인하고 콘솔 에러 0건을 검사합니다.
+`tools/v08_check.py` — 로컬 HTTP 서버 + Playwright로 92개 항목(날짜 변경 보존, PIN 설정/초기화/만료, 사진 IndexedDB·7일 삭제, 밀린문제 ⭕/❌, 도장 보호, 카톡 `-`, 마이그레이션)을 확인하고 콘솔 에러 0건을 검사합니다.
