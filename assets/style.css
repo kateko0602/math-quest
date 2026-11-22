@@ -1320,3 +1320,187 @@ button,input,select,textarea{font-family:var(--font)}
 .mission .mline .mdots.wk{flex:0 0 auto;width:86px;margin:0;height:5px;display:inline-flex;gap:4px}
 .mission .mline .mdots.wk i{height:5px}
 .mission .mline.sub{margin-top:6px;font-size:11.5px}
+
+/* =====================================================================
+   v1.1 4단계 — UI/UX 마감 · 실사용 피드백
+===================================================================== */
+
+/* ① 채점 화면 쪽수 가독성 — 8쪽 / 1-1을 크고 진하게 */
+.pgroup{font-size:13px;font-weight:900;color:#4B5563;letter-spacing:-.1px;padding:13px 2px 7px}
+.pgroup:first-child{padding-top:4px}
+.ox-row{grid-template-columns:64px 1fr 1fr}
+.ox-label{font-size:21px;font-weight:900;color:#0F172A;background:#F5EFE7;padding:13px 2px;letter-spacing:-.6px}
+.ox-label span{font-size:11px;font-weight:900;color:#7C6F60;margin-left:1px}
+.ox-row.has-star .ox-label{font-size:21px;padding:13px 1px}
+.ox-row.has-star .ox-label span{font-size:10px}
+.ox-row.gridrows .ox-label{font-size:19px}
+
+/* ② 하단 고정 바 — 나머지 전부 ⭕ + 다음이 스크롤해도 항상 보임 */
+.screen.flow{padding-bottom:232px}
+.flowfoot.gradefoot{padding-top:8px;box-shadow:0 -6px 20px rgba(30,41,59,.07)}
+.ffrow{display:grid;grid-template-columns:1fr 1.05fr;gap:8px;align-items:stretch}
+.ffrow .btn{font-size:15px;font-weight:900;border-radius:15px;padding:14px 8px;min-height:52px}
+.ff-mint{background:linear-gradient(180deg,#48E2B9,#22C79C);color:#083D2F;border:none;box-shadow:0 3px 0 #14A681}
+.ff-mint small{font-size:11px;font-weight:900;opacity:.72;margin-left:2px}
+.ff-next{font-size:16px}
+/* 안 사라지는 되돌리기 배너 */
+.undobar{display:block;width:100%;margin-bottom:8px;padding:11px 12px;border-radius:13px;border:1.5px solid #EBC98F;
+  background:#FFF6DF;color:#7A5312;font-family:var(--font);font-size:13px;font-weight:900;cursor:pointer;text-align:center;
+  animation:undoin .22s ease}
+.undobar:active{transform:scale(.985)}
+@keyframes undoin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* ③ ⬆️ 맨 위로 — 긴 목록에서만 나타나는 플로팅 버튼 */
+.fabtop{position:absolute;right:14px;bottom:96px;z-index:33;display:none;align-items:center;gap:5px;
+  padding:10px 14px;border-radius:999px;border:none;background:rgba(30,41,59,.92);color:#fff;
+  font-family:var(--font);font-size:12px;font-weight:900;box-shadow:0 8px 22px rgba(15,23,42,.3);cursor:pointer}
+.fabtop.show{display:inline-flex;animation:fabin .2s ease}
+.fabtop:active{transform:scale(.96)}
+@keyframes fabin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.app.in-flow .fabtop{bottom:196px}
+body.sheet-open .fabtop{display:none !important}
+body.sheet-open .undobar{display:none}
+
+/* ④ 학생 채점 도구 — [몇 번부터] 하나만 */
+.gtools.only-one{display:flex;align-items:center;gap:8px}
+.gtool.big{flex:1;min-height:46px;font-size:14px;font-weight:900;border-radius:13px;background:#fff;border:2px solid #EADFD3;color:var(--navy);cursor:pointer;font-family:var(--font)}
+.gtool.big.on{background:#FFF1DC;border-color:#F3B96B;color:#8A5412}
+.modechip{flex:0 0 auto;font-size:11px;font-weight:900;color:#1F6FA8;background:#EAF5FF;border:1px solid #CBE6FA;border-radius:999px;padding:6px 9px}
+
+/* ⑤ 숙제 범위 모드 (선생님) */
+.segmented.mode4{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.segmented.mode4 button{font-size:12px;padding:10px 4px;min-height:42px}
+.tilecount{margin-top:10px;font-size:12px;font-weight:700;color:#7A6F63;line-height:1.55}
+.tilecount b{color:var(--navy)}
+
+/* ⑥ 밀린문제 이유 배지 */
+.whybadge{display:inline-block;margin-left:7px;font-size:10.5px;font-weight:900;color:#6B4BD6;background:#F0EAFF;
+  border-radius:999px;padding:3px 8px;vertical-align:1px}
+
+/* ⑦ 앱 오류 비상 안내 */
+.helpbox{text-align:center;background:linear-gradient(165deg,#FFFDF6,#FFF3DC);border-radius:18px;padding:18px 16px}
+.helpbox .hb-em{font-size:42px;line-height:1}
+.helpbox .hb-t{font-size:17px;font-weight:900;color:#6B4A12;margin-top:6px}
+.helpbox .hb-l{font-size:12.5px;font-weight:700;color:#7A6448;line-height:1.65;margin-top:7px}
+.hv{display:flex;gap:10px;align-items:flex-start;padding:9px 2px;border-bottom:1px solid #F4F0EB}
+.hv:last-child{border-bottom:none}
+.hv .n{flex:0 0 24px;height:24px;border-radius:50%;background:var(--navy);color:#fff;font-size:12px;font-weight:900;display:grid;place-items:center}
+.hv b{display:block;font-size:13px;color:var(--navy)}
+.hv small{display:block;font-size:11px;font-weight:700;color:#9A8E82;margin-top:2px;line-height:1.5}
+
+/* ⑧ 선생님 — ✅ 책으로 완료 */
+.tbtn.bookdone{background:#EEFBF4;border-color:#BFEBD8;color:#0B7A55;font-weight:900}
+
+/* ⑨ 🔥 오늘의 열정 학생 */
+.effortcard{margin:10px 16px 4px;background:linear-gradient(165deg,#FFF6EC,#FFE9D5);border:1.5px solid #FFD3AC}
+.effortcard .card-hd .t{color:#9A4A10}
+.effrow{display:flex;flex-wrap:wrap;gap:6px}
+.effchip{display:inline-flex;align-items:center;gap:6px;background:#fff;border-radius:999px;padding:4px 10px 4px 4px;box-shadow:var(--shadow-s)}
+.effchip b{font-size:12px;color:var(--navy)}
+.effchip small{font-size:10px;font-weight:800;color:#B4562B}
+.notifyline{margin:10px 16px;padding:12px 14px;border-radius:14px;background:linear-gradient(165deg,#EFFBF5,#DFF6EC);
+  border:1.5px solid #B9EBD8;color:#0B6B4C;font-size:12.5px;font-weight:800;line-height:1.5;text-align:center}
+
+/* ⑩ 전체 화면 축하 팝업 — 폭죽·반짝임·확대 */
+.bigceleb{position:absolute;inset:0;z-index:120;display:grid;place-items:center;overflow:hidden;cursor:pointer;
+  background:radial-gradient(circle at 50% 42%, #3A2F68 0%, #221C3C 55%, #14111F 100%);
+  animation:bcIn .3s ease;padding:24px}
+.bigceleb.out{animation:bcOut .36s ease forwards}
+@keyframes bcIn{from{opacity:0}to{opacity:1}}
+@keyframes bcOut{to{opacity:0}}
+.bc-card{position:relative;z-index:3;text-align:center;color:#fff;max-width:320px;
+  animation:bcPop .8s cubic-bezier(.2,1.6,.35,1)}
+.bc-em{font-size:64px;line-height:1;animation:bcEm 1.1s cubic-bezier(.2,1.6,.4,1)}
+.bc-t{font-size:25px;font-weight:900;letter-spacing:-.8px;margin-top:10px;text-shadow:0 4px 18px rgba(0,0,0,.35)}
+.bc-s{font-size:13px;font-weight:800;color:#FFE9B8;margin-top:7px;line-height:1.5}
+.bc-praise{margin-top:14px;display:inline-block;font-size:13px;font-weight:900;color:#2B2150;
+  background:linear-gradient(180deg,#FFF3C4,#FFD966);border-radius:999px;padding:10px 16px;box-shadow:0 8px 22px rgba(255,215,102,.35)}
+.bc-tap{margin-top:16px;font-size:10.5px;font-weight:700;color:rgba(255,255,255,.55)}
+@keyframes bcPop{0%{opacity:0;transform:scale(.6) translateY(14px)}55%{opacity:1;transform:scale(1.06) translateY(0)}100%{transform:scale(1)}}
+@keyframes bcEm{0%{transform:scale(.3) rotate(-14deg)}60%{transform:scale(1.18) rotate(7deg)}100%{transform:scale(1) rotate(0)}}
+/* 폭죽 — 원뿔형 빛줄기가 터지며 퍼짐 */
+.bc-fw i{position:absolute;left:50%;top:38%;width:230px;height:230px;margin:-115px 0 0 -115px;border-radius:50%;opacity:0;
+  background:repeating-conic-gradient(from 0deg, rgba(255,255,255,0) 0deg 11deg, var(--fw,#FFD166) 11deg 14deg);
+  -webkit-mask:radial-gradient(circle, transparent 36%, #000 39%, #000 60%, transparent 63%);
+  mask:radial-gradient(circle, transparent 36%, #000 39%, #000 60%, transparent 63%);
+  animation:fwBurst 1.35s ease-out forwards}
+.bc-fw .f1{--fw:#FFD166;animation-delay:.05s}
+.bc-fw .f2{--fw:#6EE7FF;left:24%;top:30%;width:170px;height:170px;margin:-85px 0 0 -85px;animation-delay:.32s}
+.bc-fw .f3{--fw:#FF8FB1;left:76%;top:34%;width:190px;height:190px;margin:-95px 0 0 -95px;animation-delay:.55s}
+@keyframes fwBurst{0%{opacity:0;transform:scale(.15)}18%{opacity:1}60%{opacity:.85;transform:scale(1)}100%{opacity:0;transform:scale(1.35)}}
+/* 반짝임 */
+.bc-sparkles i{position:absolute;width:8px;height:8px;background:#fff;border-radius:2px;transform:rotate(45deg);opacity:0;
+  box-shadow:0 0 12px rgba(255,255,255,.95);animation:spTwinkle 1.6s ease-in-out infinite}
+.bc-sparkles i:nth-child(3n){background:#FFE9A8}
+.bc-sparkles i:nth-child(4n){background:#9BE7FF}
+@keyframes spTwinkle{0%,100%{opacity:0;transform:rotate(45deg) scale(.4)}45%{opacity:1;transform:rotate(45deg) scale(1.15)}}
+.bigceleb.boss{background:radial-gradient(circle at 50% 42%, #5B2A2A 0%, #2C1717 60%, #140B0B 100%)}
+.bigceleb.hatch{background:radial-gradient(circle at 50% 42%, #4A3A12 0%, #2A2210 58%, #141009 100%)}
+@media (prefers-reduced-motion: reduce){
+  .bc-fw i,.bc-sparkles i{animation:none !important;opacity:.5}
+  .bc-card,.bc-em{animation:none !important}
+}
+
+/* ⑪ 📈 성장 그래프 */
+.growthcard{padding-bottom:10px}
+.gbars{display:flex;align-items:flex-end;gap:4px;height:72px;margin-top:4px}
+.gbars.small{height:56px}
+.gcol{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.gbar{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center;gap:2px}
+.gbar i,.gbar b{display:block;width:6px;min-height:2px;border-radius:3px;background:#CBD5E1;transition:height .3s ease}
+.gbar b{background:#2FD3A6}
+.gcol.today .gbar i{background:var(--navy)}
+.gcol.today .gd{color:var(--navy);font-weight:900}
+.gd{font-size:9.5px;font-weight:800;color:#A79C90}
+.glegend,.rc-glegend{display:flex;gap:12px;margin-top:8px;font-size:10.5px;font-weight:800;color:#8C8175}
+.glegend i,.rc-glegend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:0}
+.lg-solved,.rc-glegend .lg-solved{background:var(--navy)}
+.lg-fix,.rc-glegend .lg-fix{background:#2FD3A6}
+
+/* ⑫ 🗺️ 학습맵 */
+.mapcard{margin-bottom:10px}
+.maprow{display:flex;align-items:center;gap:8px;padding:6px 0}
+.maprow .mn{flex:0 0 46%;font-size:12px;font-weight:900;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.maprow .mn small{font-size:10px;font-weight:700;color:#9A8E82;margin-left:3px}
+.maprow .mbar{flex:1;height:7px;border-radius:99px;background:#EFE7DE;overflow:hidden}
+.maprow .mbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#7C6CF0,#5AB8F0);transition:width .3s ease}
+.maprow.done .mbar i{background:linear-gradient(90deg,#48E2B9,#12A57F)}
+.maprow .mv{flex:0 0 auto;font-size:10.5px;font-weight:900;color:#7A6F63;min-width:34px;text-align:right}
+
+/* ⑬ 보스 스토리 한 줄 */
+.bossstory{display:flex;align-items:center;gap:6px;width:100%;margin-top:8px;padding:9px 10px;border-radius:11px;
+  border:1px dashed #E3D6C5;background:rgba(255,255,255,.55);font-family:var(--font);font-size:11.5px;font-weight:800;
+  color:#6B5B47;cursor:pointer;text-align:left}
+.bossstory .chev{margin-left:auto;color:#B3A79A}
+
+/* ⑭ 보스 스토리 시트 */
+.chapters{display:flex;flex-direction:column;gap:8px}
+.chap{display:flex;gap:9px;align-items:flex-start;background:#FFFDF8;border:1px solid #F1E7D8;border-radius:13px;padding:10px 11px}
+.chap .ch-no{flex:0 0 20px;height:20px;border-radius:50%;background:#F3E7D2;color:#8A6A2E;font-size:10.5px;font-weight:900;display:grid;place-items:center}
+.chap .ch-em{font-size:20px;line-height:1.1}
+.chap b{display:block;font-size:12.5px;color:var(--navy)}
+.chap small{display:block;font-size:11px;font-weight:700;color:#8C8175;margin-top:2px;line-height:1.5}
+
+/* ⑮ 어머님 리포트 — 한 줄 요약·비율 */
+.rc-summary{background:#F5F7FA;border-radius:10px;padding:11px 12px;font-size:12.5px;font-weight:800;color:#1E293B;line-height:1.5}
+.rc-unit-v em{font-style:normal;font-weight:900;color:#C53030;margin-left:2px}
+.rc-sec .gbars{height:62px}
+
+/* ⑯ 모바일 버튼·여백 통일 (iOS/Android) */
+.btn{min-height:44px}
+.btn-sm{min-height:38px;padding:9px 12px}
+.btn-lg{min-height:54px}
+.icon-btn{min-width:44px;min-height:44px}
+.linkbtn,.linkbtn2{min-height:32px}
+.tbtn{min-height:36px;padding:8px 10px;font-size:12px}
+.setrow{min-height:52px}
+.pad{padding:0 16px}
+.card{margin:0 16px 10px}
+.sect-t{padding:12px 16px 6px}
+.hint{line-height:1.5}
+@media (max-width:380px){
+  .ox-label{font-size:19px}
+  .ffrow .btn{font-size:14px}
+  .bc-t{font-size:22px}
+}
+.weakcard{margin:13px 16px 10px}

@@ -1,4 +1,12 @@
-/* 저장소 v1.0 — 로컬(브라우저) 모드와 시트 API 모드를 같은 인터페이스로 씁니다.
+/* 저장소 v1.1 — 로컬(브라우저) 모드와 시트 API 모드를 같은 인터페이스로 씁니다.
+
+   ★ v1.1 4단계에서 더한 것 ★
+     ① 쪽수표 자동 갱신 — window.EMA_PAGE_MAPS.version 이 다르면 학생 기록은 그대로 두고 pageMaps만 교체
+        (예전엔 st.pageMaps = st.pageMaps || … 라서 옛 55쪽 예시 표가 영원히 남았습니다)
+     ② 숙제 범위 모드 [전체 / 유제만(-1) / 홀수 / 짓수] — 선생님 화면·시트 파서 모두 `19~22 (유제만)` 표기 지원
+     ③ 🔥 오늘의 열정 학생 — 숙제 완료·밀린문제 3개 해결 시 선생님께 알림
+     ④ ✅ 책으로 완료 (밀린문제 제외) — 앱 오류 때 선생님이 한 번에 완료 처리
+     ⑤ 어머님 리포트 규칙 — 이번 주 최근 2회 · 이번 달 1줄 요약 · 이번 학기 목록 제외 · 오답 비율(%)
 
    ★ v1.0 3단계에서 더한 것 ★
      ① 하루 3문제 미션(+10) · 연속 🔥 · 주간 목표(주 5일, +30) · 복귀 보상(+15)
@@ -45,18 +53,39 @@ window.EMA = window.EMA || {};
   const KEY = 'ema.state.v5';           // 저장 칸 이름은 v0.8 그대로 — 기록을 옮기지 않아도 됩니다
   const DEMO_KEY = 'ema.state.demo.v5';       // 연습(?mode=demo)은 실제 운영 데이터와 다른 칸에 쌓입니다
   const LEGACY_KEYS = ['ema.state.v4', 'ema.state.v3'];
-  const SCHEMA = 7;                     // 구조 버전 7 — v1.0 3단계: 미션·주간목표·펫 경험치·수업에서 푼 문제(excl)
+  const SCHEMA = 8;                     // 구조 버전 8 — v1.1 4단계: 열정 알림(effort)·책으로 완료(bookDone)·쪽수표 자동 갱신
+  const PAGE_MAPS_BACKUP = '.pageMaps.old';   // 쪽수표를 갈아 끼우기 전 옛 표를 백업해 두는 칸
   const SESSION = 'ema.session.v2';
   const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
+  /** 숙제 범위 모드 — '' (전체) · 'yooh' (유제만/-1) · 'odd' (홀수) · 'even' (짝수) */
+  const HW_MODES = ['', 'yooh', 'odd', 'even'];
+  const HW_MODE_LABEL = { '': '전체', yooh: '유제만', odd: '홀수', even: '짝수' };
+  const HW_MODE_SUFFIX = { '': '', yooh: ' (유제만)', odd: ' (홀수만)', even: ' (짝수만)' };
+  /** 글 안에 적힌 모드 표기 — `(유제만)`, `[홀수]`, `(유제만 -1)`, `유제만` */
+  function modeOfText(text) {
+    const t = String(text || '');
+    const paren = t.match(/[(\[]([^)\]]*)[)\]]/g) || [];
+    for (let i = 0; i < paren.length; i++) {
+      const inner = paren[i];
+      if (/유제/.test(inner) || /-\s*1/.test(inner)) return 'yooh';
+      if (/홀수/.test(inner)) return 'odd';
+      if (/짝수/.test(inner)) return 'even';
+    }
+    if (/유제만/.test(t)) return 'yooh';
+    if (/홀수만?/.test(t)) return 'odd';
+    if (/짝수만?/.test(t)) return 'even';
+    return '';
+  }
   /** 쪽수 입력 파서 — '8~10쪽', '8 ∼ 10', '8,9,10', '8-10쪽' 모두 받습니다
-      ★ v1.0: 전각 쉼표(，、；)도 보통 쉼표로 바꿔 '2，4，5，6'을 개별 숫자로 읽습니다 */
+      ★ v1.0: 전각 쉼표(，、；)도 보통 쉼표로 바꿔 '2，4，5，6'을 개별 숫자로 읽습니다
+      ★ v1.1: 괄호 안 모드 표기 `(유제만)`·`(홀수만)`·`(유제만 -1)`은 쪽수로 읽지 않습니다 */
   function parsePages(raw) {
     const out = [];
     const push = n => { const v = parseInt(n, 10); if (v > 0 && v < 1000 && out.indexOf(v) < 0) out.push(v); };
     /* ★ 교재명에 들어 있는 숫자('6-1 발전책')가 쪽수로 읽히지 않게 교재명을 먼저 지웁니다 */
     const stripBooks = t => {
-      let s = String(t || '');
+      let s = String(t || '').replace(/[(\[][^)\]]*[)\]]/g, ' ');   // 괄호 안은 모드 표기
       try {
         const books = Object.keys((window.EMA_PAGE_MAPS || {}).교재 || {});
         books.forEach(b => { s = s.split(b).join(' '); });
@@ -99,7 +128,23 @@ window.EMA = window.EMA || {};
     return out;
   }
 
-  EMA.util = { todayISO, nowHHMM, DOW, pad, shiftISO, parsePages, parseProblemNos };
+  /** '6-1 발전책 19~22쪽 (유제만)' → { pages:[19,20,21,22], mode:'yooh' } */
+  function parsePagesMode(raw) {
+    return { pages: parsePages(raw), mode: modeOfText(raw) };
+  }
+  /** 숙제 타일에서 모드를 적용 — 대표번호(1,2,3…)를 뺀 '유제만', 홀수·짝수 번호만 */
+  function modeFilter(t, mode) {
+    if (!mode || HW_MODES.indexOf(mode) < 0) return true;
+    if (!t || t.missing) return true;            // 표에 없는 쪽(?)은 숨기지 않고 그대로 알립니다
+    const num = String(t.num == null ? t.label : t.num).trim();
+    if (mode === 'yooh') return !/^\d+$/.test(num);   // 1-1·2-0·확인1 … (대표번호만 제외)
+    const m = num.match(/\d+/);
+    if (!m) return false;
+    const n = parseInt(m[0], 10);
+    return mode === 'odd' ? n % 2 === 1 : n % 2 === 0;
+  }
+
+  EMA.util = { todayISO, nowHHMM, DOW, pad, shiftISO, parsePages, parseProblemNos, parsePagesMode, modeOfText, modeFilter, HW_MODES, HW_MODE_LABEL, HW_MODE_SUFFIX };
 
   const CAP_XP = 200;       // 일일 XP 상한 (몰아치기 방지)
   const FLAME_MIN = 3;      // 불꽃 인정 최소 문제 수
@@ -209,8 +254,9 @@ window.EMA = window.EMA || {};
       Object.keys(b.단원).forEach(u => { if (b.단원[u].쪽[String(page)]) hit = b.단원[u].쪽[String(page)]; });
       return hit;
     }
-    /** 교재 + 쪽수 → 문제 타일 목록 (키에 교재 포함 · 단원명까지 붙임) */
-    tilesOf(bookName, pages) {
+    /** 교재 + 쪽수 → 문제 타일 목록 (키에 교재 포함 · 단원명까지 붙임)
+        mode: '' | 'yooh' | 'odd' | 'even' — 선생님이 고른 숙제 범위 모드 */
+    tilesOf(bookName, pages, mode) {
       const out = [];
       const b = this.book(bookName);
       const unitOf = (p) => {
@@ -233,7 +279,7 @@ window.EMA = window.EMA || {};
           key: tileKey(bookName, p, i), label: num, page: p, num, book: bookName, type: info.유형, unitName: unitOf(p)
         }));
       });
-      return out;
+      return mode ? out.filter(t => modeFilter(t, mode)) : out;
     }
     /** 문제가 하나도 없는 쪽(개념 설명만 있는 쪽) — 숙제 범위에 들어와도 자동으로 빠집니다 */
     conceptPages(bookName) {
@@ -257,12 +303,13 @@ window.EMA = window.EMA || {};
     }
     lesson(classId) { return (this.state.lessons || {})[classId] || null; }
 
-    /** 오늘 숙제의 교재 목록 — 진도북+셀프북 2권 동시 지원 */
+    /** 오늘 숙제의 교재 목록 — 진도북+셀프북 2권 동시 지원 (mode: 전체/유제만/홀수/짝수) */
     books(classId) {
       const l = this.lesson(classId);
       if (!l) return [];
-      if (l.books && l.books.length) return l.books;
-      if (l.book) return [{ book: l.book, pages: l.pages || [] }];
+      const norm = b => Object.assign({}, b, { mode: HW_MODES.indexOf(b.mode) > 0 ? b.mode : '' });
+      if (l.books && l.books.length) return l.books.map(norm);
+      if (l.book) return [norm({ book: l.book, pages: l.pages || [] })];
       return [];
     }
     /* ---------- 반·학생 (v0.9: 퇴원 보관 · 반 이동) ---------- */
@@ -372,10 +419,10 @@ window.EMA = window.EMA || {};
       const bs = this.books(classId);
       if (bookName) {
         const one = bs.find(b => b.book === bookName);
-        return one ? this.tilesOf(one.book, one.pages) : [];
+        return one ? this.tilesOf(one.book, one.pages, one.mode) : [];
       }
       const out = [];
-      bs.forEach(b => { this.tilesOf(b.book, b.pages).forEach(t => out.push(t)); });
+      bs.forEach(b => { this.tilesOf(b.book, b.pages, b.mode).forEach(t => out.push(t)); });
       return out;
     }
     /** 개별 오답프린트 타일 1~N번 — 제출 완료 전에는 자정이 지나도 이어집니다 */
@@ -529,7 +576,7 @@ window.EMA = window.EMA || {};
     printCounts(classId, sid) {
       return this._count(this.printTiles(classId, sid), this.gradeOf(classId, sid, 'print'));
     }
-    /** 오늘 숙제(또는 프린트)에서 '⭐ 질문'으로 고른 문제 수 — 최대 7개 */
+    /** 오늘 숙제(또는 프린트)에서 '⭐ 질문'으로 고른 문제 수 — 최대 5개 */
     starCount(classId, sid, kind) {
       const g = this.gradeOf(classId, sid, kind);
       return Object.keys(g.cleanup || {}).filter(k => g.cleanup[k] === 'star').length;
@@ -724,12 +771,13 @@ window.EMA = window.EMA || {};
       const g = this.gradeOf(classId, sid, kind);
       return (g.excl || {})[key] || '';
     }
-    /** ✨ 나머지 전부 ⭕ — 아직 안 누른 칸만 ⭕로 (❌ 틀린 문제는 그대로) */
+    /** ✨ 나머지 전부 ⭕ — 아직 안 누른 칸만 ⭕로 (❌ 틀린 문제는 그대로)
+        반환: { n, keys } — keys는 방금 채운 문제라 [↩️ 되돌리기]로 바로 되돌릴 수 있습니다 */
     fillRestCorrect(classId, sid, kind, bookName, keys) {
       const g = this.gradeRow(classId, sid, kind);
       const tiles = kind === 'print' ? this.printTiles(classId, sid) : this.tiles(classId, bookName || null);
       const set = keys && keys.length ? new Set(keys) : null;
-      let n = 0;
+      const filled = [];
       tiles.forEach(t => {
         if (t.missing) return;
         if (set && !set.has(t.key)) return;
@@ -737,14 +785,24 @@ window.EMA = window.EMA || {};
         if ((g.excl || {})[t.key]) return;
         g.marks[t.key] = 'o';
         delete g.cleanup[t.key];
-        n++;
+        filled.push(t.key);
       });
-      if (n) {
-        this._touchActivity(classId, sid, n);
-        this.addPetXp(classId, sid, n);
+      if (filled.length) {
+        this._touchActivity(classId, sid, filled.length);
+        this.addPetXp(classId, sid, filled.length);
       }
       g.updatedAt = nowHHMM();
       this.save();
+      return { n: filled.length, keys: filled };
+    }
+    /** [↩️ 방금 채운 거 되돌리기] — fillRestCorrect 가 채운 칸만 지웁니다 (직접 누른 ⭕/❌는 그대로) */
+    undoFill(classId, sid, keys, kind) {
+      const g = this.gradeRow(classId, sid, kind);
+      let n = 0;
+      (keys || []).forEach(k => {
+        if (g.marks[k] === 'o') { delete g.marks[k]; delete g.tags[k]; n++; }
+      });
+      if (n) { g.updatedAt = nowHHMM(); this.save(); }
       return n;
     }
 
@@ -909,11 +967,16 @@ window.EMA = window.EMA || {};
       const fixed = rows.reduce((a, r) => a + r.c3 + r.p3, 0);
       const power = rows.reduce((a, r) => a + (this.companionPower(classId, r.student.id) || 0), 0);
       const petDmg = Math.min(0.15, power * 0.01);          // 동료 1 = 보스 HP 1%p
-      const dmg = (stamped / total) * 0.8 + Math.min(0.2, (fixed / (total * 3)) * 0.2) + petDmg;
-      const hp = Math.max(0, Math.round((1 - dmg) * 100 - this.bossBoost(classId)));
+      /* ★ v1.1 — 보스 최대 체력이 반 인원에 비례해 저절로 조절됩니다.
+         1명 60% · 2명 70% · 3명 80% · 4명 90% · 5명 이상 100%.
+         1~2명 반은 도장 한 번에 100% 데미지라 혼자서도 주간 보스를 격파할 수 있어요. */
+      const hpMax = Math.min(100, 50 + total * 10);
+      const stampW = total <= 2 ? 1 : 0.8;
+      const dmg = (stamped / total) * stampW + Math.min(0.2, (fixed / (total * 3)) * 0.2) + petDmg;
+      const hp = Math.max(0, Math.round(hpMax * (1 - dmg) - this.bossBoost(classId)));
       const killed = hp <= 0;
       return {
-        total, stamped, submitted, fixed, power, petDmg: Math.round(petDmg * 100),
+        total, stamped, submitted, fixed, power, petDmg: Math.round(petDmg * 100), hpMax, stampW,
         hp, left: total - stamped, def: this.bossDef(classId), killed,
         myShare: 0
       };
@@ -924,10 +987,12 @@ window.EMA = window.EMA || {};
       const st = this.stats(classId, sid);
       const p = this.printStats(classId, sid);
       const row = this.submission(classId, sid);
-      const stampPt = (row && row.stampAt) ? 0.8 / total : 0;
+      const hpMax = Math.min(100, 50 + total * 10);
+      const stampW = total <= 2 ? 1 : 0.8;
+      const stampPt = (row && row.stampAt) ? stampW / total : 0;
       const fixedPt = Math.min(0.2, ((st.c3 + p.c3) / (total * 3)) * 0.2);
       const compPt = this.companionPower(classId, sid) * 0.01;   // 동료 1 = 1%p
-      return Math.round((stampPt + fixedPt + compPt) * 100 * 10) / 10;
+      return Math.round((stampPt + fixedPt + compPt) * hpMax * 10) / 10;
     }
     myBombShare(classId, sid) {
       const st = this.student(classId, sid);
@@ -1432,6 +1497,7 @@ window.EMA = window.EMA || {};
        기간 안의 채점 기록·제출 기록·단원평가만 모아 정리합니다.
        → 학습 성실도 / 풀이·오답 해결 / 오답 원인 3비율 / 취약 단원 / 단원평가 */
     parentReport(classId, sid, range) {
+      const self = this;
       const today = this.state.today;
       const days = range === 'week' ? 7 : range === 'month' ? 30 : 120;
       const from = shiftISO(today, -(days - 1));
@@ -1544,42 +1610,78 @@ window.EMA = window.EMA || {};
         pct: tagTotal ? Math.round((tagCounts[d.id] || 0) / tagTotal * 100) : 0
       }));
 
-      /* ⑥ 취약 단원 · 단원평가 */
+      /* ⑥ 취약 단원 · 단원평가 — 오답 수와 함께 전체 오답 대비 비율(%)도 같이 적습니다 */
+      const unitBase = Object.keys(unitMap).reduce((a, k) => a + (unitMap[k].wrong || 0), 0);
       const units = Object.keys(unitMap)
-        .map(name => unitMap[name])
+        .map(name => {
+          const u = unitMap[name];
+          return Object.assign({}, u, { pct: unitBase ? Math.round(u.wrong / unitBase * 100) : 0 });
+        })
         .sort((a, b) => (b.wrong - a.wrong) || (b.fixed - a.fixed))
         .slice(0, 3);
       const exams = this.exam(classId, sid).filter(e => e.score != null && e.date >= from);
       const avgExam = exams.length ? Math.round(exams.reduce((a, e) => a + (e.score || 0), 0) / exams.length) : null;
 
-      /* ⑦ 이번 주 일자별 진도·숙제 + 개별 오답프린트 */
+      /* ⑦ 진도·숙제 — 이번 주 = 최근 2회분 / 이번 달 = 단원명+쪽수 1줄 요약 / 이번 학기 = 목록 없음 */
       const dayMap = Object.assign({}, ((this.state.dayLessons || {})[classId] || {}));
       const todayLesson = this.lesson(classId);
       if (todayLesson && todayLesson.date) {
         dayMap[todayLesson.date] = Object.assign({}, dayMap[todayLesson.date], todayLesson);
       }
       const cleanLine = t => String(t || '').replace(/\s+/g, ' ').trim();
-      const dayList = Object.keys(dayMap)
+      const allDays = Object.keys(dayMap)
         .filter(d => inRange(d))
         .sort()
         .reverse()
-        .slice(0, range === 'week' ? 7 : 5)
         .map(d => {
           const L = dayMap[d] || {};
           const books = (L.books || []).map(b => (b.book || '') + (b.pages && b.pages.length ? ' ' + pageSpan(b.pages) + '쪽' : '')).filter(Boolean);
           return {
             date: d, dow: dowName(d), label: shortLabel(d),
             lesson: cleanLine(L.lesson) || '',
-            homework: cleanLine(L.homework) || (books.length ? books.join(', ') : '')
+            homework: cleanLine(L.homework) || (books.length ? books.join(', ') : ''),
+            books: L.books || []
           };
         })
         .filter(d => d.lesson || d.homework);
+      const dayList = range === 'week' ? allDays.slice(0, 2) : [];     // 이번 주 = 최근 2회분까지만
+      /* 이번 달 — 단원명 + 전체 쪽수 한 줄 */
+      let monthSummary = null;
+      if (range === 'month') {
+        const names = [], pageSet = {};
+        let pages = 0;
+        allDays.forEach(d => {
+          (d.books || []).forEach(b => {
+            (b.pages || []).forEach(p => {
+              keySeen(b.book, p);
+            });
+          });
+          if (!(d.books || []).length && /단원|쪽/.test(d.lesson || '')) names.push(cleanLine(d.lesson));
+        });
+        function keySeen(book, p) {
+          const id = book + '|' + p;
+          if (pageSet[id]) return;
+          pageSet[id] = true; pages++;
+          let u = '';
+          try { u = self.unitNameOf(book, p) || ''; } catch (e) { u = ''; }
+          if (u && names.indexOf(u) < 0) names.push(u);
+        }
+        if (names.length || pages) {
+          const shown = names.slice(0, 3);
+          monthSummary = {
+            units: names, pages,
+            text: (shown.join(' · ') || '진도 기록 없음') + (names.length > 3 ? ' 외 ' + (names.length - 3) + '단원' : '') + (pages ? ' · 전체 ' + pages + '쪽' : '')
+          };
+        }
+      }
+
+      /* 개별 오답프린트 — 이번 주는 최근 2회분까지만 */
       const printList = Object.keys(this.state.prints || {})
         .map(k => { const p = String(k).split('|'); return { p, v: (this.state.prints || {})[k] || {} }; })
         .filter(x => x.p[0] === classId && x.p[2] === sid && inRange(x.p[1]) && (x.v.count || 0) > 0)
         .map(x => ({ date: x.p[1], label: shortLabel(x.p[1]), md: (+x.p[1].slice(5, 7)) + '.' + x.p[1].slice(8, 10), count: x.v.count }))
         .sort((a, b) => (a.date < b.date ? 1 : -1))
-        .slice(0, range === 'week' ? 7 : 3);
+        .slice(0, range === 'week' ? 2 : 3);
 
       return {
         range,
@@ -1590,7 +1692,8 @@ window.EMA = window.EMA || {};
         fixRate: wrong ? Math.round(fixed / wrong * 100) : 0,
         units, tags, tagTotal,
         exams, avgExam,
-        dayList, printList,
+        dayList, printList, monthSummary,
+        growth: this.growth(classId, sid, 7),
         activeDays: histActive + Object.keys(gradedDates).length
       };
     }
@@ -1616,30 +1719,35 @@ window.EMA = window.EMA || {};
       if (r.wrong) {
         lines.push(`· 틀린 문제 ${r.wrong}개 중 ${r.fixed}개 다시 풀어 해결 (${r.fixRate}%)`);
         if (r.wrong - r.fixed > 0) lines.push(`· 아직 남은 오답 ${r.wrong - r.fixed}개`);
+        else lines.push('· 남은 오답 없이 전부 다시 풀었습니다 👏');
       } else {
-        lines.push('· 이번 기간 오답이 없습니다.');
+        lines.push('· 틀린 문제 없이 완벽하게 해결했습니다! (오답 0개 👏)');
       }
       lines.push('');
       lines.push('■ 취약 단원');
       if (r.units.length) {
-        r.units.slice(0, 2).forEach(u => lines.push(`· ${u.name} - 오답 ${u.wrong}개${u.fixed ? ` (${u.fixed}개 해결)` : ''}`));
+        r.units.slice(0, 2).forEach(u => lines.push(`· ${u.name} · 오답 ${u.wrong}개 (${u.pct || 0}%)${u.fixed ? ` · ${u.fixed}개 해결` : ''}`));
       } else {
-        lines.push('· 이번 기간에 오답 기록이 없습니다.');
+        lines.push('· 이번 기간에는 다시 볼 단원이 없습니다 👍');
       }
-      lines.push('');
-      lines.push('■ 추가 안내');
+      /* 추가 안내 — 전할 내용이 없으면 어색한 문구를 넣지 않고 그 묶음 자체를 빼 둡니다 */
+      const extra = [];
       if (r.exams.length && r.avgExam != null) {
-        lines.push(`· 단원평가 평균 ${r.avgExam}점 (${r.exams.length}회 응시)`);
+        extra.push(`· 단원평가 평균 ${r.avgExam}점 (${r.exams.length}회 응시)`);
         const low = r.exams.filter(e => e.score != null && e.score < 80).slice(-1)[0];
-        if (low) lines.push(`· ${low.unit.replace(' 평가', '')} ${low.score}점 - 해당 단원 복습을 부탁드려요`);
+        if (low) extra.push(`· ${low.unit.replace(' 평가', '')} ${low.score}점 - 해당 단원 복습을 부탁드려요`);
       } else if (r.wrong > 0 && r.tagTotal > 0) {
-        lines.push(`· 오답 원인은 계산 실수 ${pct('calc')}% · 문제 잘못 읽음 ${pct('read')}% · 개념 보완 ${pct('concept')}% 순이에요`);
-      } else {
-        lines.push('· 특별히 전할 내용이 없습니다.');
+        extra.push(`· 오답 원인은 계산 실수 ${pct('calc')}% · 문제 잘못 읽음 ${pct('read')}% · 개념 보완 ${pct('concept')}% 순이에요`);
+      }
+      if (extra.length) {
+        lines.push('');
+        lines.push('■ 추가 안내');
+        extra.forEach(x => lines.push(x));
       }
       lines.push('');
-      lines.push('자세한 문제별 기록은 보내 드린 성적표 이미지에서 확인하실 수 있어요.');
-      lines.push('가정에서도 꾸준한 복습을 응원해 주시면 좋겠습니다. 감사합니다.');
+      if (r.wrong === 0) lines.push('다음 단원도 이 기세로 즐겁게 풀어 보자고 응원해 주세요.');
+      else lines.push('가정에서도 꾸준한 복습을 응원해 주시면 좋겠습니다.');
+      lines.push(`문제별 기록은 함께 보내 드린 ${r.label} 성취도 리포트 이미지에서 자세히 보실 수 있어요. 감사합니다.`);
       return lines.join('\n');
     }
   }
@@ -1671,7 +1779,23 @@ window.EMA = window.EMA || {};
       st.lessons = st.lessons || {};
       st.dayLessons = st.dayLessons || {};
       st.exams = st.exams || {};
-      st.pageMaps = st.pageMaps || window.EMA_PAGE_MAPS || { 교재: {} };
+      /* ★ v1.1 쪽수표 자동 갱신 — 예전엔 `st.pageMaps = st.pageMaps || …` 라서
+         localStorage에 옛 예시 표(v0.9 55쪽)가 한 번 들어가면 새 책(226쪽)이 영원히 반영되지 않았습니다.
+         version이 다르면 학생 기록(xp·coins·pets·logs·prints·backlog·streak …)은 그대로 두고 pageMaps만 교체합니다. */
+      const pm = window.EMA_PAGE_MAPS;
+      if (pm && pm.교재 && Object.keys(pm.교재).length) {
+        const mine = st.pageMaps && st.pageMaps.version;
+        if (!st.pageMaps || !st.pageMaps.교재 || !Object.keys(st.pageMaps.교재).length) {
+          st.pageMaps = pm;
+        } else if (String(mine || '') !== String(pm.version || '')) {
+          this._write(this.key + PAGE_MAPS_BACKUP, st.pageMaps);   // 옛 표는 백업 (되돌릴 수 있게)
+          st.pageMaps = pm;
+          st.meta = Object.assign({}, st.meta, { pageMapsAt: new Date().toISOString(), pageMapsFrom: String(mine || '') });
+          console.info('쪽수표 자동 갱신:', mine || '(없음)', '→', pm.version);
+        }
+      } else {
+        st.pageMaps = st.pageMaps || { 교재: {} };
+      }
       st.grades = st.grades || {};
       st.submissions = st.submissions || {};
       st.history = st.history || {};
@@ -1686,6 +1810,7 @@ window.EMA = window.EMA || {};
       st.missions = st.missions || {};          // v1.0 — 날짜별 미션 완료 기록
       st.weekBonus = st.weekBonus || {};        // v1.0 — 주간 목표 보너스 지급 기록
       st.petXp = st.petXp || {};                // v1.0 — 펫 경험치 하루 상한 기록
+      st.effort = st.effort || {};              // v1.1 — 🔥 오늘의 열정 학생 알림 (날짜|학생 → {at, reason})
       if (!st.shop) st.shop = { rewardsOn: true, claims: [] };
       if (!st.gallery) st.gallery = { mode: 'auto' };
       if (!st.bossBoosts) st.bossBoosts = {};
@@ -2172,6 +2297,7 @@ window.EMA = window.EMA || {};
       });
       const killed = this.checkBossKill(classId);
       this.save();
+      if (!already) this.markEffort(classId, sid, 'homework');   // 🔥 선생님께 '오늘 열심히 했어요!' 알림
       return Object.assign({}, rw, {
         sub, titles, killed, carried, already,
         coins: already ? 0 : rw.coins, photoId: sub.photoId, photoError: !put.ok
@@ -2462,9 +2588,20 @@ window.EMA = window.EMA || {};
       if ((s.coins || 0) < 20) return { error: '코인이 20개 필요해요 (간식 1개)' };
       if ((p.lv || 1) >= 3) return { error: p.name + '는 이미 최고로 자랐어요 ⭐⭐⭐' };
       s.coins -= 20;
-      p.lv = (p.lv || 1) + 1;
+      const before = p.lv || 1;
+      p.lv = before + 1;
+      p.xp = Math.max(Number(p.xp || 0), p.lv === 2 ? PET_XP.need2 : PET_XP.need3);
+      let title = null;
+      if (p.lv >= 3) {
+        s.titles = s.titles || [];
+        if (!s.titles.find(t => t.id === 'grown_' + p.id)) {
+          title = { id: 'grown_' + p.id, name: p.name + ' 대장', em: '👑' };
+          s.titles.push(Object.assign({ at: this.state.today }, title));
+        }
+      }
       this.save();
-      return { ok: true, pet: p, msg: `${p.name} ⭐${p.lv}로 성장! 공격력 +1` };
+      /* stageUp: 간식으로 한 단계 자랖을 때 앱이 전체 화면 축하를 보여 줍니다 */
+      return { ok: true, pet: p, stageUp: true, title, msg: `${p.name} ⭐${p.lv}로 성장! 공격력 +1` };
     }
 
     /* ---------- 개별 오답프린트 ---------- */
@@ -2528,7 +2665,9 @@ window.EMA = window.EMA || {};
       }
       const killed = this.checkBossKill(classId);
       this.save();
-      return { item, coins, xp, killed, join, skip: isSkip, count: n, capped: !isSkip && n > 5 };
+      /* 🔥 오늘의 열정 학생 — 숙제 완료 또는 밀린문제 3개 이상 해결 */
+      const effort = !isSkip && n === 3 ? this.markEffort(classId, sid, 'carry3') : null;
+      return { item, coins, xp, killed, join, skip: isSkip, count: n, capped: !isSkip && n > 5, effort };
     }
     /** ❌ 틀렸어요 — 이유를 골라 두고 목록에는 그대로 남깁니다(다시 도전) */
     retryCarried(classId, sid, id, tag) {
@@ -2540,6 +2679,98 @@ window.EMA = window.EMA || {};
       item.lastTry = this.state.today;
       this.save();
       return item;
+    }
+
+    /* =========================================================
+       v1.1 4단계 — 🔥 오늘의 열정 학생 · ✅ 책으로 완료 · 성장 그래프
+    ========================================================= */
+    /** 🔥 오늘의 열정 학생 알림 — 숙제 완료 / 밀린문제 3개 이상 해결 / 선생님 책으로 완료
+        reason: homework | carry3 | book */
+    markEffort(classId, sid, reason) {
+      const s = this.student(classId, sid);
+      if (!s) return null;
+      const day = this.state.today;
+      const key = day + '|' + sid;
+      const E = this.state.effort = this.state.effort || {};
+      const cur = E[key] || { at: nowHHMM(), reason: reason || 'homework', count: 0 };
+      cur.at = nowHHMM();
+      cur.count = (cur.count || 0) + 1;
+      cur.reason = reason || cur.reason || 'homework';
+      cur.label = s.nickname || s.name;
+      E[key] = cur;
+      this.save();
+      return cur;
+    }
+    /** 선생님 대시보드 상단 — 오늘 열정을 보인 학생 (최근 순) */
+    effortToday(classId) {
+      const day = this.state.today;
+      const E = this.state.effort || {};
+      const out = [];
+      this.activeStudents(classId).forEach(s => {
+        const row = E[day + '|' + s.id];
+        if (row) out.push({ student: s, at: row.at || '', reason: row.reason || 'homework', count: row.count || 1 });
+      });
+      return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+    }
+    /** 오늘 열정 알림 기록 지우기 (선생님이 확인한 뒤) */
+    clearEffort(classId, sid) {
+      const day = this.state.today;
+      const E = this.state.effort || {};
+      if (sid) delete E[day + '|' + sid];
+      else Object.keys(E).forEach(k => { if (k.indexOf(day + '|') === 0) delete E[k]; });
+      this.save();
+      return true;
+    }
+    /** ✅ 책으로 완료 (밀린문제 제외) — 앱 오류·사진 문제로 제출이 막혔을 때 선생님이 한 번에 완료 처리
+        오늘 숙제는 '도장'으로 마무리하고, 아직 안 누른 문제는 새로 밀린문제로 넘기지 않습니다. */
+    markBookDone(classId, sid, kind) {
+      const k2 = kind === 'print' ? 'print' : 'hw';
+      const date = k2 === 'print' ? this.state.today : this.hwDate(classId);
+      const key = SK(classId, date, sid, k2);
+      const S = this.state.submissions = this.state.submissions || {};
+      const sub = S[key] || (S[key] = { coins: 0, xp: 0, rewarded: false });
+      const already = !!(sub.stampAt || sub.status === 'stamped');
+      sub.at = sub.at || nowHHMM();
+      sub.status = 'stamped';
+      sub.stampAt = sub.stampAt || nowHHMM();
+      sub.bookDone = true;
+      sub.bookDoneAt = nowHHMM();
+      sub.note = '책으로 완료 (선생님 확인)';
+      const s = this.student(classId, sid);
+      if (s) this.markEffort(classId, sid, 'book');
+      this.save();
+      return { ok: true, already, sub };
+    }
+    /** 📈 성장 그래프 — 최근 N일 학습량·오답 해결 수 (내 도감·리포트용) */
+    growth(classId, sid, days) {
+      const n = Math.max(3, Math.min(14, days || 7));
+      const today = this.state.today;
+      const hist = (this.state.history || {})[sid] || [];
+      const act = (this.state.activity || {})[sid] || {};
+      const fixedBy = {};
+      ((this.state.solvedCarried || {})[sid] || []).forEach(m => {
+        if (!m || m.skip) return;
+        const d = m.solvedAt || m.date;
+        if (d) fixedBy[d] = (fixedBy[d] || 0) + 1;
+      });
+      Object.keys(this.state.grades || {}).forEach(k => {
+        const p = String(k).split('|');
+        if (p[0] !== classId || p[2] !== sid) return;
+        const row = this.state.grades[k] || {};
+        const nf = Object.keys(row.cleanup || {}).filter(x => row.cleanup[x] === 'fixed').length;
+        if (nf) fixedBy[p[1]] = (fixedBy[p[1]] || 0) + nf;
+      });
+      const out = [];
+      for (let i = n - 1; i >= 0; i--) {
+        const date = shiftISO(today, -i);
+        const h = hist.find(x => x && x.date === date);
+        const solved = Math.max(Number((h && h.solved) || 0), Number(act[date] || 0));
+        out.push({
+          date, dow: DOW[new Date(date + 'T12:00:00').getDay()],
+          day: +date.slice(8, 10), solved, fixed: fixedBy[date] || 0, today: date === today
+        });
+      }
+      return out;
     }
 
     /* ---------- 선생님 설정 ---------- */
@@ -2661,7 +2892,15 @@ window.EMA = window.EMA || {};
     async clearExcl(c, s, kind, onlyReason) { await this.call('exclClear', { classId: c, studentId: s, kind, only: onlyReason || '' }); return true; }
     async fillRestCorrect(c, s, kind, bookName, keys) {
       const r = await this.call('fillRest', { classId: c, studentId: s, kind, keys: keys || [] });
+      return { n: r.count || 0, keys: (r.filled || keys || []) };
+    }
+    async undoFill(c, s, keys, kind) {
+      const r = await this.call('undoFill', { classId: c, studentId: s, kind, keys: keys || [] });
       return r.count || 0;
+    }
+    async markBookDone(c, s, kind) {
+      const r = await this.call('bookDone', { classId: c, studentId: s, kind: kind || 'hw' });
+      return { ok: true, already: !!r.already };
     }
     addPetXp() { return 0; }        // 서버(setMark·markAll)가 같이 넣습니다
 

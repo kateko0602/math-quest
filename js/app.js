@@ -1,4 +1,12 @@
-/* 숙제 대소동 v1.0 — 화면과 동선 (3단계: 5초 컷 채점 · 하루 미션 · 펫 3단계 성장 · 선생님 질문/오답 리스트)
+/* 숙제 대소동 v1.1 — 화면과 동선 (4단계: UI/UX 마감 · 실사용 피드백 12건 반영)
+   ─────────────────────────────────────────────────────────
+   4단계에서 달라진 것
+     · 쪽수표 자동 갱신 · 채점 쪽수 글씨 크게 · ⭐ 질문 5개까지
+     · 하단 고정 바(나머지 전부 ⭕ + 다음) · ⬆️ 맨 위로 · 안 사라지는 ↩️ 되돌리기 배너
+     · 숙제 범위 [전체/유제만/홀수/짝수]를 선생님 화면으로 (학생은 [🏫 몇 번부터] 하나만)
+     · 밀린문제 ❌ 이유 배지 · 앱 오류 비상 안내 · 선생님 [✅ 책으로 완료]
+     · 전체 화면 축하 팝업 + 자기 칭찬 + 🔥 오늘의 열정 학생
+     · 어머님 리포트(주 2회·월 1줄·학기 목록 없음·오답 비율 %) · 성장 그래프 · 학습맵
    ─────────────────────────────────────────────────────────────
    세계관: 〈숫자 왕국 구출 대작전〉 — 알은 하나, '펫 알'뿐
      · 못 고친 오답 → 다시 풀어 ⚔️ 해결하면 '펫 알 부화!' → 펫 합류
@@ -16,6 +24,7 @@ window.EMA = window.EMA || {};
   const STORY = () => GAME().story || {};
   const MIN = 3;
   const REUP_MS = 3600000;
+  const STAR_MAX = 5;          // ⭐ 질문은 숙제 1건당 5개까지 (나머지는 선생님께 직접)
   let store = null;
 
   const view = {
@@ -30,13 +39,13 @@ window.EMA = window.EMA || {};
     flow: null,               // null | grade | clean | done
     gradeSource: 'homework',  // homework | print
     gradeBook: null,
-    gradeRep: false,          // 🏫 대표문제(1,2,3…) 접기
-    gradeParity: '',          // '' | 'odd' | 'even'
     gradeStartKey: null,      // 🏫 몇 번부터 숙제?
+    undoFill: null,           // ✨ 나머지 전부 ⭕ 직후 { keys:[…], n } — [↩️ 되돌리기] 배너가 유지됩니다
     pending: { photo: null, avatar: null, nickname: '', yphoto: null, tempPhoto: null, tempTarget: null, reupload: false },
     pmBook: null, pmPage: null, pmInput: '', pmNewPage: '', pmList: null,
     carryWhy: null,
-    lessonEditBook: null, lessonEditPages: null, lessonEditInput: '', lessonEditDue: '',
+    lessonEditBook: null, lessonEditPages: null, lessonEditInput: '', lessonEditDue: '', lessonEditMode: '',
+    baBook: null, baPages: null,
     dashRange: 'month', dashOpen: {},
     moveSid: null, moveTo: null, copyTo: null, copyFrom: null, copyPrintSid: null,
     pinReveal: null,
@@ -202,13 +211,17 @@ window.EMA = window.EMA || {};
     EMA.ui.sound('coin');
     EMA.ui.toast('🎯 ' + bits.join(' · ') + '코인!', 3400);
     if (r.weekly || r.comeback) {
-      EMA.ui.fx.celebrate({
-        kind: 'title', em: r.weekly ? '🏅' : '🌈',
-        title: r.weekly ? '주간 목표 달성!' : '다시 왔구나!',
-        sub: (r.weekly ? '이번 주 ' + r.weekDays + '일 미션 완료' : '이틀 쉬었지만 다시 시작했어요') + ' · +' + r.coins + '코인',
-        ms: 2200
-      });
-      EMA.ui.fx.confetti(60);
+      if (r.weekly) {
+        bigCeleb({ kind: 'title', em: '🏅', title: '주간 목표 달성!', sub: '이번 주 ' + r.weekDays + '일 미션 완료 · +' + r.coins + '코인' });
+      } else {
+        EMA.ui.fx.celebrate({
+          kind: 'title', em: '🌈',
+          title: '다시 왔구나!',
+          sub: '이틀 쉬었지만 다시 시작했어요 · +' + r.coins + '코인',
+          ms: 2200
+        });
+        EMA.ui.fx.confetti(60);
+      }
     }
   }
   /** 오늘 미션 한 줄 — ③ 제출 완료 화면용 */
@@ -237,6 +250,39 @@ window.EMA = window.EMA || {};
       ${m.comeback ? `<div class="mcome">🌈 이틀 쉬었어요 · 3문제 풀면 <b>+${m.comebackCoins}코인</b> 응원 보너스!</div>` : ''}
     </div>`;
   }
+  /** 🗺️ 오늘의 학습맵 — 오늘 숙제한 단원을 막대 하나로 가볍게 (과하지 않게) */
+  function learningMap(cid, sid) {
+    const bs = store.books(cid);
+    if (!bs.length) return '';
+    const g = store.gradeOf(cid, sid, 'hw');
+    const rows = [];
+    const add = (u, name, done, total) => {
+      const hit = rows.find(r => r.u === u && r.name === name);
+      if (hit) { hit.done += done; hit.total += total; return; }
+      rows.push({ u, name, done, total });
+    };
+    bs.forEach(b => {
+      const def = store.book(b.book) || { 단원: {} };
+      const tiles = store.tilesOf(b.book, b.pages, b.mode);
+      Object.keys(def.단원 || {}).sort((a, c) => +a - +c).forEach(u => {
+        const unit = (def.단원 || {})[u] || {};
+        const my = tiles.filter(t => (t.unitName || '') === (unit.이름 || ''));
+        if (!my.length) return;
+        const done = my.filter(t => g.marks[t.key]).length;
+        add(u, unit.이름 || (u + '단원'), done, my.length);
+      });
+    });
+    if (!rows.length) return '';
+    return `<div class="card tight mapcard">
+      <div class="card-hd"><span class="t">🗺️ 오늘의 학습맵</span><span class="grow"></span><span class="hint">채점하면 채워져요</span></div>
+      ${rows.map(x => `<div class="maprow ${x.done >= x.total ? 'done' : ''}">
+        <span class="mn">${x.u}단원 <small>${esc(x.name)}</small></span>
+        <span class="mbar"><i style="width:${Math.round(x.done / x.total * 100)}%"></i></span>
+        <span class="mv">${x.done >= x.total ? '✓' : x.done + '/' + x.total}</span>
+      </div>`).join('')}
+    </div>`;
+  }
+
   function todayTitle(cid, sid) {
     const st = store.stats(cid, sid);
     if (st.c3 >= 2) return '오답 사냥꾼 ⚔️';
@@ -275,11 +321,20 @@ window.EMA = window.EMA || {};
   function storySheet() {
     const st = STORY();
     const lines = st.lines || [];
+    const chapters = st.chapters || [];
     return sheetWrap('📖 ' + (st.title || '숫자 왕국 구출 대작전'), `
       <div class="storybox">
         <div class="s-em">🌑</div>
         ${lines.map(l => `<p class="s-line">${esc(l)}</p>`).join('')}
       </div>
+      ${chapters.length ? `<div class="sect-t" style="margin-top:14px"><span>보스 스토리</span><span class="grow"></span><span class="hint">4장</span></div>
+      <div class="chapters">
+        ${chapters.map((ch, i) => `<div class="chap">
+          <span class="ch-no">${i + 1}</span>
+          <span class="ch-em">${ch.em}</span>
+          <span class="grow"><b>${esc(ch.t)}</b><small>${esc(ch.d)}</small></span>
+        </div>`).join('')}
+      </div>` : ''}
       <button class="btn btn-primary btn-block" style="margin-top:14px" data-act="openDex">내 도감 보기 →</button>
     `);
   }
@@ -300,13 +355,32 @@ window.EMA = window.EMA || {};
       <div class="hint" style="margin:-2px 6px 4px">아이폰은 옆면 무음 모드를 풀어야 소리가 나요</div>
       ${me ? `<button class="setrow" data-act="openPinChange"><span class="se">🔑</span><span class="st">PIN 바꾸기</span><span class="chev">›</span></button>` : ''}
       <button class="setrow" data-act="openStory"><span class="se">📖</span><span class="st">이야기 보기</span><span class="chev">›</span></button>
+      <button class="setrow" data-act="appHelp"><span class="se">❓</span><span class="st">앱이 이상해요</span><span class="sv">비상 안내</span><span class="chev">›</span></button>
       <div class="sethd">선생님</div>
       <button class="setrow" data-act="teacherEntry"><span class="se">👩‍🏫</span><span class="st">선생님 모드</span><span class="chev">›</span></button>
       <div class="sethd">계정</div>
       <button class="setrow" data-act="logout"><span class="se">↩️</span><span class="st">로그아웃</span><span class="chev">›</span></button>
       <button class="setrow danger" data-act="resetDemo"><span class="se">🧹</span><span class="st">연습 데이터 초기화</span></button>
       <div class="hint wrap" style="margin:6px 6px 0">초기화하면 지금 데이터를 먼저 이 기기에 백업해 두고, 이 화면에서만 새로 시작해요.</div>
-      <div class="hint center" style="margin-top:12px">숙제 대소동 v1.0 · 숫자 왕국 구출 대작전 ${demoChip()}</div>
+      <div class="hint center" style="margin-top:12px">숙제 대소동 v1.1 · 숫자 왕국 구출 대작전 ${demoChip()}</div>
+    `);
+  }
+
+  /** ❓ 앱이 이상해요 — 앱이 멈춰도 숙제는 계속할 수 있다는 안내 (학생·어머님 모두 읽을 수 있게 쉬운 말) */
+  function sheetAppHelp() {
+    return sheetWrap('❓ 앱이 이상해요', `
+      <div class="helpbox">
+        <div class="hb-em">😌</div>
+        <div class="hb-t">당황하지 않아도 돼요!</div>
+        <div class="hb-l">앱이 멈추거나 안 열리면 <b>책에 직접</b> 채점하고 오답을 고친 뒤,<br>선생님께 그 책을 보여 주세요. <b>그걸로 숙제 완료</b>예요.</div>
+      </div>
+      <div class="card tight" style="margin-top:12px">
+        <div class="hv"><span class="n">1</span><div><b>책에 ⭕·❌ 직접 표시</b><small>앱은 잠시 안 써도 괜찮아요</small></div></div>
+        <div class="hv"><span class="n">2</span><div><b>틀린 문제는 책에 다시 풀기</b><small>고친 것까지 보여 주면 더 좋아요</small></div></div>
+        <div class="hv"><span class="n">3</span><div><b>선생님께 책을 보여 주기</b><small>선생님이 [✅ 책으로 완료]로 처리해 주세요</small></div></div>
+      </div>
+      <div class="hint wrap" style="margin-top:10px">폰을 바꾸거나 앱을 지우기 전에도 선생님께 미리 말씀해 주세요. 기록은 이 기기에 저장되어 있어요.</div>
+      <button class="btn btn-primary btn-block" style="margin-top:12px" data-act="closeSheet">확인했어요</button>
     `);
   }
 
@@ -406,7 +480,7 @@ window.EMA = window.EMA || {};
         <button class="btn btn-ghost btn-block" data-act="openStory">📖 이야기 보기</button>
         <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="teacherEntry">👩‍🏫 선생님이세요? 선생님 모드</button>
         <div class="pin-hint">학생 PIN은 선생님께 물어보세요 · 내 PIN은 ⚙️ 설정에서 바꿀 수 있어요</div>
-        <div class="verline">v1.0 ${demoChip()}</div>
+        <div class="verline">v1.1 ${demoChip()}</div>
       </div>
       ${sheetHtml()}`;
     }
@@ -558,6 +632,7 @@ window.EMA = window.EMA || {};
         <span class="go">올리기</span></button>` : ''}
 
       ${lessonHtml}
+      ${learningMap(cid, sid)}
       ${dueCard}
 
       <div class="cta-wrap">
@@ -566,6 +641,7 @@ window.EMA = window.EMA || {};
         <div class="quickrow">
           <button class="btn btn-ghost btn-sm" data-act="gallery">👀 친구들 풀이</button>
           <button class="btn btn-ghost btn-sm" data-act="openShop">🛍️ 상점</button>
+          <button class="btn btn-ghost btn-sm" data-act="appHelp">❓ 앱이 이상해요</button>
         </div>
       </div>
 
@@ -581,8 +657,12 @@ window.EMA = window.EMA || {};
           <div class="hpn">${boss.hp}<span>%</span></div>
         </div>
         <div class="hpbar"><div class="fill" style="width:${boss.hp}%"></div></div>
-        <div class="hplb"><span>도장 ${boss.stamped}/${boss.total}</span><span>🎯 내가 ${mine}%</span></div>
+        <div class="hplb"><span>도장 ${boss.stamped}/${boss.total}${boss.hpMax && boss.hpMax < 100 ? ` · 보스 체력 ${boss.hpMax}` : ''}</span><span>🎯 내가 ${mine}%</span></div>
         <div class="combat">🐾 내 펫 ${store.myPets(cid, sid).length}마리 · 공격력 +${store.companionPct(cid, sid)}%</div>
+        ${(() => {
+          const ch = (STORY().chapters || [])[new Date(store.state.today + 'T12:00:00').getDate() % Math.max(1, (STORY().chapters || [1]).length)];
+          return ch ? `<button class="bossstory" data-act="openStory">📖 ${esc(ch.t)} <span class="chev">›</span></button>` : '';
+        })()}
         ${boss.killed ? '<div class="bosskill">🏆 우리 반이 보스를 잡았어요!</div>' : ''}
       </div>
 
@@ -660,11 +740,12 @@ window.EMA = window.EMA || {};
       ${list.map(m => {
         const open = view.carryWhy === m.id;
         const tries = (m.tries || 0) > 0 ? ` · ${m.tries}번 다시 풀었어요` : '';
+        const whyDef = (GAME().tags || []).find(td => td.id === m.why);
         return `<div class="carrywrap">
           <div class="carrycard">
             <div class="cc-em">${m.em || '👾'}</div>
             <div class="grow">
-              <div class="cc-nm">${esc(m.name || '못 고친 오답')}</div>
+              <div class="cc-nm">${esc(m.name || '못 고친 오답')}${whyDef ? `<span class="whybadge">${whyDef.em} ${esc(whyDef.label)}</span>` : ''}</div>
               <div class="cc-lb">${esc(m.book === '프린트' ? '' : m.book + ' ')}${m.page}쪽 ${esc(m.num)}번 <span class="dot">·</span> ${esc(m.date.slice(5))} <span class="dot">·</span> ${reasonTxt[m.reason] || '❌'}${tries}${overdueText(m) ? `<br><span class="late-note">⏰ ${esc(overdueText(m).replace(' · ', ''))}</span>` : ''}</div>
             </div>
             <div class="cc-do">
@@ -700,7 +781,7 @@ window.EMA = window.EMA || {};
     const excl = g.excl || {};
     return tiles.filter(t => !(excl[t.key] && !g.marks[t.key]));
   }
-  /** 🏫 도구(몇 번부터 · 대표문제 · 홀짝)를 '제외' 표시로 반영 */
+  /** 🏫 도구(몇 번부터)를 '제외' 표시로 반영 — 학생 화면에는 이 도구만 남깁니다 */
   function applyGradeView() {
     const cid = view.classId, sid = view.studentId, kind = sourceKind();
     const tiles = sourceTiles();
@@ -709,11 +790,7 @@ window.EMA = window.EMA || {};
     const wanted = [];
     tiles.forEach((t, i) => {
       if (g.marks[t.key] || t.missing) return;      // 이미 채점한 문제는 절대 건드리지 않습니다
-      let reason = '';
-      if (startIdx >= 0 && i < startIdx) reason = 'class';
-      else if (view.gradeRep && isRepTile(t)) reason = 'class';
-      else if (view.gradeParity && parityOf(t) && parityOf(t) !== view.gradeParity) reason = 'filter';
-      if (reason) wanted.push({ key: t.key, reason });
+      if (startIdx >= 0 && i < startIdx) wanted.push({ key: t.key, reason: 'class' });
     });
     store.clearExcl(cid, sid, kind);
     store.setExcl(cid, sid, wanted, kind);
@@ -764,18 +841,14 @@ window.EMA = window.EMA || {};
       }).join('')}
     </div>` : '';
 
-    /* 🏫 5초 컷 도구 — 몇 번부터 / 대표문제 접기 / 홀수만·짝수만 */
+    /* 🏫 학생 화면에 남는 도구는 [몇 번부터 숙제?] 하나뿐 — 홀수·짝수·대표문제는 선생님이 숙제를 낼 때 정합니다 */
     const startTile = view.gradeStartKey ? all.find(t => t.key === view.gradeStartKey) : null;
+    const curBook = !isPrint ? store.books(cid).find(b => b.book === view.gradeBook) : null;
+    const modeLabel = curBook && curBook.mode ? EMA.util.HW_MODE_LABEL[curBook.mode] : '';
     const tools = isPrint ? '' : `
-      <div class="gtools">
-        <button class="gtool ${startTile ? 'on' : ''}" data-act="gradeStartOpen">🏫 ${startTile ? startTile.label + '번부터' : '몇 번부터 숙제?'}</button>
-        <button class="gtool ${view.gradeRep ? 'on' : ''}" data-act="gradeRep">${view.gradeRep ? '🏫 대표문제 펼치기' : '🏫 대표문제 접기'}</button>
-      </div>
-      <div class="gtools">
-        <span class="gtool-lb">번호</span>
-        <button class="gtool sm ${!view.gradeParity ? 'on' : ''}" data-act="gradeParity" data-p="">전체</button>
-        <button class="gtool sm ${view.gradeParity === 'odd' ? 'on' : ''}" data-act="gradeParity" data-p="odd">홀수만</button>
-        <button class="gtool sm ${view.gradeParity === 'even' ? 'on' : ''}" data-act="gradeParity" data-p="even">짝수만</button>
+      <div class="gtools only-one">
+        <button class="gtool big ${startTile ? 'on' : ''}" data-act="gradeStartOpen">🏫 ${startTile ? startTile.label + '번부터' : '몇 번부터 숙제?'}</button>
+        ${modeLabel ? `<span class="modechip">${esc(modeLabel)}</span>` : ''}
       </div>
       ${cnt.c6 ? `<div class="gfold">🏫 수업에서 푼 문제 <b>${cnt.c6}</b>개는 빼뒀어요<button class="linkbtn2" data-act="gradeReset">되돌리기</button></div>` : ''}`;
 
@@ -797,13 +870,16 @@ window.EMA = window.EMA || {};
       ${tools}
       ${oxSum(cnt)}
       <div class="card oxcard">
-        <button class="btn btn-mint btn-block" data-act="markAll">✨ 나머지 전부 ⭕</button>
-        <div class="hint center" style="margin:6px 0 0">❌ 틀린 것만 톡톡 누르고, 나머지는 이 버튼 한 번!${restN ? ` (빈칸 ${restN})` : ''}</div>
+        <div class="hint center" style="margin:0">❌ 틀린 것만 톡톡 누르고, 나머지는 아래 <b>✨ 나머지 전부 ⭕</b> 버튼 한 번!</div>
         <div class="rows ${isPrint ? 'gridrows' : ''}">${rows}</div>
       </div>
-      <div class="flowfoot">
+      <div class="flowfoot gradefoot">
+        ${view.undoFill && view.undoFill.n ? `<button class="undobar" data-act="undoFill">↩️ 방금 채운 ${view.undoFill.n}문제 되돌리기</button>` : ''}
         ${untagged ? `<div class="tag-need">왜 틀렸는지 <b>${untagged}개</b> 더 골라야 해요</div>` : ''}
-        <button class="btn btn-primary btn-block btn-lg" data-act="toClean">다음 → 정리 · 사진</button>
+        <div class="ffrow">
+          <button class="btn btn-mint ff-mint" data-act="markAll">✨ 나머지 전부 ⭕${restN ? ` <small>${restN}</small>` : ''}</button>
+          <button class="btn btn-primary ff-next" data-act="toClean">다음 →</button>
+        </div>
         ${(dueG && dueG.has && !dueG.passed && cnt.marked) ? `<button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="saveTemp">💾 여기까지만 임시 저장 (${cnt.marked}/${cnt.total})</button>` : ''}
       </div>
       ${sheetHtml()}
@@ -841,7 +917,7 @@ window.EMA = window.EMA || {};
         <div class="cl-label">${bkLabel(t)}${isPrint ? '' : t.page + '쪽 '}<b>${esc(t.label)}</b>번</div>
         <div class="cl-btns">
           <button class="clb fix ${cl === 'fixed' ? 'on' : ''}" data-act="cleanup" data-key="${t.key}" data-k="fixed">⚔️ 해결!</button>
-          <button class="clb star ${cl === 'star' ? 'on' : ''} ${starCnt >= 7 && cl !== 'star' ? 'is-full' : ''}" data-act="cleanup" data-key="${t.key}" data-k="star">⭐ 질문</button>
+          <button class="clb star ${cl === 'star' ? 'on' : ''} ${starCnt >= STAR_MAX && cl !== 'star' ? 'is-full' : ''}" data-act="cleanup" data-key="${t.key}" data-k="star">⭐ 질문</button>
         </div>
       </div>`;
     }).join('') : `<div class="empty-note">🎉 틀린 문제가 없어요!</div>`;
@@ -883,7 +959,7 @@ window.EMA = window.EMA || {};
       ${topbar({ title: '② 정리 · 사진', sub: isPrint ? '오답프린트' : '틀린 문제 정리', back: true, backAct: 'flowBack' })}
       ${stepper(2)}
 
-      <div class="sect-t"><span>❌ 틀린 문제 ${wrong.length}</span><span class="grow"></span><span class="hint">⭐ 질문 ${starCnt}/7</span></div>
+      <div class="sect-t"><span>❌ 틀린 문제 ${wrong.length}</span><span class="grow"></span><span class="hint">⭐ 질문 ${starCnt}/${STAR_MAX}</span></div>
       <div class="card clean-card">${wrongHtml}</div>
 
       ${starOs.length ? `<div class="sect-t"><span>⭕ 맞았지만 궁금해요 ${starOs.length}</span><span class="grow"></span><span class="hint">선생님 질문 목록에 올라갔어요</span></div>
@@ -959,6 +1035,7 @@ window.EMA = window.EMA || {};
         <div class="row"><span class="grow muted" style="font-size:12.5px">⚔️ 밀린문제 <b>${carriedNow}개</b></span>
         <button class="btn btn-mint btn-sm" data-act="homeTab" data-t="carry">고치기 →</button></div>
       </div>` : ''}
+      ${(!isPrint && r && !r.reupload && !r.already) ? `<div class="notifyline">📣 선생님께 <b>'오늘 열심히 했어요!'</b> 알림이 전달됐어요!</div>` : ''}
       <div class="cta-wrap">
         <button class="btn btn-primary btn-block btn-lg" data-act="goHome">🏠 숙제로 돌아가기</button>
         <div class="quickrow">
@@ -1035,6 +1112,8 @@ window.EMA = window.EMA || {};
       </div></div>
 
       ${weakCard(cid, sid)}
+
+      ${growthCard(cid, sid)}
 
       <div class="sect-t" id="companionDex"><span>🐾 펫 도감</span><span class="grow"></span><span class="hint">${pets.length}/${cat.length}</span></div>
       <div class="card">
@@ -1192,6 +1271,8 @@ window.EMA = window.EMA || {};
     if (sub && store.photo(sub.photoId)) out.push(`<button class="tbtn" data-act="photoBig" data-sid="${s.id}" data-at="${esc(sub.at)}">📸 사진</button>`);
     out.push(`<button class="tbtn ${store.hasPrint(cid, s.id) ? 'on' : ''}" data-act="openPrintSet" data-id="${s.id}">📝 프린트${store.hasPrint(cid, s.id) ? ' ' + store.printInfo(cid, s.id).count : ''}</button>`);
     out.push(`<button class="tbtn" data-act="openReport" data-id="${s.id}">📊 성취도</button>`);
+    /* ✅ 책으로 완료 — 앱 오류·사진 문제로 제출이 막혔을 때 (밀린문제는 건드리지 않음) */
+    out.push(`<button class="tbtn bookdone" data-act="bookDone" data-id="${s.id}">✅ 책으로 완료</button>`);
     return `<div class="tbtns">${out.join('')}</div>`;
   }
 
@@ -1227,7 +1308,7 @@ window.EMA = window.EMA || {};
                 </span>
               </button>
               <div class="stright">${status}${(sub && psub) ? '<span class="pill info">📝+</span>' : ''}</div>
-              ${shown ? `<button class="more" data-act="stuTools" data-id="${r.student.id}" aria-label="도구">⋯</button>` : ''}
+              <button class="more" data-act="stuTools" data-id="${r.student.id}" aria-label="도구">⋯</button>
             </div>
             ${stuQuickButtons(cid, r)}
           </div>`;
@@ -1342,6 +1423,21 @@ window.EMA = window.EMA || {};
   /* =========================================================
      선생님 반 대시보드 (v0.9) — 제출률·미제출·오답 수정률·학습량·학생별 비교
   ========================================================= */
+  /** 🔥 오늘의 열정 학생 — 숙제 완료·밀린문제 3개 이상 해결한 학생을 대시보드 맨 위에 */
+  function effortCard(cid) {
+    const list = store.effortToday ? store.effortToday(cid) : [];
+    const reasonTxt = { homework: '숙제 완료', carry3: '밀린문제 3개 해결', book: '책으로 완료' };
+    if (!list.length) return '';
+    return `<div class="card effortcard">
+      <div class="card-hd"><span class="t">🔥 오늘의 열정 학생</span><span class="grow"></span>
+        <span class="hint">${list.length}명 · 앱이 알려 줬어요</span></div>
+      <div class="effrow">
+        ${list.slice(0, 8).map(r => `<span class="effchip">${avatarHtml(r.student, 22)}<b>${esc(r.student.nickname || r.student.name)}</b><small>${reasonTxt[r.reason] || '열심히 했어요'}</small></span>`).join('')}
+      </div>
+      <button class="linkbtn2" style="margin-top:8px" data-act="effortClear">오늘 알림 비우기</button>
+    </div>`;
+  }
+
   function teacherDashboard(c) {
     const cid = c.id;
     const d = store.dashboard(cid, view.dashRange);
@@ -1351,6 +1447,7 @@ window.EMA = window.EMA || {};
     const bar = (pct, color) => `<div class="pbar"><i style="width:${Math.max(0, Math.min(100, pct))}%;background:${color || 'var(--navy)'}"></i></div>`;
     const open = !!view.dashOpen.detail;
     return `
+      ${effortCard(cid)}
       <div class="pad" style="margin-top:10px"><div class="segmented" style="margin:0">
         ${[['week', '이번 주'], ['month', '이번 달'], ['semester', '이번 학기']].map(x =>
           `<button class="${view.dashRange === x[0] ? 'on' : ''}" data-act="dashRange" data-r="${x[0]}">${x[1]}</button>`).join('')}
@@ -1492,9 +1589,9 @@ window.EMA = window.EMA || {};
       <div class="kv" style="margin-top:10px"><span class="k">지금 숙제</span><span>${esc(l.homework)}</span></div>
       <button class="btn btn-primary btn-block" style="margin-top:10px" data-act="lessonEdit">쪽수 바꾸기</button>
       <div class="card tight" style="margin-top:10px">
-        <div class="hint">쪽수표에 없는 쪽(예: 56쪽)도 여기서 문제번호를 넣으면 채점할 수 있어요.</div>
+        <div class="hint">쪽수표에 없는 쪽(예: 18쪽 — 이 책에서 스캔이 빠진 쪽)도 여기서 문제번호를 넣으면 채점할 수 있어요.</div>
         <div class="row" style="margin-top:8px;gap:8px">
-          <input id="pmNewPage" class="tinput grow" inputmode="numeric" placeholder="쪽 번호 (예: 56)">
+          <input id="pmNewPage" class="tinput grow" inputmode="numeric" placeholder="쪽 번호 (예: 18)">
           <button class="btn btn-ghost btn-sm" data-act="pmAddPage">쪽 추가</button>
         </div>
       </div>`;
@@ -1550,7 +1647,7 @@ window.EMA = window.EMA || {};
       story: storySheet, photoconfirm: sheetPhotoConfirm, nextday: sheetNextDay,
       settings: sheetSettings, bigphoto: sheetBigPhoto, recovery: sheetRecovery,
       moveStu: sheetMoveStu, copyLesson: sheetCopyLesson, startfrom: sheetStartFrom,
-      bookall: sheetBookAll
+      bookall: sheetBookAll, apphelp: sheetAppHelp
     };
     const fn = map[view.sheet];
     return fn ? fn() : '';
@@ -1830,6 +1927,26 @@ window.EMA = window.EMA || {};
     return `<div class="rc-bar ${cls || ''}"><i style="width:${w}%"></i></div>`;
   }
 
+  /** 📈 최근 7일 미니 성장 그래프 — 학습량(남색 막대) · 오답 해결(초록 막대) */
+  function growthBars(g, opt) {
+    const list = g || [];
+    const max = Math.max(1, list.reduce((a, d) => Math.max(a, d.solved, d.fixed), 1));
+    return `<div class="gbars ${opt && opt.small ? 'small' : ''}">${list.map(d => `<div class="gcol ${d.today ? 'today' : ''}">
+      <div class="gbar"><i style="height:${Math.round(d.solved / max * 100)}%"></i><b style="height:${Math.round(d.fixed / max * 100)}%"></b></div>
+      <span class="gd">${d.dow}</span></div>`).join('')}</div>`;
+  }
+  function growthCard(cid, sid) {
+    const g = store.growth ? store.growth(cid, sid, 7) : [];
+    const solved = g.reduce((a, d) => a + d.solved, 0);
+    const fixed = g.reduce((a, d) => a + d.fixed, 0);
+    return `<div class="card growthcard">
+      <div class="card-hd"><span class="t">📈 최근 7일 성장</span><span class="grow"></span>
+        <span class="hint">학습 ${solved} · 오답 해결 ${fixed}</span></div>
+      ${growthBars(g)}
+      <div class="glegend"><span><i class="lg-solved"></i>푼 문제</span><span><i class="lg-fix"></i>오답 해결</span></div>
+    </div>`;
+  }
+
   function reportCardHtml(s, c, r) {
     const nm = s.nickname && s.nickname !== s.name ? `<span class="rc-nick">${esc(s.nickname)}</span>` : '';
     const tags = r.tags.map(t => `<div class="rc-tag">
@@ -1843,7 +1960,7 @@ window.EMA = window.EMA || {};
     const units = r.units.length
       ? r.units.map(u => `<div class="rc-unit">
           <span class="rc-unit-nm">${esc(u.name)}</span>
-          <span class="rc-unit-v">오답 <b>${u.wrong}</b>${u.fixed ? ` · 재풀이 <b>${u.fixed}</b>` : ''}</span>
+          <span class="rc-unit-v">오답 <b>${u.wrong}</b>개 <em>(${u.pct || 0}%)</em>${u.fixed ? ` · 재풀이 <b>${u.fixed}</b>` : ''}</span>
         </div>`).join('')
       : '<div class="rc-empty">이 기간에 오답 기록이 없습니다.</div>';
     const dayList = (r.dayList || []).map(d => `<div class="rc-day">
@@ -1853,8 +1970,19 @@ window.EMA = window.EMA || {};
           ${d.homework ? `<div class="rc-day-l"><b>숙제</b><span>${esc(d.homework)}</span></div>` : ''}
         </div>
       </div>`).join('');
+    /* 이번 달 — 단원명 + 전체 쪽수 한 줄 / 이번 학기 — 진도 목록 없음 */
+    const monthLine = r.range === 'month'
+      ? (r.monthSummary
+        ? `<div class="rc-summary"><b>${esc(r.monthSummary.text)}</b></div>`
+        : '<div class="rc-empty">이번 달 진도 기록이 없습니다.</div>')
+      : '';
     const printList = (r.printList || []).map(p =>
       `<div class="rc-extra">추가 과제 · 개별 오답프린트 <b>${p.count}문항</b> 배부 <small>${esc(p.label)}</small></div>`).join('');
+    const lessonSection = r.range === 'semester' ? '' : `<div class="rc-sec">
+        <div class="rc-t">${r.range === 'week' ? '이번 주 진도 · 숙제 (최근 2회)' : '이번 달 진도'}</div>
+        ${r.range === 'month' ? monthLine : (dayList || '<div class="rc-empty">이번 주 진도 기록이 없습니다.</div>')}
+        ${r.range === 'week' ? printList : ''}
+      </div>`;
     const tagBlock = r.wrong === 0
       ? '<div class="rc-empty">이번 기간 오답 없음</div>'
       : r.tagTotal
@@ -1885,10 +2013,11 @@ window.EMA = window.EMA || {};
         ${rcBar(r.hwRate)}
         <div class="rc-sub">${r.classDays ? `숙제 ${r.classDays}회 중 ${r.doneClassDays}회 완료` : '이번 기간 숙제 기록 없음'}</div>
       </div>
-      ${(dayList || printList) ? `<div class="rc-sec">
-        <div class="rc-t">${r.range === 'week' ? '이번 주' : '최근'} 진도 · 숙제</div>
-        ${dayList}
-        ${printList}
+      ${lessonSection}
+      ${(r.growth && r.growth.length) ? `<div class="rc-sec">
+        <div class="rc-t">최근 7일 성장</div>
+        ${growthBars(r.growth)}
+        <div class="rc-glegend"><span><i class="lg-solved"></i>푼 문제</span><span><i class="lg-fix"></i>오답 해결</span></div>
       </div>` : ''}
       <div class="rc-sec">
         <div class="rc-t">풀이 및 오답 해결</div>
@@ -1972,11 +2101,14 @@ window.EMA = window.EMA || {};
         return outY;
       };
 
-      /* 머리 */
-      txt('학습 성취도 리포트', PAD, y, 13, 700, NAVY);
-      txt(`${dotted(r.from)} – ${shortDot(r.to)}`, W - PAD, y, 9, 500, MUTED, 'right');
-      y += 12; hair(y);
-      y += 26;
+      /* 머리 — 남색 머리띠로 성적표답게 (v1.1 디자인) */
+      ctx.fillStyle = NAVY;
+      ctx.fillRect(0, 0, W, 62);
+      txt('학습 성취도 리포트', PAD, 28, 13.5, 700, '#FFFFFF');
+      txt('HOMEWORK & ACHIEVEMENT', PAD, 44, 6.6, 700, 'rgba(255,255,255,.6)');
+      txt(`${dotted(r.from)} – ${shortDot(r.to)}`, W - PAD, 28, 8.6, 600, 'rgba(255,255,255,.85)', 'right');
+      txt(r.label, W - PAD, 44, 8, 700, '#FFCF4D', 'right');
+      y = 86;
       setF(21, 700);
       txt(s.name, PAD, y, 21, 700, INK);
       if (s.nickname && s.nickname !== s.name) {
@@ -1999,9 +2131,10 @@ window.EMA = window.EMA || {};
       y += 16;
       txt(r.classDays ? `숙제 ${r.classDays}회 중 ${r.doneClassDays}회 완료` : '이번 기간 숙제 기록 없음', PAD, y, 8, 500, MUTED);
 
-      /* 이번 주 진도·숙제 */
-      if ((r.dayList && r.dayList.length) || (r.printList && r.printList.length)) {
-        section(r.range === 'week' ? '이번 주 진도 · 숙제' : '최근 진도 · 숙제');
+      /* 진도 — 이번 주는 최근 2회 / 이번 달은 1줄 요약 / 이번 학기는 목록 없음 */
+      if (r.range === 'week') {
+        section('이번 주 진도 · 숙제 (최근 2회)');
+        if (!(r.dayList || []).length) { txt('이번 주 진도 기록이 없습니다.', PAD, y, 8.5, 500, MUTED); y += 14; }
         (r.dayList || []).forEach(d => {
           txt(d.label, PAD, y, 9, 700, NAVY);
           y += 12;
@@ -2019,6 +2152,13 @@ window.EMA = window.EMA || {};
           y = wrap(`추가 과제 · 개별 오답프린트 ${p.count}문항 배부 (${p.md})`, PAD, y, 8.5, 600, '#B4562B', W - PAD * 2, 11);
         });
         y -= 2;
+      } else if (r.range === 'month') {
+        section('이번 달 진도');
+        if (r.monthSummary) {
+          rr(PAD, y - 12, W - PAD * 2, 34, 8, '#F5F7FA');
+          y = wrap(r.monthSummary.text, PAD + 10, y + 4, 9, 700, NAVY, W - PAD * 2 - 20, 12);
+          y += 6;
+        } else { txt('이번 달 진도 기록이 없습니다.', PAD, y, 8.5, 500, MUTED); y += 14; }
       }
 
       /* 풀이 및 오답 해결 */
@@ -2048,18 +2188,41 @@ window.EMA = window.EMA || {};
         y -= 4;
       }
 
-      /* 취약 단원 */
+      /* 취약 단원 — 오답 수 + 전체 대비 비율 */
       section('취약 단원');
       if (r.units.length) {
         r.units.forEach(u => {
           txt(u.name, PAD, y, 9.5, 600, INK);
-          txt(`오답 ${u.wrong}${u.fixed ? ` · 재풀이 ${u.fixed}` : ''}`, W - PAD, y, 8.5, 600, MUTED, 'right');
+          txt(`오답 ${u.wrong}개 (${u.pct || 0}%)${u.fixed ? ` · 재풀이 ${u.fixed}` : ''}`, W - PAD, y, 8.5, 600, MUTED, 'right');
           y += 18;
         });
         y -= 4;
       } else {
         txt('이 기간에 오답 기록이 없습니다.', PAD, y, 8.5, 500, MUTED);
         y += 14;
+      }
+
+      /* 최근 7일 성장 그래프 — 학습량(검남) · 오답 해결(초록). 요일 라벨과 범례 사이에 충분한 여백 */
+      if (r.growth && r.growth.length) {
+        section('최근 7일 성장');
+        const maxV = Math.max(1, Math.max.apply(null, r.growth.map(g => Math.max(g.solved, g.fixed))));
+        const gw = W - PAD * 2, colW = gw / r.growth.length, bw2 = Math.min(9, colW * .3);
+        const barH = 34, baseY = y + barH;
+        ctx.fillStyle = '#E8EDF2';
+        ctx.fillRect(PAD, baseY, gw, 0.8);          // 막대 바닥선 — 0인 날도 눈에 보이게
+        r.growth.forEach((g, i) => {
+          const cx = PAD + colW * i + colW / 2;
+          const hs = Math.round((g.solved / maxV) * barH), hf = Math.round((g.fixed / maxV) * barH);
+          if (hs) rr(cx - bw2 - 1.5, baseY - hs, bw2, hs, 2, g.today ? '#111827' : '#94A3B8');
+          if (hf) rr(cx + 1.5, baseY - hf, bw2, hf, 2, '#0F8F68');
+          txt(g.dow, cx, baseY + 13, 7.5, 700, g.today ? NAVY : '#9CA3AF', 'center');
+        });
+        y = baseY + 30;                      // 요일 라벨 아래 17px 여백 뒤에 범례
+        rr(PAD, y - 5.5, 7, 4, 2, '#94A3B8');
+        txt('막대 = 그날 푼 문항', PAD + 10, y, 7.6, 600, '#8A94A6');
+        rr(PAD + 104, y - 5.5, 7, 4, 2, '#0F8F68');
+        txt('초록 = 다시 풀어 해결한 오답', PAD + 114, y, 7.6, 600, '#0F8F68');
+        y += 12;
       }
 
       /* 학원 단원평가 */
@@ -2199,7 +2362,9 @@ window.EMA = window.EMA || {};
     view.lessonEditBook = book;
     const saved = (store.books(cid).find(b => b.book === book) || { pages: [] }).pages;
     const pages = (view.lessonEditPages != null ? view.lessonEditPages.slice() : saved.slice()).sort((a, b) => a - b);
-    const tiles = store.tilesOf(book, pages);
+    if (view.lessonEditMode == null) view.lessonEditMode = '';
+    const mode = EMA.util.HW_MODES.indexOf(view.lessonEditMode) > 0 ? view.lessonEditMode : '';
+    const tiles = store.tilesOf(book, pages, mode);
     const missing = pages.filter(p => !store.pageInfo(book, p));
     const due = view.lessonEditDue != null ? view.lessonEditDue : store.dueAtOf(cid);
     const nextDue = store.defaultDueAt(cid);
@@ -2208,15 +2373,21 @@ window.EMA = window.EMA || {};
       <div class="tabs-scroll" style="padding:0 0 10px">
         ${books.map(b => `<button class="${b === book ? 'on' : ''}" data-act="lessonBook" data-b="${esc(b)}">${esc(b)}</button>`).join('')}
       </div>
-      <div class="editor"><input id="pageInput" value="${esc(view.lessonEditInput != null ? view.lessonEditInput : pagesText(pages))}" placeholder="8-10, 12쪽 · 1~14쪽"></div>
+      <div class="editor"><input id="pageInput" value="${esc(view.lessonEditInput != null ? view.lessonEditInput : pagesText(pages))}" placeholder="19~22쪽 (유제만) · 8-10, 12쪽"></div>
       <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="lessonRange">🔢 이 범위로 칸 만들기</button>
       <button class="btn btn-navy btn-block btn-sm" style="margin-top:8px" data-act="bookAllOpen">📚 책 전체 보기 · 단원·쪽수 한번에 고르기</button>
+      <div class="sect-t" style="margin-top:14px"><span>🎯 숙제 범위</span><span class="grow"></span><span class="hint">학생은 고르지 못해요</span></div>
+      <div class="segmented mode4" style="margin:0">
+        ${[['', '전체'], ['yooh', '유제만(-1)'], ['odd', '홀수'], ['even', '짝수']].map(x =>
+          `<button class="${mode === x[0] ? 'on' : ''}" data-act="lessonMode" data-m="${x[0]}">${x[1]}</button>`).join('')}
+      </div>
+      <div class="hint wrap" style="margin-top:6px">유제만 = 대표번호(1,2,3…)를 빼고 <b>1-1, 2-1</b> 같은 유제만 · 쪽수 칸에 <b>19~22 (유제만)</b>처럼 적어도 됩니다.</div>
       <div class="chipx">${pages.length ? pages.map(p => `<button class="chipx-item" data-act="lessonPageDel" data-p="${p}">${p}쪽 ✕</button>`).join('') : '<span class="hint">아직 쪽이 없어요 — 위에 범위를 적어 주세요</span>'}</div>
       <div class="row" style="margin-top:8px;gap:8px">
-        <input id="lessonNewPage" class="tinput grow" inputmode="numeric" placeholder="쪽 하나 추가 (예: 56)">
+        <input id="lessonNewPage" class="tinput grow" inputmode="numeric" placeholder="쪽 하나 추가 (예: 18)">
         <button class="btn btn-ghost btn-sm" data-act="lessonPageAdd">추가</button>
       </div>
-      <div class="muted" style="margin-top:8px">→ 문제 ${tiles.length}개${tiles.length ? ': ' + tiles.slice(0, 12).map(t => t.label).join(', ') + (tiles.length > 12 ? ' …' : '') : ''}</div>
+      <div class="tilecount">→ <b>${EMA.util.HW_MODE_LABEL[mode] || '전체'}</b> 문제 <b>${tiles.length}</b>개${tiles.length ? ': ' + tiles.slice(0, 12).map(t => t.label).join(', ') + (tiles.length > 12 ? ' …' : '') : ''}</div>
       ${missing.length ? `<div class="card tight missing-note" style="margin-top:10px"><div class="muted wrap" style="font-size:12px;white-space:normal">⚠️ <b>${missing.join(', ')}쪽</b>은 쪽수표에 없어요. 저장은 되지만 채점하려면 <b>⚙️ 관리 → 쪽수표 → 쪽 추가</b>에서 그 쪽 문제번호를 넣어 주세요.</div></div>` : ''}
       <div class="sect-t" style="margin-top:14px"><span>⏰ 제출 기한</span><span class="grow"></span><span class="hint">${esc(store.dueInfo(cid).leftText || store.dueInfo(cid).lateText)}</span></div>
       <input id="dueAt" class="tinput" type="datetime-local" value="${esc(String(due).replace(' ', 'T'))}">
@@ -2405,6 +2576,21 @@ window.EMA = window.EMA || {};
     `, { full: true });
   }
 
+  /** ⬆️ 긴 목록을 볼 때만 나타나는 '맨 위로' 버튼 — 화면과 따로 살아서 스크롤을 따라가지 않습니다 */
+  function topButton() {
+    const app = document.getElementById('app');
+    let b = app.querySelector('.fabtop');
+    if (!b) {
+      b = document.createElement('button');
+      b.className = 'fabtop';
+      b.setAttribute('data-act', 'scrollTop');
+      b.setAttribute('aria-label', '맨 위로');
+      b.innerHTML = '⬆️ 맨 위로';
+      app.appendChild(b);
+    }
+    return b;
+  }
+
   /* =========================================================
      렌더 진입
   ========================================================= */
@@ -2412,6 +2598,9 @@ window.EMA = window.EMA || {};
     const app = document.getElementById('app');
     const prev = app.querySelector('.screen');
     const y = prev ? prev.scrollTop : 0;
+    // ★ v1.1 — 모달(책 전체 보기·쪽수표·숙제 편집) 안에서 버튼을 눌러도 스크롤이 0으로 튀지 않게 위치를 기억합니다
+    const prevSheet = app.querySelector('.sheet-scroll');
+    const sy = prevSheet ? prevSheet.scrollTop : 0;
     let html = '';
     if (view.role === 'login') html = renderLogin();
     else if (view.role === 'teacher') html = renderTeacher();
@@ -2420,6 +2609,7 @@ window.EMA = window.EMA || {};
     else if (view.flow === 'done') html = flowDone();
     else html = view.tab === 'rank' ? renderRank() : view.tab === 'record' ? renderRecord() : renderStudentHome();
     app.innerHTML = html;
+    app.classList.toggle('in-flow', !!view.flow);
     const sc = app.querySelector('.screen');
     if (sc) {
       sc.scrollTop = view.resetScroll ? 0 : y;
@@ -2433,8 +2623,22 @@ window.EMA = window.EMA || {};
         view.scrollTarget = null;
       }
     }
+    const sheetSc = app.querySelector('.sheet-scroll');
+    if (sheetSc && sy) sheetSc.scrollTop = sy;
     if (document.body.classList.contains('sheet-open')) document.body.classList.remove('sheet-open');
     if (view.sheet) document.body.classList.add('sheet-open');
+
+    /* ⬆️ 맨 위로 — 300px 넘게 내려간 긴 화면에서만 */
+    const topBtn = topButton();
+    if (sc) {
+      const sync = () => {
+        const long = sc.scrollHeight > sc.clientHeight + 220;
+        topBtn.classList.toggle('show', long && sc.scrollTop > 300);
+      };
+      sc.addEventListener('scroll', sync, { passive: true });
+      sync();
+      setTimeout(sync, 80);
+    } else topBtn.classList.remove('show');
 
     const inputs = app.querySelectorAll('input[id]');
     inputs.forEach(inp => {
@@ -2539,6 +2743,14 @@ window.EMA = window.EMA || {};
       EMA.ui.fx.celebrate(it);
       EMA.ui.sound(it.sfx || 'fanfare');
     }, i * 1050));
+  }
+
+  /** 🎊 전체 화면 축하 — 폭진·반짝임·자기 칭찬 (숙제 완료·펫 부화/진화·보스 격파·주간 목표) */
+  function bigCeleb(o) {
+    if (!o || !o.title) return;
+    EMA.ui.fx.bigCelebrate(Object.assign({ ms: 3000 }, o));
+    EMA.ui.sound(o.sfx || 'fanfare');
+    EMA.ui.fx.confetti(o.kind === 'legend' ? 120 : 80);
   }
 
   /* =========================================================
@@ -2664,7 +2876,7 @@ window.EMA = window.EMA || {};
     startGrade() {
       view.sheet = null;
       view.gradeSource = 'homework';
-      view.gradeRep = false; view.gradeParity = ''; view.gradeStartKey = null;
+      view.gradeStartKey = null; view.undoFill = null;
       const bs = store.books(view.classId);
       view.gradeBook = bs.length > 1 ? (view.gradeBook && bs.find(b => b.book === view.gradeBook) ? view.gradeBook : bs[0].book) : (bs[0] || {}).book || null;
       if (!store.tiles(view.classId).length) { actions.noHomework(); return; }
@@ -2681,13 +2893,14 @@ window.EMA = window.EMA || {};
     startPrint() {
       if (!store.hasPrint(view.classId, view.studentId)) { view.sheet = 'printpick'; render(); return; }
       view.gradeSource = 'print';
-      view.gradeRep = false; view.gradeParity = ''; view.gradeStartKey = null;
+      view.gradeStartKey = null; view.undoFill = null;
       view.resetScroll = true; setFlow('grade');
     },
     /** 도감의 오늘 알 → 바로 ② 정리 화면으로 (⚔️ 해결하러) */
     fixNow() {
       view.sheet = null;
       view.gradeSource = 'homework';
+      view.undoFill = null;
       const bs = store.books(view.classId);
       view.gradeBook = bs.length > 1 ? (view.gradeBook && bs.find(b => b.book === view.gradeBook) ? view.gradeBook : bs[0].book) : (bs[0] || {}).book || null;
       if (!store.tiles(view.classId).length) { actions.noHomework(); return; }
@@ -2716,14 +2929,14 @@ window.EMA = window.EMA || {};
       if (mx && mx.then) mx.then(r => r && missionToast(r));
       else if (mx) missionToast(mx);
     },
-    /** ⭐ 맞았지만 궁금해요 — ⭕ 문제에도 질문을 달 수 있습니다 (1건당 7개까지) */
+    /** ⭐ 맞았지만 궁금해요 — ⭕ 문제에도 질문을 달 수 있습니다 (1건당 5개까지) */
     starO(d) {
       const kind = sourceKind();
       const g = store.gradeOf(view.classId, view.studentId, kind);
       if (g.marks[d.key] !== 'o') { EMA.ui.toast('⭕ 맞은 문제에만 ⭐를 달 수 있어요'); return; }
       const before = (g.cleanup || {})[d.key] || '';
-      if (before !== 'star' && store.starCount(view.classId, view.studentId, kind) >= 7) {
-        EMA.ui.toast('질문은 7개까지! 나머지는 선생님께 직접 물어봐 😊', 3200);
+      if (before !== 'star' && store.starCount(view.classId, view.studentId, kind) >= STAR_MAX) {
+        EMA.ui.toast('질문은 ' + STAR_MAX + '개까지! 나머지는 선생님께 직접 물어봐 😊', 3200);
         EMA.ui.sound('wrong');
         return;
       }
@@ -2746,8 +2959,6 @@ window.EMA = window.EMA || {};
     gradeStartOpen() { view.sheet = 'startfrom'; EMA.ui.sound('tap'); view.resetScroll = false; render(); },
     gradeStartPick(d) {
       view.gradeStartKey = d.k || null;
-      view.gradeRep = false;
-      view.gradeParity = '';
       const n = applyGradeView();
       view.sheet = null;
       view.resetScroll = false;
@@ -2759,25 +2970,14 @@ window.EMA = window.EMA || {};
       if (view.gradeStartKey && n) EMA.ui.toast(n + '문제는 수업에서 푼 걸로 빼뒀어요', 2600);
     },
     gradeRep() {
-      view.gradeRep = !view.gradeRep;
-      if (view.gradeRep) view.gradeStartKey = null;
-      const n = applyGradeView();
-      view.resetScroll = false;
-      EMA.ui.sound('tap');
-      render();
-      EMA.ui.toast(view.gradeRep ? (n ? '대표문제 ' + n + '개를 접었어요 · 유제만 남았어요' : '접을 대표문제가 없어요') : '대표문제를 펼쳤어요', 2600);
+      /* v1.1 — 학생 화면에서는 뺐습니다. 선생님 숙제 출제의 [유제만]이 같은 역할을 합니다. */
+      EMA.ui.toast('대표문제 접기는 이제 선생님이 숙제를 낼 때 [유제만]으로 정해요', 3200);
     },
-    gradeParity(d) {
-      const p = d.p || '';
-      view.gradeParity = p;
-      const n = applyGradeView();
-      view.resetScroll = false;
-      EMA.ui.sound('tap');
-      render();
-      EMA.ui.toast(p === 'odd' ? '홀수 번만 보여요 (짝수 ' + n + '개는 잠시 빼뒀어요)' : p === 'even' ? '짝수 번만 보여요 (홀수 ' + n + '개는 잠시 빼뒀어요)' : '전체 번호를 다시 보여요', 2600);
+    gradeParity() {
+      EMA.ui.toast('홀수·짝수 범위는 이제 선생님이 숙제를 낼 때 정해요', 3200);
     },
     gradeReset() {
-      view.gradeRep = false; view.gradeParity = ''; view.gradeStartKey = null;
+      view.gradeStartKey = null;
       applyGradeView();
       view.resetScroll = false;
       EMA.ui.sound('tap');
@@ -2851,15 +3051,28 @@ window.EMA = window.EMA || {};
     },
     markAll() {
       const kind = view.gradeSource === 'print' ? 'print' : 'hw';
-      const n = store.fillRestCorrect
+      const r = store.fillRestCorrect
         ? store.fillRestCorrect(view.classId, view.studentId, kind, view.gradeSource === 'print' ? null : view.gradeBook)
-        : 0;
+        : null;
+      const n = r && r.n != null ? r.n : (typeof r === 'number' ? r : 0);
+      const keys = (r && r.keys) || [];
+      view.undoFill = n && keys.length ? { keys, n, kind } : null;   // 다음 단계로 갈 때까지 유지되는 되돌리기 배너
       EMA.ui.haptic(); EMA.ui.sound('correct');
-      EMA.ui.toast(n ? n + '문제를 한 번에 ⭕ 했어요! 틀린 문제만 ❌를 눌러 주세요' : '채울 빈칸이 없어요', 2600);
+      EMA.ui.toast(n ? n + '문제를 한 번에 ⭕ 했어요! 틀린 문제만 ❌를 눌러 주세요' : '채울 빈칸이 없어요', 3500);
       const mx = store.ensureMission(view.classId, view.studentId);
-      if (mx && mx.then) mx.then(r => r && missionToast(r));
+      if (mx && mx.then) mx.then(r2 => r2 && missionToast(r2));
       else if (mx) missionToast(mx);
       render();
+    },
+    undoFill() {
+      if (!view.undoFill) return;
+      const kind = view.gradeSource === 'print' ? 'print' : 'hw';
+      const n = store.undoFill ? store.undoFill(view.classId, view.studentId, view.undoFill.keys, kind) : 0;
+      view.undoFill = null;
+      view.resetScroll = false;
+      EMA.ui.sound('tap');
+      render();
+      EMA.ui.toast(n ? n + '문제를 되돌렸어요 · 다시 골라 주세요' : '되돌릴 것이 없어요', 3200);
     },
     toClean() {
       const tiles = sourceTiles();
@@ -2889,9 +3102,9 @@ window.EMA = window.EMA || {};
     cleanup(d, el) {
       const kind = view.gradeSource === 'print' ? 'print' : 'hw';
       const before = store.gradeOf(view.classId, view.studentId, kind).cleanup[d.key] || '';
-      // ⭐ 질문은 숙제 1건당 7개까지
-      if (d.k === 'star' && before !== 'star' && store.starCount(view.classId, view.studentId, kind) >= 7) {
-        EMA.ui.toast('질문은 7개까지! 나머지 ❌ 틀림 문제는 수업 전후에 선생님께 직접 물어봐 😊', 3400);
+      // ⭐ 질문은 숙제 1건당 5개까지
+      if (d.k === 'star' && before !== 'star' && store.starCount(view.classId, view.studentId, kind) >= STAR_MAX) {
+        EMA.ui.toast('질문은 ' + STAR_MAX + '개까지! 나머지 ❌ 틀림 문제는 수업 전후에 선생님께 직접 물어봐 😊', 3400);
         EMA.ui.sound('wrong');
         EMA.ui.haptic();
         return;
@@ -2914,7 +3127,7 @@ window.EMA = window.EMA || {};
           EMA.ui.fx.shake('.boss');
           if (join && join.pet) {
             EMA.ui.sound('hatch');
-            EMA.ui.fx.celebrate({ kind: 'hatch', em: join.pet.em, title: join.pet.name + ' 나왔어요!', sub: '펫 알 부화! · 내 도감에 담았어요', ms: 2000 });
+            bigCeleb({ kind: 'hatch', em: join.pet.em, title: join.pet.name + ' 부화!', sub: '펫 알 부화! · 내 도감에 담았어요', sfx: 'hatch' });
           } else if (join && join.coins) {
             EMA.ui.toast('펫이 힘을 보태 코인 +' + join.coins + ' 🐾');
           }
@@ -3038,7 +3251,7 @@ window.EMA = window.EMA || {};
         if (r && r.titles && r.titles.length) {
           r.titles.forEach(t => items.push({ kind: 'title', em: t.em || '🏅', title: t.name + ' 획득!', sub: '새 칭호가 열렸어요', sfx: 'fanfare' }));
         }
-        if (r && r.killed) items.push({ kind: 'boss', em: '🏆', title: '보스 처치!', sub: '반 전원 보너스 코인 30개 · 한정판 칭호', sfx: 'bossdown', ms: 2400 });
+        if (r && r.killed) setTimeout(() => bigCeleb({ kind: 'boss', em: '🏆', title: '보스 처치!', sub: '반 전원 보너스 코인 30개 · 한정판 칭호', sfx: 'bossdown' }), 3000);
         if (r && r.sub && r.sub.shield) items.push({ kind: 'shield', em: '🛡️', title: '보스 방어막 발동!', sub: '수업 당일에 몰아서 내서 보스·코인 50%만 들어갔어요', sfx: 'shield' });
         else if (r && r.sub && r.sub.early) items.push({ kind: 'early', em: '⚡', title: '얼리버드 크리티컬 2배!', sub: '일찍 내서 코인 2배 + XP 20 보너스!', sfx: 'fanfare' });
         if (r && r.carried) items.push({ kind: 'title', em: '🥚', title: '안 푼 ' + r.carried + '문제 → 밀린문제', sub: '제출 기한이 지나 ⚔️ 밀린문제로 넘어갔어요', sfx: 'tap', ms: 1800 });
@@ -3052,6 +3265,19 @@ window.EMA = window.EMA || {};
       view.sheet = null;
       view.resetScroll = true;
       setFlow('done');
+      /* 🎊 숙제를 끝낸 순간 — 화면 전체 축하 팝업 + 자기 칭찬 */
+      if (view.lastResult && !view.lastResult.reupload) {
+        const lr = view.lastResult;
+        const pr = lr.print || kind === 'print';
+        setTimeout(() => {
+          bigCeleb({
+            kind: 'title', em: pr ? '📝' : '🎉',
+            title: pr ? '프린트 끝!' : '오늘 숙제 완료!',
+            sub: `코인 +${lr.coins != null ? lr.coins : 0} · XP +${lr.xp != null ? lr.xp : 0}` + (lr.carried ? ` · 밀린문제 ${lr.carried}개` : ''),
+            ms: 2600
+          });
+        }, 420);
+      }
       if (!(view.lastResult && view.lastResult.titles && view.lastResult.titles.length)) EMA.ui.fx.confetti(70);
       EMA.ui.sound('fanfare');
       if (view.lastResult && view.lastResult.reupload) EMA.ui.toast('사진을 새로 올렸어요! 남은 시간 동안 한 번 더 바꿀 수 있어요');
@@ -3063,6 +3289,30 @@ window.EMA = window.EMA || {};
       view.bigPhotoFrom = ''; view.printSid = null; view.printInput = ''; view.reportImg = null; render();
     },
     carry() { view.homeTab = 'carry'; view.sheet = null; render(); },
+    /** ⬆️ 맨 위로 — 긴 목록의 맨 위로 부드럽게 */
+    scrollTop() {
+      const sc = document.querySelector('.screen');
+      if (!sc) return;
+      try { sc.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { sc.scrollTop = 0; }
+    },
+    /** ❓ 앱이 이상해요 — 당황하지 말고 책에 직접 채점·오답 고쳐서 선생님께 보여주면 됩니다 */
+    appHelp() { view.sheet = 'apphelp'; EMA.ui.sound('tap'); render(); },
+    /** ✅ 책으로 완료 (밀린문제 제외) — 선생님 비상 버튼 */
+    bookDone(d) {
+      const cid = view.classId;
+      const s = store.student(cid, d.id);
+      if (!s) return;
+      if (!confirm(`${s.name} 학생을 '책으로 완료'로 처리할까요?\n\n아직 안 누른 문제는 새로 밀린문제로 넘어가지 않습니다.`)) return;
+      const r = store.markBookDone ? store.markBookDone(cid, d.id, 'hw') : null;
+      EMA.ui.sound('stamp');
+      EMA.ui.toast(r && r.already ? `${s.name}은 이미 완료 처리되어 있어요` : `${s.name} — 책으로 완료! (밀린문제는 그대로)`, 3400);
+      render();
+    },
+    effortClear() {
+      if (store.clearEffort) store.clearEffort(view.classId);
+      EMA.ui.toast('오늘의 열정 알림을 비웠어요');
+      render();
+    },
 
     /* ---- 세계관·도감 ---- */
     openDex() {
@@ -3082,6 +3332,10 @@ window.EMA = window.EMA || {};
       EMA.ui.sound(r.pet.lv >= 3 ? 'legendary' : 'coin');
       render();
       EMA.ui.toast(r.msg || '펫이 자랐어요!');
+      /* 🌱 펫이 한 단계 자라면 전체 화면 축하 */
+      if (r.stageUp && r.pet) {
+        bigCeleb({ kind: 'hatch', em: r.pet.em, title: r.pet.name + ' ' + (r.pet.lv >= 3 ? '완성!' : '성장!'), sub: '펫 ' + r.pet.lv + '단계가 열렸어요' + (r.title ? ' · 칭호 ' + r.title.name : ''), sfx: 'hatch' });
+      }
     },
     /* ---- 선생님 테스트: 다음 날로 넘겨보기 ---- */
     galleryMode(d) {
@@ -3112,13 +3366,13 @@ window.EMA = window.EMA || {};
       EMA.ui.toast(r.msg || '구매 완료!');
       if (r.hatch) {
         const p = r.hatch.pet;
-        const items = [{ kind: 'hatch', em: p.em, title: `${p.name} 부화!`, sub: (GAME().rarity[p.rarity] || {}).label + ' 등급 · 도감에 등록됐어요', sfx: p.rarity === 'legend' ? 'legendary' : 'hatch', ms: 2300 }];
-        (r.hatch.titles || []).forEach(t => items.push({ kind: 'title', em: t.em || '🏅', title: t.name + ' 획득!', sub: '새 칭호가 열렸어요', sfx: 'fanfare' }));
-        celebrateQueue(items);
-        EMA.ui.fx.confetti(p.rarity === 'legend' ? 110 : 60);
+        bigCeleb({ kind: 'hatch', em: p.em, title: `${p.name} 부화!`, sub: (GAME().rarity[p.rarity] || {}).label + ' 등급 · 도감에 등록됐어요', sfx: p.rarity === 'legend' ? 'legendary' : 'hatch' });
+        const items = [];
+        (r.hatch.titles || []).forEach(t => items.push({ kind: 'title', em: t.em || '🏅', title: t.name + ' 획득!', sub: '새 칭호가 열렸어요', sfx: 'fanfare', ms: 1900 }));
+        if (items.length) setTimeout(() => celebrateQueue(items), 3000);
       }
       if (r.killed && r.killed.boss) {
-        setTimeout(() => { EMA.ui.fx.celebrate({ kind: 'boss', em: '🏆', title: '보스 처치!', sub: '반 전원 보너스 코인 30개', ms: 2400 }); EMA.ui.sound('bossdown'); }, 900);
+        setTimeout(() => bigCeleb({ kind: 'boss', em: '🏆', title: '보스 처치!', sub: '반 전원 보너스 코인 30개 · 한정판 칭호', sfx: 'bossdown' }), 900);
       }
     },
     feed() {
@@ -3129,8 +3383,7 @@ window.EMA = window.EMA || {};
       EMA.ui.toast(r.msg || '냠냠!');
       if (r.hatch) {
         const p = r.hatch.pet;
-        celebrateQueue([{ kind: 'hatch', em: p.em, title: `${p.name} 부화!`, sub: (GAME().rarity[p.rarity] || {}).label + ' 등급 · 도감에 등록됐어요', sfx: p.rarity === 'legend' ? 'legendary' : 'hatch', ms: 2300 }]);
-        EMA.ui.fx.confetti(p.rarity === 'legend' ? 110 : 60);
+        bigCeleb({ kind: 'hatch', em: p.em, title: `${p.name} 부화!`, sub: (GAME().rarity[p.rarity] || {}).label + ' 등급 · 도감에 등록됐어요', sfx: p.rarity === 'legend' ? 'legendary' : 'hatch' });
       }
     },
     petDetail(d) { view.petDetail = d.id; view.sheet = 'pet'; render(); },
@@ -3169,7 +3422,8 @@ window.EMA = window.EMA || {};
       EMA.ui.fx.celebrate({ kind: 'title', em: r.skip ? '✅' : '⚔️', title: '해결!', sub, ms: 1700 });
       if (r.join && r.join.pet) EMA.ui.sound('hatch');
       EMA.ui.toast(r.capped ? '해결! 오늘 정식 보상 5개를 넘어 코인 1개만 들어요' : r.skip ? '해결! 안 푼 문제는 코인 1개만 들어요' : '밀린문제 하나 해결! ⚔️');
-      if (r.killed && r.killed.boss) setTimeout(() => { EMA.ui.fx.celebrate({ kind: 'boss', em: '🏆', title: '보스 처치!', sub: '반 전원 보너스 코인 30개', ms: 2200 }); EMA.ui.sound('bossdown'); }, 1800);
+      if (r.killed && r.killed.boss) setTimeout(() => bigCeleb({ kind: 'boss', em: '🏆', title: '보스 처치!', sub: '반 전원 보너스 코인 30개', sfx: 'bossdown' }), 1800);
+      if (r.effort && !r.skip) EMA.ui.fx.banner('📣 선생님께 \'오늘 열심히 했어요!\' 알림이 전달됐어요!', 'effort', 3400);
       if (mx && mx.then) mx.then(x => x && missionToast(x));
       else if (mx) missionToast(mx);
     },
@@ -3438,7 +3692,7 @@ window.EMA = window.EMA || {};
     pmAddPage() {
       const v = (document.querySelector('#pmNewPage') || {}).value || '';
       const p = parseInt(v, 10);
-      if (!p || p < 1 || p > 999) { EMA.ui.toast('쪽 번호를 숫자로 넣어 주세요 (예: 56)'); return; }
+      if (!p || p < 1 || p > 999) { EMA.ui.toast('쪽 번호를 숫자로 넣어 주세요 (예: 18)'); return; }
       const book = view.pmBook || (store.books(view.classId)[0] || {}).book || store.bookList()[0];
       view.pmBook = book;
       view.pmPage = p;
@@ -3492,6 +3746,7 @@ window.EMA = window.EMA || {};
       view.lessonEditBook = b0.book || (l && l.book);
       view.lessonEditPages = (b0.pages || []).slice();
       view.lessonEditInput = pagesText(view.lessonEditPages);
+      view.lessonEditMode = b0.mode || '';
       view.lessonEditDue = store.dueAtOf(view.classId);
       view.sheet = 'lessonEdit'; render();
     },
@@ -3501,14 +3756,28 @@ window.EMA = window.EMA || {};
       const b = store.books(view.classId).find(x => x.book === d.b) || { pages: [] };
       view.lessonEditPages = (b.pages || []).slice();
       view.lessonEditInput = pagesText(view.lessonEditPages);
+      view.lessonEditMode = b.mode || '';
       render();
+    },
+    lessonMode(d) {
+      view.lessonEditMode = d.m || '';
+      EMA.ui.sound('tap');
+      render();
+      const n = store.tilesOf(view.lessonEditBook, view.lessonEditPages || [], view.lessonEditMode).length;
+      EMA.ui.toast(`${EMA.util.HW_MODE_LABEL[view.lessonEditMode] || '전체'} · 문제 ${n}개`, 3000);
     },
     lessonRange() {
       const v = (document.querySelector('#pageInput') || {}).value || '';
+      const parsed = EMA.util.parsePagesMode ? EMA.util.parsePagesMode(v) : { pages: EMA.util.parsePages(v), mode: '' };
       view.lessonEditInput = v;
-      view.lessonEditPages = EMA.util.parsePages(v);
+      view.lessonEditPages = parsed.pages;
+      if (parsed.mode) view.lessonEditMode = parsed.mode;
       EMA.ui.sound('tap');
       render();
+      const n = store.tilesOf(view.lessonEditBook, view.lessonEditPages, view.lessonEditMode).length;
+      EMA.ui.toast(parsed.pages.length
+        ? `✓ ${pagesText(parsed.pages)}쪽 · ${EMA.util.HW_MODE_LABEL[view.lessonEditMode] || '전체'} → 문제 ${n}개`
+        : '쪽수를 숫자로 적어 주세요 (예: 19~22)', 3400);
     },
     lessonPageDel(d) {
       view.lessonEditPages = (view.lessonEditPages || []).filter(p => String(p) !== String(d.p));
@@ -3518,7 +3787,7 @@ window.EMA = window.EMA || {};
     lessonPageAdd() {
       const v = (document.querySelector('#lessonNewPage') || {}).value || '';
       const p = parseInt(v, 10);
-      if (!p || p < 1 || p > 999) { EMA.ui.toast('쪽 번호를 숫자로 넣어 주세요 (예: 56)'); return; }
+      if (!p || p < 1 || p > 999) { EMA.ui.toast('쪽 번호를 숫자로 넣어 주세요 (예: 18)'); return; }
       const list = (view.lessonEditPages || []).slice();
       if (list.indexOf(p) < 0) list.push(p);
       view.lessonEditPages = list.sort((a, b) => a - b);
@@ -3532,24 +3801,27 @@ window.EMA = window.EMA || {};
       const pages = (view.lessonEditPages || []).slice().sort((a, b) => a - b);
       if (!pages.length) { EMA.ui.toast('쪽수를 범위로 만들거나 하나 추가해 주세요'); return; }
       const book = view.lessonEditBook || (store.books(cid)[0] || {}).book;
-      const tiles = store.tilesOf(book, pages);
+      const mode = EMA.util.HW_MODES.indexOf(view.lessonEditMode) > 0 ? view.lessonEditMode : '';
+      const tiles = store.tilesOf(book, pages, mode);
       const missing = pages.filter(p => !store.pageInfo(book, p));
-      const books = store.books(cid).map(b => b.book === book ? { book, pages } : b);
-      if (!books.find(b => b.book === book)) books.push({ book, pages });
+      const books = store.books(cid).map(b => b.book === book ? { book, pages, mode } : b);
+      if (!books.find(b => b.book === book)) books.push({ book, pages, mode });
       const dueEl = document.querySelector('#dueAt');
       const dueVal = String(dueEl ? dueEl.value : (view.lessonEditDue || '')).replace('T', ' ').trim();
       store.saveLesson(cid, {
         date: store.state.today,
         books,
-        homework: books.map(b => b.book + ' ' + pagesText(b.pages) + '쪽').join(', '),
+        homework: books.map(b => b.book + ' ' + pagesText(b.pages) + '쪽' + (EMA.util.HW_MODE_SUFFIX[b.mode] || '')).join(', '),
         assignedAt: (store.lesson(cid) || {}).assignedAt || store.state.today
       });
       store.setDue(cid, dueVal);
+      view.lessonEditInput = pagesText(pages);
       view.sheet = null;
       const d = store.dueInfo(cid);
+      const modeTxt = mode ? ' · ' + EMA.util.HW_MODE_LABEL[mode] : '';
       EMA.ui.toast(missing.length
-        ? `${book} ${pagesText(pages)}쪽 → 문제 ${tiles.length}개 (${missing.join(', ')}쪽은 쪽수표에 없어 ?로 나와요)`
-        : `${book} ${pagesText(pages)}쪽 → 문제 ${tiles.length}개 · 기한 ${d.label}`, 3600);
+        ? `${book} ${pagesText(pages)}쪽${modeTxt} → 문제 ${tiles.length}개 (${missing.join(', ')}쪽은 쪽수표에 없어 ?로 나와요)`
+        : `${book} ${pagesText(pages)}쪽${modeTxt} → 문제 ${tiles.length}개 · 기한 ${d.label}`, 3600);
       render();
     },
     /** ⏰ 지금 마감 — 안 푼 문제를 바로 밀린문제로 */

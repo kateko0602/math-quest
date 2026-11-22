@@ -21,7 +21,7 @@ window.EMA = window.EMA || {};
     setTimeout(() => { if (d.parentNode) d.remove(); }, left);
   }
   ui.toast = function (msg, ms) {
-    toastState = { msg, until: Date.now() + (ms || 2400) };
+    toastState = { msg, until: Date.now() + (ms || 3500) };   // v1.1 — 읽을 시간 여유 있게 3.5초
     paintToast();
   };
   /** 화면을 다시 그린 뒤 토스트가 지워지지 않게 다시 붙입니다 */
@@ -224,6 +224,42 @@ window.EMA = window.EMA || {};
         wrap.classList.add('out');
         setTimeout(() => wrap.remove(), 420);
       }, o.ms);
+      return wrap;
+    },
+
+    /** 화면 전체를 채우는 축하 팝업 (v1.1) — 폭죽·반짝임·확대 + 자기 칭찬 한 마디
+        숙제 완료 · 펫 부화/진화 · 보스 격파 · 주간 목표 달성에 씁니다. 눌러서 바로 닫을 수 있어요. */
+    bigCelebrate(opt) {
+      const app = document.getElementById('app');
+      if (!app) return null;
+      const old = app.querySelector('.bigceleb');
+      if (old) old.remove();
+      const o = Object.assign({ em: '🎉', title: '', sub: '', kind: 'title', ms: 2800, praise: '' }, opt || {});
+      const praises = [
+        '오늘도 끝까지 해낸 내가 최고야! ✨',
+        '이 정도면 수학 천재 맞지? 🧠',
+        '틀린 걸 고친 내가 진짜 멋져! 💪',
+        '한 문제 더 풀 힘이 생겼어! 🔋',
+        '포기하지 않은 나, 칭찬해! 🏅'
+      ];
+      const praise = o.praise || praises[Math.floor(Math.random() * praises.length)];
+      const sparks = Array.from({ length: 14 }, (_, i) =>
+        `<i style="left:${8 + Math.round(Math.random() * 84)}%;top:${8 + Math.round(Math.random() * 72)}%;animation-delay:${(Math.random() * .9).toFixed(2)}s"></i>`).join('');
+      const wrap = document.createElement('div');
+      wrap.className = 'bigceleb ' + o.kind;
+      wrap.innerHTML = `<div class="bc-fw"><i class="f1"></i><i class="f2"></i><i class="f3"></i></div>
+        <div class="bc-sparkles">${sparks}</div>
+        <div class="bc-card">
+          <div class="bc-em">${o.em}</div>
+          <div class="bc-t">${ui.esc(o.title)}</div>
+          ${o.sub ? `<div class="bc-s">${ui.esc(o.sub)}</div>` : ''}
+          <div class="bc-praise">“${ui.esc(praise)}”</div>
+          <div class="bc-tap">화면을 눌러 닫기</div>
+        </div>`;
+      app.appendChild(wrap);
+      const close = () => { wrap.classList.add('out'); setTimeout(() => wrap.remove(), 380); };
+      wrap.addEventListener('click', close);
+      setTimeout(() => { if (wrap.parentNode) close(); }, o.ms);
       return wrap;
     },
 
