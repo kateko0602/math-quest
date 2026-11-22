@@ -47,6 +47,7 @@ window.EMA = window.EMA || {};
     carryMode: 'list',       // v1.2 — 밀린문제 [📋 목록으로 | 🎯 한 문제씩] (기본값 = 목록으로)
     carryOne: null,          // 🎯 한 문제씩 이번 판 대기열 { sid, ids:[…], idx }
     lessonEditBook: null, lessonEditPages: null, lessonEditInput: '', lessonEditDue: '', lessonEditMode: '',
+    classExclOpen: false,      // 🏫 수업 때 같이 푼 문제 목록 펼침
     baBook: null, baPages: null,
     dashRange: 'month', dashOpen: {},
     moveSid: null, moveTo: null, copyTo: null, copyFrom: null, copyPrintSid: null,
@@ -1163,7 +1164,8 @@ window.EMA = window.EMA || {};
         <button class="gtool big ${startTile ? 'on' : ''}" data-act="gradeStartOpen">🏫 ${startTile ? startTile.label + '번부터' : '몇 번부터 숙제?'}</button>
         ${modeLabel ? `<span class="modechip">${esc(modeLabel)}</span>` : ''}
       </div>
-      ${cnt.c6 ? `<div class="gfold">🏫 수업에서 푼 문제 <b>${cnt.c6}</b>개는 빼뒀어요<button class="linkbtn2" data-act="gradeReset">되돌리기</button></div>` : ''}`;
+      ${cnt.c6 ? `<div class="gfold">🏫 수업에서 푼 문제 <b>${cnt.c6}</b>개는 빼뒀어요<button class="linkbtn2" data-act="gradeReset">되돌리기</button></div>` : ''}
+      ${store.classExclCount(cid) ? `<div class="gfold cexfold">🏫 선생님과 같이 푼 문제 <b>${store.classExclCount(cid)}</b>개는 채점에서 빠져 있어요</div>` : ''}`;
 
     const untagged = tiles.filter(t => g.marks[t.key] === 'x' && !(g.tags || {})[t.key]).length;
     const missingN = all.filter(t => t.missing).length;
@@ -1712,18 +1714,20 @@ window.EMA = window.EMA || {};
 
     const l = store.lesson(cid) || {};
     const due = store.dueInfo(cid);
+    const cex = store.classExclCount(cid);
     return `
       ${tg('lesson', '📘', '오늘 진도 · 숙제', `
         <div class="kv"><span class="k">진도</span><span>${esc(l.lesson)}</span></div>
         <div class="kv"><span class="k">숙제</span><span>${esc(l.homework)}</span></div>
         <div class="kv"><span class="k">제출 기한</span><span>${esc(due.label || '없음')} <span class="pill ${due.passed ? 'bad' : 'ok'}">${due.passed ? (due.closed ? '마감됨' : '기한 지남') : '진행 중'}</span></span></div>
+        <div class="kv"><span class="k">🏫 수업 때 같이 푼 문제</span><span>${cex ? `<b class="cex-n">${cex}문제 제외됨</b> <button class="linkbtn2" data-act="openLessonEdit">고치기</button>` : '<span class="muted">없음</span> <button class="linkbtn2" data-act="openLessonEdit">빼기</button>'}</span></div>
         <div class="hint wrap" style="margin:2px 0 4px">${esc(due.passed ? due.lateText : due.leftText)}</div>
         <button class="btn btn-ghost btn-block btn-sm" style="margin-top:10px" data-act="openLessonEdit">숙제·기한 바꾸기</button>
         <div class="row" style="margin-top:8px;gap:8px">
           <button class="btn btn-primary grow btn-sm" data-act="closeDue">⏰ 지금 마감</button>
           <button class="btn btn-ghost grow btn-sm" data-act="copyLessonOpen">📤 다른 반에 복사</button>
         </div>
-        <div class="hint" style="margin-top:6px">마감하면 지금까지 안 푼 문제가 바로 ⚔️ 밀린문제로 넘어가요.</div>`, due.passed ? '기한 지남' : '진행 중')}
+        <div class="hint" style="margin-top:6px">마감하면 지금까지 안 푼 문제가 바로 ⚔️ 밀린문제로 넘어가요.</div>`, cex ? `수업 풀이 ${cex}문제 제외` : (due.passed ? '기한 지남' : '진행 중'))}
 
       ${tg('print', '🖨️', '프린트 설정', `
         ${rows.map(r => {
@@ -2770,6 +2774,31 @@ window.EMA = window.EMA || {};
         <button class="btn btn-ghost btn-sm" data-act="lessonPageAdd">추가</button>
       </div>
       <div class="tilecount">→ <b>${EMA.util.HW_MODE_LABEL[mode] || '전체'}</b> 문제 <b>${tiles.length}</b>개${tiles.length ? ': ' + tiles.slice(0, 12).map(t => t.label).join(', ') + (tiles.length > 12 ? ' …' : '') : ''}</div>
+      ${(() => {
+        /* ★ v2.0 — 🏫 수업 때 같이 푼 문제: 반 전체에서 빼 둡니다 */
+        const ex = store.classExclKeys(cid);
+        const n = store.classExclCount(cid);
+        const open = !!view.classExclOpen;
+        const groups = [];
+        tiles.forEach(t => {
+          let g2 = groups.find(x => x.page === t.page);
+          if (!g2) { g2 = { page: t.page, type: t.type, list: [] }; groups.push(g2); }
+          g2.list.push(t);
+        });
+        const btnLabel = n ? ('🏫 수업 때 풀이 ' + n + '문제 제외됨 · 다시 고치기') : ('🏫 수업 때 같이 푼 문제 빼기' + (open ? ' · 접기' : ''));
+        return `<div class="sect-t" style="margin-top:14px"><span>🏫 수업 때 같이 푼 문제</span><span class="grow"></span><span class="hint">${n ? n + '문제 제외됨' : '반 전체에서 빼기'}</span></div>
+        <button class="btn ${n ? 'btn-navy' : 'btn-ghost'} btn-block btn-sm" data-act="classExclOpen">
+          ${btnLabel}
+        </button>
+        <div class="cex-note">수업에서 선생님과 같이 푼 어려운 문제를 눌러 두면, <b>반 학생 전원</b>의 채점 화면·안 누른 문제·밀린문제에서 빠집니다. 다시 누르면 돌아옵니다.</div>
+        ${open ? `<div class="cex-list">
+          ${groups.length ? groups.map(g2 => `<div class="cex-group">
+            <div class="cex-pg">${g2.page}쪽${g2.type && g2.type !== '표없음' ? ` <small>${esc(g2.type)}</small>` : ''}</div>
+            <div class="cex-chips">${g2.list.map(t => `<button class="cex ${ex[t.key] ? 'on' : ''}" data-act="classExclSet" data-key="${esc(t.key)}" aria-pressed="${ex[t.key] ? 'true' : 'false'}">${esc(t.label)}</button>`).join('')}</div>
+          </div>`).join('') : '<div class="hint">아직 숙제 범위가 없어요 — 위에서 쪽수를 먼저 정해 주세요.</div>'}
+        </div>
+        ${n ? `<button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="classExclClear">↩️ 제외 모두 되돌리기 (${n}문제)</button>` : ''}` : ''}`;
+      })()}
       ${missing.length ? `<div class="card tight missing-note" style="margin-top:10px"><div class="muted wrap" style="font-size:12px;white-space:normal">⚠️ <b>${missing.join(', ')}쪽</b>은 쪽수표에 없어요. 저장은 되지만 채점하려면 <b>⚙️ 관리 → 쪽수표 → 쪽 추가</b>에서 그 쪽 문제번호를 넣어 주세요.</div></div>` : ''}
       <div class="sect-t" style="margin-top:14px"><span>⏰ 제출 기한</span><span class="grow"></span><span class="hint">${esc(store.dueInfo(cid).leftText || store.dueInfo(cid).lateText)}</span></div>
       <input id="dueAt" class="tinput" type="datetime-local" value="${esc(String(due).replace(' ', 'T'))}">
@@ -4212,9 +4241,29 @@ window.EMA = window.EMA || {};
       view.lessonEditInput = pagesText(view.lessonEditPages);
       view.lessonEditMode = b0.mode || '';
       view.lessonEditDue = store.dueAtOf(view.classId);
+      view.classExclOpen = false;
       view.sheet = 'lessonEdit'; render();
     },
     openLessonEdit() { actions.lessonEdit(); },
+    /* ★ v2.0 — 🏫 수업 때 같이 푼 문제: 반 전체에서 빼기 / 되돌리기 */
+    classExclOpen() {
+      view.classExclOpen = !view.classExclOpen;
+      EMA.ui.sound('tap');
+      render();
+    },
+    classExclSet(d) {
+      const on = !store.classExclKeys(view.classId)[d.key];
+      const n = store.setClassExcl(view.classId, d.key, on);
+      EMA.ui.sound(on ? 'tap' : 'coin');
+      EMA.ui.toast(on ? '🏫 수업 풀이로 빼 뒀어요 · 반 전체 ' + n + '문제 제외' : '🏫 다시 학생 문제로 돌아왔어요 · ' + n + '문제 제외', 2600);
+      render();
+    },
+    classExclClear() {
+      const n = store.classExclCount(view.classId);
+      store.clearClassExcl(view.classId);
+      EMA.ui.toast('↩️ ' + n + '문제를 모두 학생 문제로 되돌렸어요', 2800);
+      render();
+    },
     lessonBook(d) {
       view.lessonEditBook = d.b;
       const b = store.books(view.classId).find(x => x.book === d.b) || { pages: [] };

@@ -437,13 +437,66 @@ window.EMA = window.EMA || {};
     /** 숙제 타일 (bookName 생략 시 모든 교재) */
     tiles(classId, bookName) {
       const bs = this.books(classId);
+      /* ★ v2.0 — 선생님이 '🏫 수업 때 같이 푼 문제'로 빼 둔 문제는 반 전체에서 빠집니다
+         (채점 화면·안 누른 문제·밀린문제·학습맵 모두 tiles()를 거칩니다) */
+      const skip = this.classExclKeys(classId);
+      const keep = t => !skip[t.key];
       if (bookName) {
         const one = bs.find(b => b.book === bookName);
-        return one ? this.tilesOf(one.book, one.pages, one.mode) : [];
+        return one ? this.tilesOf(one.book, one.pages, one.mode).filter(keep) : [];
       }
       const out = [];
-      bs.forEach(b => { this.tilesOf(b.book, b.pages, b.mode).forEach(t => out.push(t)); });
+      bs.forEach(b => { this.tilesOf(b.book, b.pages, b.mode).forEach(t => { if (keep(t)) out.push(t); }); });
       return out;
+    }
+
+    /* ---------- 🏫 수업 때 같이 푼 문제 — 반 전체 제외 (v2.0) ---------- */
+    /** 이번 숙제(lesson.date)에 묶인 반 전체 제외 목록 — 새 숙제가 나가면 자동으로 비어 있습니다 */
+    classExclInfo(classId) {
+      const l = (this.state.lessons || {})[classId];
+      const date = (l && l.date) || this.state.today;
+      const box = l && l.classExcl;
+      if (!box || box.date !== date) return { date, keys: {} };
+      return { date, keys: box.keys || {} };
+    }
+    classExclKeys(classId) { return this.classExclInfo(classId).keys; }
+    classExclCount(classId) {
+      const k = this.classExclKeys(classId);
+      return Object.keys(k).filter(x => k[x]).length;
+    }
+    /** 한 문제 빼기/되돌리기 — on=false면 그 문제가 다시 학생 화면에 나옵니다 */
+    setClassExcl(classId, key, on) {
+      if (!key) return this.classExclCount(classId);
+      const l = this.state.lessons[classId] || (this.state.lessons[classId] = {});
+      const date = l.date || this.state.today;
+      if (!l.classExcl || l.classExcl.date !== date) l.classExcl = { date, keys: {} };
+      if (on) l.classExcl.keys[key] = true;
+      else {
+        delete l.classExcl.keys[key];
+        this._dropClassCarry(classId, key);        // 이미 넘어간 밀린문제도 같이 뺍니다
+      }
+      this.save();
+      return this.classExclCount(classId);
+    }
+    clearClassExcl(classId) {
+      const l = this.state.lessons[classId];
+      if (!l || !l.classExcl) return 0;
+      Object.keys(l.classExcl.keys || {}).forEach(k => this._dropClassCarry(classId, k));
+      l.classExcl = { date: l.date || this.state.today, keys: {} };
+      this.save();
+      return 0;
+    }
+    /** 제외한 문제를 이미 밀린문제로 넘겨 둔 학생이 있으면 목록에서 뺍니다 */
+    _dropClassCarry(classId, key) {
+      const date = this.hwDate(classId);
+      const all = this.state.carried || {};
+      let changed = false;
+      Object.keys(all).forEach(sid => {
+        const before = all[sid] || [];
+        const after = before.filter(m => !(m.origin && m.origin.key === key && m.origin.date === date));
+        if (after.length !== before.length) { all[sid] = after; changed = true; }
+      });
+      return changed;
     }
     /** 개별 오답프린트 타일 1~N번 — 제출 완료 전에는 자정이 지나도 이어집니다 */
     printInfo(classId, sid) {

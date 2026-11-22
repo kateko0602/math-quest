@@ -2590,3 +2590,29 @@ body{
 .rc-bar{background:#E7EDF6}
 .rc-bar i{background:var(--cobalt)}
 .rc-sec{border-top:1px dashed #E2E8F0}
+.maprow .mv{min-width:40px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.oxsum .pbar i{background:linear-gradient(90deg,#5B9BFF,#2563EB)}
+.tagbar.calc{background:#EEF2F8;color:#475569}
+.tagbar.read{background:var(--cobalt-l);color:var(--cobalt-d)}
+.tagbar.concept{background:#F2EFFF;color:#5B47A8}
+
+/* ---------- v2.0 — 🏫 수업 때 같이 푼 문제 (선생님 출제) ---------- */
+.cex-note{font-size:11.5px;font-weight:700;color:#7C8AA0;line-height:1.55;margin:6px 2px 0}
+.cex-note b{color:#475569;font-weight:900}
+.cex-list{margin-top:10px;border:1px dashed #D8E4F7;border-radius:14px;padding:10px 11px;background:#FAFCFF;max-height:260px;overflow-y:auto}
+.cex-group{margin-bottom:10px}
+.cex-group:last-child{margin-bottom:0}
+.cex-pg{font-size:11px;font-weight:900;color:#64748B;margin-bottom:5px}
+.cex-pg small{font-size:10px;font-weight:800;color:#96A4B8;margin-left:3px}
+.cex-chips{display:flex;flex-wrap:wrap;gap:5px}
+.cex{
+  min-width:40px;min-height:34px;padding:0 8px;border-radius:9px;cursor:pointer;
+  border:1.5px solid var(--line);border-bottom:3px solid #DDE5F0;background:#fff;
+  font-family:var(--font);font-size:12px;font-weight:900;color:#5B6B80;
+}
+.cex:active{transform:translateY(2px);border-bottom-width:1px}
+.cex.on{background:var(--cobalt-l);border-color:#B9CEFF;border-bottom-color:#B9CEFF;color:var(--cobalt-d)}
+.cex.on::before{content:"✓ ";font-weight:900}
+.cex-n{color:var(--cobalt-d);font-weight:900}
+.cexfold{color:#64748B}
+.cexfold b{color:var(--cobalt-d)}
