@@ -2595,6 +2595,8 @@ body{
 .tagbar.calc{background:#EEF2F8;color:#475569}
 .tagbar.read{background:var(--cobalt-l);color:var(--cobalt-d)}
 .tagbar.concept{background:#F2EFFF;color:#5B47A8}
+/* 계산 실수 = 코랄 액센트 (전체 실수 중 제일 흔한 것을 눈에 띄게) */
+.weakcard .tagbar.calc,.tagbar.calc{background:var(--coral-l);color:var(--coral-d);border:1px solid #FFD9CF}
 
 /* ---------- v2.0 — 🏫 수업 때 같이 푼 문제 (선생님 출제) ---------- */
 .cex-note{font-size:11.5px;font-weight:700;color:#7C8AA0;line-height:1.55;margin:6px 2px 0}
@@ -2618,3 +2620,5 @@ body{
 .cexfold b{color:var(--cobalt-d)}
 .chipx-item{background:#F1F5F9;color:#475569}
 .booktab{border-bottom-width:3px}
+
+.title-chip{background:var(--cobalt-l);border:1px solid #D3E0FF;color:var(--cobalt-d)}
