@@ -2940,7 +2940,6 @@ window.EMA = window.EMA || {};
       s.pets = []; s.egg = null; s.purified = {}; s.titles = [];
       s.bag = { snack: 0, shield: 0, bomb: 0 };
       s.sick = false; s.bombGiven = 0;
-      delete s.leftAt;
       this.save();
       return { name: s.name, before };
     }
