@@ -546,35 +546,23 @@ window.EMA = window.EMA || {};
     /** 사진 인증 — '이 학생이 실제로 ⭕/❌를 누른 쪽'에서만 뽑습니다.
         (전체 숙제 쪽에서 뽑으면 안 푼 쪽을 찍어 오라는 안내가 나갔습니다)
         아직 아무것도 안 눌렀으면 문제가 많은 쪽 → 그래도 없으면 숙제 첫 쪽. */
+    /** 🎲 사진 인증 문제 — 그날 아이가 직접 ⭕/❌로 체크한 문제 중 1개 (아무것도 안 눌렀으면 숙제 첫 문제)
+        같은 학생·같은 날이면 항상 같은 문제가 나와서 화면마다 어긋나지 않습니다. */
     verifyTarget(classId, sid) {
-      const bs = this.books(classId);
-      if (!bs.length) return null;
       const g = this.grade(classId, sid);
-      const marks = {};
+      const picked = [];
       this.tiles(classId).forEach(t => {
         if (!g.marks[t.key] || t.missing) return;
-        const k = t.book + '|' + t.page;
-        const row = marks[k] || (marks[k] = { book: t.book, page: t.page, count: 0 });
-        row.count++;
+        if (t.num == null || t.num === '?') return;
+        picked.push({ book: t.book, page: t.page, num: String(t.num) });
       });
-      let pool = Object.keys(marks).map(k => marks[k]);
-      if (pool.length) {
-        pool.sort((a, b) => (b.count - a.count) || (a.page - b.page));
-        const i = hash(sid + '|' + this.state.today + '|verify') % pool.length;
-        return { book: pool[i].book, page: pool[i].page };
+      if (picked.length) {
+        const i = hash(sid + '|' + this.state.today + '|verify') % picked.length;
+        return picked[i];
       }
-      // 아직 아무것도 안 눌렀으면 문제가 있는 쪽 중에서 (개념 설명만 있는 쪽은 빼고)
-      const seen = {};
-      const all = [];
-      this.tiles(classId).forEach(t => {
-        const k = t.book + '|' + t.page;
-        if (seen[k] || t.missing) return;
-        seen[k] = true;
-        all.push({ book: t.book, page: t.page });
-      });
-      if (!all.length) return null;
-      const i = hash(sid + '|' + this.state.today + '|verify') % all.length;
-      return all[i];
+      const first = this.tiles(classId).find(t => !t.missing && t.num != null && t.num !== '?');
+      if (first) return { book: first.book, page: first.page, num: String(first.num) };
+      return null;
     }
     /** 지금 ② 정리 화면에서 안내할 쪽 — 이미 낸 제출이 있으면 그때 뽑힌 쪽을 그대로 */
     verifyHint(classId, sid, kind) {
@@ -594,6 +582,7 @@ window.EMA = window.EMA || {};
       if (!g.cleanup) g.cleanup = {};
       if (!g.tags) g.tags = {};
       if (!g.excl) g.excl = {};
+      if (!g.stars) g.stars = {};
       return g;
     }
     gradeOf(classId, sid, kind) {
@@ -604,7 +593,22 @@ window.EMA = window.EMA || {};
       if (!g.cleanup) g.cleanup = {};
       if (!g.tags) g.tags = {};
       if (!g.excl) g.excl = {};
+      if (!g.stars) g.stars = {};
       return g;
+    }
+    /** ★⭐ 질문 — 다른 상태와 독립으로 켜고 끕니다 (v2.1) */
+    _isStarG(g, key) { return !!(((g && g.stars) || {})[key] || ((g && g.cleanup) || {})[key] === 'star'); }
+    isStar(classId, sid, key, kind) { return this._isStarG(this.gradeOf(classId, sid, kind), key); }
+    setStar(classId, sid, key, on, kind) {
+      const g = this.gradeRow(classId, sid, kind);
+      g.stars = g.stars || {};
+      if (on) g.stars[key] = true; else delete g.stars[key];
+      if ((g.cleanup || {})[key] === 'star') delete g.cleanup[key];
+      /* 아무 상태도 안 고른 문제에서 ⭐만 누르면 → ❌ + ⭐ (v2.1 확정) */
+      if (on && !g.marks[key] && !((g.excl || {})[key])) g.marks[key] = 'x';
+      g.updatedAt = nowHHMM();
+      this.save();
+      return !!on;
     }
     markOf(classId, sid, key, date) { return this.grade(classId, sid, date).marks[key] || ''; }
     cleanupOf(classId, sid, key, date) { return this.grade(classId, sid, date).cleanup[key] || ''; }
@@ -614,7 +618,7 @@ window.EMA = window.EMA || {};
       const g = this.grade(classId, sid, date);
       const m = g.marks[key];
       if (m === 'o') return 'o';
-      if (m === 'x') return g.cleanup[key] === 'fixed' ? 'fixed' : (g.cleanup[key] === 'star' ? 'star' : 'x');
+      if (m === 'x') return g.cleanup[key] === 'fixed' ? 'fixed' : (this._isStarG(g, key) ? 'star' : 'x');
       return '';
     }
 
@@ -625,11 +629,12 @@ window.EMA = window.EMA || {};
       tiles.forEach(t => {
         const m = g.marks[t.key];
         if (!m && excl[t.key]) { c6++; return; }          // 🏫 수업에서 푼 문제 · 안 낸 문제 — 채점·밀린문제·미션에서 빼요
-        if (m === 'o') { c1++; if (g.cleanup[t.key] === 'star') starO++; return; }
+        const isStar = this._isStarG(g, t.key);
+        if (m === 'o') { c1++; if (isStar) starO++; return; }
         if (m === 'x') {
           const cl = g.cleanup[t.key];
-          if (cl === 'fixed') c3++;
-          else if (cl === 'star') c4++;
+          if (cl === 'fixed') { c3++; if (isStar) starO++; }
+          else if (isStar) c4++;
           else c2++;
           return;
         }
@@ -651,7 +656,10 @@ window.EMA = window.EMA || {};
     /** 오늘 숙제(또는 프린트)에서 '⭐ 질문'으로 고른 문제 수 — 최대 5개 */
     starCount(classId, sid, kind) {
       const g = this.gradeOf(classId, sid, kind);
-      return Object.keys(g.cleanup || {}).filter(k => g.cleanup[k] === 'star').length;
+      const keys = {};
+      Object.keys(g.cleanup || {}).forEach(k => { if (g.cleanup[k] === 'star') keys[k] = 1; });
+      Object.keys(g.stars || {}).forEach(k => { if (g.stars[k]) keys[k] = 1; });
+      return Object.keys(keys).length;
     }
     /** 숙제 + 프린트 합친 오늘 푼 문제 수 */
     solvedToday(classId, sid) {
@@ -906,7 +914,7 @@ window.EMA = window.EMA || {};
       this.activeStudents(classId).forEach(s => {
         const g = this.grade(classId, s.id, d);
         Object.keys(g.marks).forEach(k => {
-          if (g.cleanup[k] === 'star') add(s, k, g.marks[k]);
+          if (this._isStarG(g, k)) add(s, k, g.marks[k]);
         });
       });
       return Object.values(map).map(m => {
@@ -926,7 +934,7 @@ window.EMA = window.EMA || {};
           const row = map[k] || (map[k] = { key: k, students: [], fixed: 0, star: 0 });
           if (!row.students.find(x => x.id === s.id)) row.students.push(s);
           if (g.cleanup[k] === 'fixed') row.fixed++;
-          if (g.cleanup[k] === 'star') row.star++;
+          if (this._isStarG(g, k)) row.star++;
         });
       });
       return Object.values(map).map(m => {
@@ -941,7 +949,7 @@ window.EMA = window.EMA || {};
         const rows = [];
         this.tiles(classId).forEach(t => {
           if (g.marks[t.key] !== 'x' || g.cleanup[t.key] === 'fixed') return;
-          rows.push({ book: t.book, page: t.page, num: t.num, label: (t.page + '쪽 ' + t.num + '번'), star: g.cleanup[t.key] === 'star', today: true });
+          rows.push({ book: t.book, page: t.page, num: t.num, label: (t.page + '쪽 ' + t.num + '번'), star: this._isStarG(g, t.key), today: true });
         });
         this.carried(classId, s.id).forEach(m => {
           if ((m.reason || 'x') === 'skip') return;
@@ -949,6 +957,119 @@ window.EMA = window.EMA || {};
         });
         return { student: s, rows };
       });
+    }
+    /** 📋 선생님 전용 — 학생 한 명의 오답 · 미풀이 · 밀린문제 · 취약 단원 상세 (v2.1)
+        어머님 리포트 이미지는 짧게 두고, 케어에 필요한 목록만 선생님 화면에서 자세히 봅니다.
+        · allWrong: 한 번이라도 틀린 문제 전체 (❌ 못 고침 + 🔁 고침 + 해결한 밀린문제) — 책별 → 쪽수 → 번호순 */
+    studentDetail(classId, sid) {
+      const wrong = [], unsolved = [], allWrong = [];
+      const seen = {};
+      const addWrong = o => {
+        const k = o.book + '|' + o.page + '|' + o.num;
+        if (seen[k]) {
+          if (seen[k].status !== 'open' && o.status === 'open') Object.assign(seen[k], o);
+          return;
+        }
+        seen[k] = o;
+        allWrong.push(o);
+      };
+      const push = (kind, t, g, date) => {
+        const m = g.marks[t.key];
+        if (!m && (g.excl || {})[t.key]) return;          // 🏫 수업에서 푼 문제
+        const base = {
+          key: t.key,
+          book: t.book, kind, page: t.page, num: t.num,
+          unit: t.unitName || this.unitNameOf(t.book, t.page) || '',
+          type: t.type || '', date: date || this.state.today
+        };
+        if (m === 'x') {
+          const cl = (g.cleanup || {})[t.key] || '';
+          const st = cl === 'fixed' ? 'fixed' : 'open';
+          const o = Object.assign(base, {
+            status: st,
+            star: this._isStarG(g, t.key),
+            why: (g.tags || {})[t.key] || '',
+            classSolved: !!(g.classSolved && g.classSolved[t.key])
+          });
+          if (date && date !== this.hwDate(classId)) {
+            /* 지난 날짜의 오답도 '한 번이라도 틀린 문제'에 넣습니다 */
+            addWrong(o);
+            return;
+          }
+          wrong.push(o);
+          addWrong(o);
+        } else if (!m && (!date || date === this.hwDate(classId))) {
+          unsolved.push(base);
+        }
+      };
+      const gh = this.grade(classId, sid);
+      this.tiles(classId).forEach(t => push('hw', t, gh, this.hwDate(classId)));
+      const gp = this.gradeOf(classId, sid, 'print');
+      this.printTiles(classId, sid).forEach(t => push('print', t, gp, this.state.today));
+
+      /* 지난 날 채점 기록 (밀린문제가 된 뒤 날짜가 바뀐 오답까지) */
+      const hwD = this.hwDate(classId);
+      Object.keys(this.state.grades || {}).forEach(k => {
+        const p = String(k).split('|');
+        if (p[0] !== classId || p[2] !== sid) return;
+        if (p[1] === hwD && !p[3]) return;                 // 오늘 것은 위에서 이미 담았습니다
+        const row = this.state.grades[k] || {};
+        Object.keys(row.marks || {}).forEach(tk => {
+          if (row.marks[tk] !== 'x') return;
+          const t = this.tileOfKey(tk);
+          if (!t) return;
+          const cl = (row.cleanup || {})[tk] || '';
+          addWrong({
+            key: tk, book: t.book, kind: p[3] === 'print' ? 'print' : 'hw',
+            page: t.page, num: t.num, unit: t.unitName || this.unitNameOf(t.book, t.page) || '',
+            type: t.type || '', date: p[1],
+            status: cl === 'fixed' ? 'fixed' : 'open',
+            star: this._isStarG(row, tk),
+            why: (row.tags || {})[tk] || '',
+            classSolved: !!(row.classSolved && row.classSolved[tk])
+          });
+        });
+      });
+
+      const carried = this.carried(classId, sid).map(m => ({
+        id: m.id, key: (m.origin && m.origin.key) || '', book: m.book, page: m.page, num: m.num, label: m.label,
+        unit: this.unitNameOf(m.book, m.page) || '',
+        date: m.date, reason: m.reason || 'x', why: m.why || '',
+        overdue: !!m.overdue, tries: m.tries || 0
+      }));
+      carried.forEach(m => {
+        if ((m.reason || 'x') === 'skip') return;          // ⏭️ 안 푼 문제는 오답이 아님
+        addWrong({ key: m.key, book: m.book, kind: 'hw', page: m.page, num: m.num, unit: m.unit,
+          type: '', date: m.date, status: 'open', star: m.reason === 'star', why: m.why, carried: true });
+      });
+      this.solvedCarried(sid).forEach(m => {
+        if ((m.reason || 'x') === 'skip' || m.skip) return;
+        if (m.classSolved) return;                         // 수업에서 같이 푼 문제는 아래(classSolved)로
+        addWrong({ key: (m.origin && m.origin.key) || '', book: m.book, kind: 'hw', page: m.page, num: m.num,
+          unit: this.unitNameOf(m.book, m.page) || '', type: '', date: m.solvedAt || m.date,
+          status: 'fixed', star: false, why: m.why || '', solved: true });
+      });
+
+      /* 책별 → 쪽수 → 문제번호순 */
+      const bookOrder = {};
+      this.bookList().forEach((b, i) => { bookOrder[b] = i; });
+      const numA = v => {
+        const m = String(v == null ? '' : v).match(/^(\d+)\s*(?:-\s*(\d+))?/);
+        return m ? (Number(m[1]) * 1000 + Number(m[2] || 0)) : 999999;
+      };
+      allWrong.sort((a, b) => {
+        const ao = bookOrder[a.book] == null ? 99 : bookOrder[a.book], bo = bookOrder[b.book] == null ? 99 : bookOrder[b.book];
+        return (ao - bo) || (Number(a.page) - Number(b.page)) || (numA(a.num) - numA(b.num));
+      });
+
+      const wk = this.weakReport(classId, sid);
+      return {
+        wrong, unsolved, carried, allWrong,
+        fixed: allWrong.filter(w => w.status === 'fixed').length,
+        open: allWrong.filter(w => w.status !== 'fixed').length,
+        units: wk.allUnits || wk.units || [],
+        tags: wk.tags || [], tagTotal: wk.tagTotal || 0
+      };
     }
     stats(classId, sid) {
       const c = this.counts(classId, sid);
@@ -1012,6 +1133,88 @@ window.EMA = window.EMA || {};
       return c.students.map(s => ({ s, sub: this.submission(classId, s.id, d) }))
         .filter(r => r.sub && r.sub.stampAt)
         .sort((a, b) => a.sub.stampAt < b.sub.stampAt ? -1 : 1);
+    }
+    /** 제출 기록을 사진 ID로 찾기 — 숙제·프린트·날짜 어디에 있든 확실히 찾습니다 (v2.1) */
+    submissionByPhoto(classId, sid, photoId) {
+      const S = this.state.submissions || {};
+      const keys = Object.keys(S);
+      for (let i = 0; i < keys.length; i++) {
+        const k = keys[i];
+        const p = String(k).split('|');
+        if (p[0] !== classId || p[2] !== sid) continue;
+        if (photoId && S[k] && S[k].photoId === photoId) return { key: k, sub: S[k] };
+      }
+      return null;
+    }
+
+    /* ---------- 📸 사진 인증 정책 (v2.1) ----------
+       기본은 예전처럼 '사진 필수'입니다. 선생님이 [숙제·기한 바꾸기]에서
+       '오늘만 사진 생략 허용'을 켰을 때만 그 숙제에 한해 사진 없이 완료할 수 있어요. */
+    photoOptional(classId) {
+      const p = (this.state.photoPolicy || {})[classId];
+      if (!p || !p.optional) return false;
+      return p.date === this.hwDate(classId);
+    }
+    photoPolicyOf(classId) {
+      const on = this.photoOptional(classId);
+      return { optional: on, required: !on, label: on ? '오늘만 생략 허용' : '사진 필수' };
+    }
+    setPhotoOptional(classId, on) {
+      this.state.photoPolicy = this.state.photoPolicy || {};
+      this.state.photoPolicy[classId] = { optional: !!on, date: this.hwDate(classId), at: nowHHMM() };
+      this.save();
+      return this.photoOptional(classId);
+    }
+    /** ↩️ 도장 취소 — 잘못 찍은 도장을 '도장 대기'로 되돌립니다 (재제출 요청과 다릅니다) */
+    unStamp(classId, sid, kind) {
+      const k = SK(classId, kind === 'print' ? this.state.today : this.hwDate(classId), sid, kind);
+      const sub = this.state.submissions[k];
+      if (!sub) return false;
+      sub.stampAt = null;
+      sub.status = 'submitted';
+      sub.unstampedAt = nowHHMM();
+      sub.unstampCount = (sub.unstampCount || 0) + 1;
+      if (sub.bookDone) sub.bookDone = false;
+      this.save();
+      return true;
+    }
+    /** ⚡ 사진 없이 바로 완료 — 선생님이 '오늘만 사진 생략 허용'을 켠 숙제에서만 */
+    async submitNoPhoto(classId, sid, kind) {
+      const t = this.timing(classId);
+      const rw = this.previewReward(classId, sid, kind);
+      const prev = this.submission(classId, sid, null, kind);
+      if (prev && (prev.stampAt || prev.status === 'stamped')) return { error: '선생님이 도장을 찍은 제출이에요' };
+      const already = !!(prev && prev.rewarded);
+      const sub = {
+        status: 'submitted', at: nowHHMM(), ts: Date.now(),
+        photoId: null, photoAt: '', photoSubmitted: false, stampAt: null,
+        verify: kind === 'print' ? { book: '오답프린트', page: '프린트' } : this.verifyTarget(classId, sid),
+        kind: kind || 'hw',
+        early: t.kind === 'early', shield: t.kind === 'shield',
+        coins: already ? 0 : rw.coins, xp: already ? 0 : rw.xp, rewarded: true,
+        noPhoto: true, xpBanked: false
+      };
+      this.state.submissions[SK(classId, kind === 'print' ? this.state.today : this.hwDate(classId), sid, kind)] = sub;
+      const s = this.student(classId, sid);
+      if (!already && s) {
+        s.coins = (s.coins || 0) + rw.coins;
+        s.xp = (s.xp || 0) + rw.xp;
+        sub.xpBanked = true;
+      }
+      const carried = this.carryOverUnmarked(classId, sid, kind);
+      const st = kind === 'print' ? this.printStats(classId, sid) : this.stats(classId, sid);
+      const titles = this._awardTitles(classId, sid, {
+        early: t.kind === 'early',
+        cleaner: st.c3 >= 3,
+        bulldozer: kind !== 'print' && st.c5 === 0 && st.marked >= 8
+      });
+      const killed = this.checkBossKill(classId);
+      this.save();
+      if (!already) this.markEffort(classId, sid, 'homework');
+      return Object.assign({}, rw, {
+        sub, titles, killed, carried, already,
+        coins: already ? 0 : rw.coins, noPhoto: true
+      });
     }
 
     /* ---------- 보스 ---------- */
@@ -1440,7 +1643,7 @@ window.EMA = window.EMA || {};
         out.push({
           id: 'today_' + t.key, key: t.key, book: t.book, page: t.page, num: t.num,
           label: (t.page + '쪽 ' + t.num + '번'), unitName: t.unitName || this.unitNameOf(t.book, t.page),
-          date: this.state.today, today: true, reason: g.cleanup[t.key] === 'star' ? 'star' : 'x',
+          date: this.state.today, today: true, reason: this._isStarG(g, t.key) ? 'star' : 'x',
           name: this.monsterOf(t.page + '쪽 ' + t.num + '번').name
         });
       });
@@ -1457,11 +1660,13 @@ window.EMA = window.EMA || {};
 
     /** 📊 약점 단원 & 실수 패턴 리포트 (아이·선생님 공통) */
     weakReport(classId, sid) {
-      const wrongByUnit = {}, fixByUnit = {};
+      const wrongByUnit = {}, fixByUnit = {}, scoreByUnit = {};
+      /* ★ v2.1 — 취약 단원 가중치: 아직 못 고친 ❌ 는 2점, 고친 🔁 는 1점 */
       const add = (book, page, fixed) => {
         const u = this.unitNameOf(book, page) || book || '기타';
         wrongByUnit[u] = (wrongByUnit[u] || 0) + 1;
         if (fixed) fixByUnit[u] = (fixByUnit[u] || 0) + 1;
+        scoreByUnit[u] = (scoreByUnit[u] || 0) + (fixed ? 1 : 2);
       };
       const g = this.grade(classId, sid);
       this.tiles(classId).forEach(t => {
@@ -1478,9 +1683,15 @@ window.EMA = window.EMA || {};
       });
       ((this.state.monsters || {})[sid] || []).forEach(m => { if (m.fromCarry) return; add(m.book, m.page, !!m.captured); });
 
+      const unitScoreTotal = Object.keys(scoreByUnit).reduce((a, k) => a + scoreByUnit[k], 0) || 1;
       const units = Object.keys(wrongByUnit)
-        .map(name => ({ name, wrong: wrongByUnit[name], fixed: fixByUnit[name] || 0 }))
-        .sort((a, b) => (b.wrong - a.wrong) || (b.fixed - a.fixed));
+        .map(name => ({
+          name, wrong: wrongByUnit[name], fixed: fixByUnit[name] || 0,
+          score: scoreByUnit[name] || 0,
+          open: (wrongByUnit[name] || 0) - (fixByUnit[name] || 0),
+          pct: Math.round((scoreByUnit[name] || 0) / unitScoreTotal * 100)
+        }))
+        .sort((a, b) => (b.score - a.score) || (b.wrong - a.wrong) || (b.fixed - a.fixed));
 
       const counts = { calc: 0, read: 0, concept: 0 };
       Object.keys(this.state.grades || {}).forEach(k => {
@@ -1567,7 +1778,7 @@ window.EMA = window.EMA || {};
     /* ---------- 어머님용 전문 성취도 리포트 ----------
        학원 성적표 톤: 게임 용어(펫·불꽃·보스·XP·코인) 없이
        기간 안의 채점 기록·제출 기록·단원평가만 모아 정리합니다.
-       → 학습 성실도 / 풀이·오답 해결 / 오답 원인 3비율 / 취약 단원 / 단원평가 */
+       → 이번 주 학습 참여도 / 풀이·오답 해결 / 오답 원인 3비율 / 취약 단원 / 단원평가 */
     parentReport(classId, sid, range) {
       const self = this;
       const today = this.state.today;
@@ -1582,10 +1793,12 @@ window.EMA = window.EMA || {};
       const unitMap = {};
       const tagCounts = { calc: 0, read: 0, concept: 0 };
       const gradedDates = {};
+      /* ★ v2.1 — 취약 단원은 '아직 못 고친 ❌'에 2배 가중치 (개념 부족·고난도가 먼저 보이게) */
       const addUnit = (book, page, isFixed) => {
         const unit = this.unitNameOf(book, page) || book || '기타';
-        const u = unitMap[unit] || (unitMap[unit] = { name: unit, wrong: 0, fixed: 0 });
+        const u = unitMap[unit] || (unitMap[unit] = { name: unit, wrong: 0, fixed: 0, score: 0 });
         u.wrong++;
+        u.score += isFixed ? 1 : 2;
         if (isFixed) u.fixed++;
         return u;
       };
@@ -1638,7 +1851,7 @@ window.EMA = window.EMA || {};
       const histActive = hist.filter(h => (h.solved || 0) > 0).length;
       const totalSolved = solved + histSolved;
 
-      /* ④ 학습 성실도 — 연속 학습일 · 숙제 완료율(수업일 기준) */
+      /* ④ 학습 참여도 — 연속 학습일 · 숙제 완료율(수업일 기준) */
       const streak = this.streak(classId, sid);
       const dowMap = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6 };
       let dowSet = [];
@@ -1683,13 +1896,16 @@ window.EMA = window.EMA || {};
       }));
 
       /* ⑥ 취약 단원 · 단원평가 — 오답 수와 함께 전체 오답 대비 비율(%)도 같이 적습니다 */
-      const unitBase = Object.keys(unitMap).reduce((a, k) => a + (unitMap[k].wrong || 0), 0);
+      const unitBase = Object.keys(unitMap).reduce((a, k) => a + (unitMap[k].score || 0), 0);
       const units = Object.keys(unitMap)
         .map(name => {
           const u = unitMap[name];
-          return Object.assign({}, u, { pct: unitBase ? Math.round(u.wrong / unitBase * 100) : 0 });
+          return Object.assign({}, u, {
+            open: (u.wrong || 0) - (u.fixed || 0),
+            pct: unitBase ? Math.round((u.score || 0) / unitBase * 100) : 0
+          });
         })
-        .sort((a, b) => (b.wrong - a.wrong) || (b.fixed - a.fixed))
+        .sort((a, b) => (b.score - a.score) || (b.wrong - a.wrong) || (b.fixed - a.fixed))
         .slice(0, 3);
       const exams = this.exam(classId, sid).filter(e => e.score != null && e.date >= from);
       const avgExam = exams.length ? Math.round(exams.reduce((a, e) => a + (e.score || 0), 0) / exams.length) : null;
@@ -1782,7 +1998,7 @@ window.EMA = window.EMA || {};
       lines.push(`안녕하세요 어머님, ${c.name || ''} 담임입니다.`);
       lines.push(`${s.name} 학생의 ${r.label} 학습 현황을 보내 드립니다. (${kd(r.from)} - ${kd(r.to)})`);
       lines.push('');
-      lines.push('■ 숙제 수행');
+      lines.push('■ ' + r.label + ' 학습 참여도');
       if (r.classDays) lines.push(`· 숙제 ${r.classDays}회 중 ${r.doneClassDays}회 완료 (${r.hwRate}%)`);
       else lines.push('· 이번 기간 숙제 기록이 없습니다.');
       lines.push(`· 총 ${r.solved}문항 풀이 · 연속 ${r.streak}일 학습`);
@@ -1883,6 +2099,7 @@ window.EMA = window.EMA || {};
       st.weekBonus = st.weekBonus || {};        // v1.0 — 주간 목표 보너스 지급 기록
       st.petXp = st.petXp || {};                // v1.0 — 펫 경험치 하루 상한 기록
       st.effort = st.effort || {};              // v1.1 — 🔥 오늘의 열정 학생 알림 (날짜|학생 → {at, reason})
+      st.photoPolicy = st.photoPolicy || {};    // v2.1 — 사진 인증 정책 (기본 = 사진 필수 · 선생님이 '오늘만 생략 허용'을 켤 수 있음)
       if (!st.shop) st.shop = { rewardsOn: true, claims: [] };
       if (!st.gallery) st.gallery = { mode: 'auto' };
       if (!st.bossBoosts) st.bossBoosts = {};
@@ -2173,6 +2390,7 @@ window.EMA = window.EMA || {};
       if (!g.cleanup) g.cleanup = {};
       if (!g.tags) g.tags = {};
       if (!g.excl) g.excl = {};
+      if (!g.stars) g.stars = {};
       return g;
     }
 
@@ -2215,7 +2433,13 @@ window.EMA = window.EMA || {};
       const m = g.marks[key];
       // ★ v1.0: ⭕ 맞았어요에도 ⭐ 질문을 달 수 있습니다(엄마 도움받아 풀었거나 찜찜한 경우)
       if (m !== 'x' && m !== 'o') return '';
-      // ❌ 틀린 문제는 '해결 / 질문'만, ⭕ 맞은 문제는 '질문'만
+      /* ★ v2.1 — ⭐ 질문은 독립 토글 (❌+⭐, 🔁+⭐, ⭕+⭐ 모두 가능) */
+      if (kind2 === 'star') {
+        const on = !this._isStarG(g, key);
+        this.setStar(classId, sid, key, on, kind);
+        return on ? 'star' : '';
+      }
+      // ❌ 틀린 문제는 '해결'만, ⭕ 맞은 문제는 질문만
       if (m === 'o' && kind2 !== 'star') return '';
       if (!kind2 || g.cleanup[key] === kind2) delete g.cleanup[key];
       else g.cleanup[key] = kind2;
@@ -2423,6 +2647,9 @@ window.EMA = window.EMA || {};
     async _submitPhoto(classId, sid, dataUrl, kind) {
       const t = this.timing(classId);
       const rw = this.previewReward(classId, sid, kind);
+      /* ★ v2.1 — 사진을 선택으로 둔 날(선생님이 '오늘만 생략 허용')에는
+         사진을 올리면 보너스 코인 +10. 사진이 필수인 날에는 예전 그대로입니다. */
+      const photoBonus = (kind !== 'print' && this.photoOptional(classId)) ? 10 : 0;
       const pid = 'ph_' + Date.now().toString(36) + Math.floor(Math.random() * 99);
       const put = await this._savePhoto(pid, dataUrl, sid, kind);
       const prev = this.submission(classId, sid, null, kind);
@@ -2434,14 +2661,14 @@ window.EMA = window.EMA || {};
         verify: kind === 'print' ? { book: '오답프린트', page: '프린트' } : this.verifyTarget(classId, sid),
         kind: kind || 'hw',
         early: t.kind === 'early', shield: t.kind === 'shield',
-        coins: already ? 0 : rw.coins, xp: already ? 0 : rw.xp, rewarded: true,
-        xpBanked: false
+        coins: already ? 0 : rw.coins + photoBonus, xp: already ? 0 : rw.xp, rewarded: true,
+        photoBonus: photoBonus, xpBanked: false
       };
       const prevPhoto = prev && prev.photoId;
       this.state.submissions[SK(classId, kind === 'print' ? this.state.today : this.hwDate(classId), sid, kind)] = sub;
       const s = this.student(classId, sid);
       if (!already && s) {
-        s.coins = (s.coins || 0) + rw.coins;
+        s.coins = (s.coins || 0) + rw.coins + photoBonus;
         s.xp = (s.xp || 0) + rw.xp;              // ★ XP가 실제로 쌓여 레벨에 반영됩니다
         sub.xpBanked = true;
       }
@@ -2459,7 +2686,7 @@ window.EMA = window.EMA || {};
       if (!already) this.markEffort(classId, sid, 'homework');   // 🔥 선생님께 '오늘 열심히 했어요!' 알림
       return Object.assign({}, rw, {
         sub, titles, killed, carried, already,
-        coins: already ? 0 : rw.coins, photoId: sub.photoId, photoError: !put.ok
+        coins: already ? 0 : rw.coins + photoBonus, photoBonus, photoId: sub.photoId, photoError: !put.ok
       });
     }
 
@@ -2842,6 +3069,118 @@ window.EMA = window.EMA || {};
       this.save();
       return item;
     }
+    /** ★ v2.1 — 다시 풀 때 고른 틀린 이유를 원래 채점 기록(grades.tags)에도 남깁니다.
+        → 오답 통계·어머님 리포트·학생 상세 분석이 그대로 이어집니다. */
+    setCarryReason(classId, sid, id, tag) {
+      const list = (this.state.carried || {})[sid] || [];
+      const item = list.find(x => x.id === id);
+      if (!item) return null;
+      item.why = tag || item.why || 'x';
+      item.whyAt = this.state.today;
+      if (tag && item.origin && item.origin.key) {
+        const d = item.origin.date || this.hwDate(classId);
+        const key = K(classId, d, sid);
+        const row = this.state.grades[key] || (this.state.grades[key] = { marks: {}, cleanup: {}, tags: {}, excl: {} });
+        row.tags = row.tags || {};
+        row.tags[item.origin.key] = tag;
+      }
+      this.save();
+      return item;
+    }
+    /** 다시 풀었는데 또 틀렸을 때 — '다시 풀어 본 횟수'만 올립니다 (문제는 목록에 그대로 남아요) */
+    markCarryTry(classId, sid, id) {
+      const list = (this.state.carried || {})[sid] || [];
+      const item = list.find(x => x.id === id);
+      if (!item) return null;
+      item.tries = (item.tries || 0) + 1;
+      item.lastTry = this.state.today;
+      this.save();
+      return item;
+    }
+
+    /* ---------- ✅ 수업에서 같이 풀었어요 (v2.1) ----------
+       수업 중 선생님이 같이 풀어 준 문제를 '밀린문제'에서 해결 완료로 내립니다.
+       보상(코인·XP)은 주지 않고, 그날 숙제의 ❌ → 🔁 고침으로 정리합니다. */
+    resolveClassProblem(classId, key, onlySid) {
+      const t = this.tileOfKey(key);
+      if (!t) return 0;
+      const tb = String(t.book), tp = Number(t.page), tn = String(t.num);
+      const sids = onlySid ? [onlySid] : this.activeStudents(classId).map(s => s.id);
+      let n = 0;
+      sids.forEach(sid => {
+        let hit = false;
+        const list = (this.state.carried || {})[sid] || [];
+        for (let i = list.length - 1; i >= 0; i--) {
+          const m = list[i];
+          if (!(String(m.book) === tb && Number(m.page) === tp && String(m.num) === tn)) continue;
+          list.splice(i, 1);
+          m.solvedAt = this.state.today;
+          m.classSolved = true;
+          if ((m.reason || 'x') === 'skip') m.skip = true;
+          (this.state.solvedCarried[sid] = this.state.solvedCarried[sid] || []).push(m);
+          hit = true;
+        }
+        const g = this.gradeRow(classId, sid, 'hw');
+        if (g.marks[key] === 'x' || (g.marks[key] === 'o' && this._isStarG(g, key)) || this._isStarG(g, key)) {
+          if (g.cleanup[key] === 'star') delete g.cleanup[key];
+          if (g.stars) delete g.stars[key];
+          if (g.marks[key] === 'x') g.cleanup[key] = 'fixed';
+          g.classSolved = g.classSolved || {};
+          g.classSolved[key] = this.state.today;
+          g.updatedAt = nowHHMM();
+          hit = true;
+        }
+        if (hit) n++;
+      });
+      if (n) this.save();
+      return n;
+    }
+    /** 밀린문제 하나를 '수업에서 같이 풀었어요'로 해결 (목록에서 바로) */
+    resolveCarriedByClass(classId, sid, id) {
+      const list = (this.state.carried || {})[sid] || [];
+      const i = list.findIndex(x => x.id === id);
+      if (i < 0) return false;
+      const m = list.splice(i, 1)[0];
+      m.solvedAt = this.state.today;
+      m.classSolved = true;
+      if ((m.reason || 'x') === 'skip') m.skip = true;
+      (this.state.solvedCarried[sid] = this.state.solvedCarried[sid] || []).push(m);
+      if (m.origin && m.origin.key) {
+        const g = this.gradeRow(classId, sid, 'hw');
+        if (g.marks[m.origin.key] === 'x') g.cleanup[m.origin.key] = 'fixed';
+        if (g.stars) delete g.stars[m.origin.key];
+      }
+      this.save();
+      return true;
+    }
+    /** 여러 문제를 한 번에 (선택 해제용) */
+    resolveClassProblems(classId, keys) {
+      let n = 0;
+      (keys || []).forEach(k => { n += this.resolveClassProblem(classId, k) ? 1 : 0; });
+      return n;
+    }
+    /** 오늘 반 전체에서 틀렸거나 질문한 모든 문제 (⭐ 질문 탭 전체 목록) */
+    classProblemList(classId, date) {
+      const d = date || this.state.today;
+      const map = {};
+      this.activeStudents(classId).forEach(s => {
+        const g = this.grade(classId, s.id, d);
+        Object.keys(g.marks).forEach(k => {
+          const m = g.marks[k];
+          const star = this._isStarG(g, k);
+          if (m !== 'x' && !star) return;
+          const row = map[k] || (map[k] = { key: k, students: [], wrong: 0, star: 0, fixed: 0 });
+          if (!row.students.find(x => x.id === s.id)) row.students.push(s);
+          if (m === 'x' && !star) row.wrong++;
+          if (star) row.star++;
+          if (m === 'x' && g.cleanup[k] === 'fixed') row.fixed++;
+        });
+      });
+      return Object.values(map).map(r => {
+        const t = this.tiles(classId).find(x => x.key === r.key) || this.tileOfKey(r.key) || { page: '?', num: '?', type: '', book: '' };
+        return Object.assign(r, { page: t.page, num: t.num, type: t.type, book: t.book, unit: t.unitName || '', count: r.students.length });
+      }).sort((a, b) => (b.star - a.star) || (b.wrong - a.wrong) || (a.page - b.page));
+    }
 
     /* =========================================================
        v1.1 4단계 — 🔥 오늘의 열정 학생 · ✅ 책으로 완료 · 성장 그래프
@@ -2902,6 +3241,40 @@ window.EMA = window.EMA || {};
       if (s) this.markEffort(classId, sid, 'book');
       this.save();
       return { ok: true, already, sub };
+    }
+    /** ✏️ 대신 채점 (선생님) — 집에서 못 누른 학생을 선생님이 대신 채점하고 바로 도장.
+        사진 인증 없이 처리하되, 코인·XP·오답 기록은 정상으로 반영합니다 (v2.1). */
+    proxyGradeAndStamp(classId, sid, kind) {
+      const k2 = kind === 'print' ? 'print' : 'hw';
+      const rw = this.previewReward(classId, sid, k2);
+      const s = this.student(classId, sid);
+      const date = k2 === 'print' ? this.state.today : this.hwDate(classId);
+      const key = SK(classId, date, sid, k2);
+      const S = this.state.submissions = this.state.submissions || {};
+      const prev = S[key] || {};
+      const already = !!prev.rewarded;
+      const sub = Object.assign(prev, {
+        status: 'stamped', stampAt: prev.stampAt || nowHHMM(), at: prev.at || nowHHMM(), ts: prev.ts || Date.now(),
+        photoId: prev.photoId || null, photoSubmitted: !!prev.photoId,
+        verify: prev.verify || (k2 === 'print' ? { book: '오답프린트', page: '프린트' } : this.verifyTarget(classId, sid)),
+        kind: k2, proxyGraded: true, proxyAt: nowHHMM(),
+        coins: already ? 0 : rw.coins, xp: already ? 0 : rw.xp, rewarded: true, xpBanked: true
+      });
+      S[key] = sub;
+      if (!already && s) {
+        s.coins = (s.coins || 0) + rw.coins;
+        s.xp = (s.xp || 0) + rw.xp;
+      }
+      const st = k2 === 'print' ? this.printStats(classId, sid) : this.stats(classId, sid);
+      const carried = this.carryOverUnmarked(classId, sid, k2);
+      const titles = this._awardTitles(classId, sid, {
+        cleaner: st.c3 >= 3,
+        bulldozer: k2 !== 'print' && st.c5 === 0 && st.marked >= 8
+      });
+      const killed = this.checkBossKill(classId);
+      if (s) this.markEffort(classId, sid, 'book');
+      this.save();
+      return { coins: already ? 0 : rw.coins, xp: already ? 0 : rw.xp, carried, titles, killed, sub, already };
     }
     /** 📈 성장 그래프 — 최근 N일 학습량·오답 해결 수 (내 도감·리포트용) */
     growth(classId, sid, days) {
@@ -3120,6 +3493,15 @@ window.EMA = window.EMA || {};
     async stampAllPending(c) { const r = await this.call('stampAll', { classId: c }); return { count: r.count || 0, killed: null }; }
     async requestResubmit(c, s, kind) { await this.call('resubmit', { classId: c, studentId: s, kind }); return true; }
     async unlockSubmission(c, s, kind) { await this.call('unlock', { classId: c, studentId: s, kind }); return true; }
+    /* v2.1 — 시트 연동 모드에서도 화면이 그대로 돌아가게 (서버 액션은 12/1 Code.gs 배포 때 함께 넣습니다) */
+    async unStamp(c, s, kind) { await this.call('unlock', { classId: c, studentId: s, kind }); return true; }
+    async submitNoPhoto(c, s, kind) {
+      const rw = this.previewReward(c, s, kind);
+      await this.call('touchSubmission', { classId: c, studentId: s, kind });
+      return { sub: this.submission(c, s, null, kind), coins: rw.coins, xp: rw.xp, noPhoto: true };
+    }
+    async setCarryReason(c, s, id, tag) { return await this.call('retryCarried', { classId: c, studentId: s, id, tag }); }
+    markCarryTry() { return null; }
     async submitYesterday(c, s, dataUrl, solved) { await this.call('submitYesterday', { classId: c, studentId: s, photo: dataUrl, solved }); return true; }
 
     /* 학생·반 */

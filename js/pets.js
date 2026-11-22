@@ -71,7 +71,14 @@ window.EMA_GAME = {
     { id: 'coupon_choco',  em: '🍫', name: '초코파이 1개',  price: 200, kind: 'coupon', tag: '간식',
       desc: '선생님께 보여주면 진짜 간식!' },
     { id: 'coupon_mypu',   em: '🍬', name: '마이쮸 1개',    price: 300, kind: 'coupon', tag: '간식',
-      desc: '선생님께 보여주면 진짜 간식!' }
+      desc: '선생님께 보여주면 진짜 간식!' },
+    /* ★ v2.1 — 학원에서 진짜로 주는 오프라인 보상 쿠폰 (구매 → 내 쿠폰함 → 선생님 확인 후 사용 완료) */
+    { id: 'coupon_snack',  em: '🍬', name: '간식 교환권',   price: 250, kind: 'coupon', tag: '학원 보상',
+      desc: '학원에서 간식으로 바꿔요' },
+    { id: 'coupon_supply', em: '✏️', name: '학원 문구 뽑기권', price: 400, kind: 'coupon', tag: '학원 보상',
+      desc: '학원 문구함에서 하나 뽑기' },
+    { id: 'coupon_skip',   em: '🛡️', name: '숙제 1쪽 면제권', price: 700, kind: 'coupon', tag: '학원 보상',
+      desc: '숙제 딱 1쪽은 안 해도 돼요' }
   ],
 
   /* ---------- 매주 자동 교체 어둠의 보스 ---------- */

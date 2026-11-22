@@ -33,6 +33,54 @@ window.EMA = window.EMA || {};
     try { if (navigator.vibrate) navigator.vibrate(12); } catch (e) { }
   };
 
+  /* ---------- 앱 안 확인창 (v2.1) ----------
+     iOS Brave·사파리에서 브라우저 기본 confirm() 이 조용히 막혀 버튼이 '안 눌리는' 것처럼 되던 문제를 없앱니다.
+     쓰는 법:  const yes = await EMA.ui.confirm({ title:'도장을 되돌릴까요?', msg:'…', ok:'되돌리기', cancel:'그대로' }); */
+  let askDone = null;
+  ui.confirm = function (opt) {
+    const o = Object.assign({ title: '확인', msg: '', ok: '예', cancel: '아니오', em: '❓', danger: false },
+      typeof opt === 'string' ? { msg: opt } : (opt || {}));
+    return new Promise(resolve => {
+      const app = document.getElementById('app');
+      if (!app) { resolve(false); return; }
+      if (askDone) askDone(false);                       // 겹쳐 뜨면 앞의 것은 '아니오'
+      const old = app.querySelector('.ask-wrap');
+      if (old) old.remove();
+      const wrap = document.createElement('div');
+      wrap.className = 'ask-wrap';
+      wrap.innerHTML = `<div class="ask-card" role="dialog" aria-modal="true" aria-label="${ui.esc(o.title)}">
+        <div class="ask-em">${o.em}</div>
+        <div class="ask-t">${ui.esc(o.title)}</div>
+        ${o.msg ? `<div class="ask-m">${String(o.msg).split('\n').map(l => ui.esc(l)).join('<br>')}</div>` : ''}
+        <div class="ask-row">
+          <button class="ask-no" type="button">${ui.esc(o.cancel)}</button>
+          <button class="ask-ok ${o.danger ? 'danger' : ''}" type="button">${ui.esc(o.ok)}</button>
+        </div>
+      </div>`;
+      app.appendChild(wrap);
+      let closed = false;
+      const finish = (v) => {
+        if (closed) return;
+        closed = true;
+        askDone = null;
+        document.removeEventListener('keydown', onKey, true);
+        wrap.classList.add('out');
+        setTimeout(() => { if (wrap.parentNode) wrap.remove(); }, 190);
+        resolve(v);
+      };
+      askDone = finish;
+      const onKey = e => {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      };
+      wrap.querySelector('.ask-no').addEventListener('click', () => finish(false));
+      wrap.querySelector('.ask-ok').addEventListener('click', () => finish(true));
+      wrap.addEventListener('click', e => { if (e.target === wrap) finish(false); });
+      document.addEventListener('keydown', onKey, true);
+      setTimeout(() => { const b = wrap.querySelector('.ask-ok'); if (b) { try { b.focus({ preventScroll: true }); } catch (e) { } } }, 60);
+    });
+  };
+
   ui.kdate = function (iso) {
     const d = new Date(iso + 'T12:00:00');
     return (d.getMonth() + 1) + '월 ' + d.getDate() + '일';

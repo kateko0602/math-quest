@@ -2622,3 +2622,226 @@ body{
 .booktab{border-bottom-width:3px}
 
 .title-chip{background:var(--cobalt-l);border:1px solid #D3E0FF;color:var(--cobalt-d)}
+
+/* ============================================================
+   v2.1 — 앱 안 확인창 · 밀린문제 뱃지 · 책 뱃지 · 상세 분석 · 사진 선택
+   ============================================================ */
+
+/* ---------- ❓ 앱 안 확인창 (iOS 기본 confirm 대신) ---------- */
+.ask-wrap{position:absolute;inset:0;z-index:140;display:grid;place-items:center;padding:26px;
+  background:rgba(15,23,42,.5);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);animation:askIn .16s ease}
+@keyframes askIn{from{opacity:0}to{opacity:1}}
+.ask-wrap.out{opacity:0;transition:opacity .18s ease}
+.ask-card{width:100%;max-width:330px;background:#fff;border-radius:22px;padding:22px 20px 18px;text-align:center;
+  box-shadow:0 24px 60px rgba(15,23,42,.34);animation:askPop .18s cubic-bezier(.3,1.4,.5,1)}
+@keyframes askPop{from{transform:translateY(10px) scale(.96);opacity:0}to{transform:none;opacity:1}}
+.ask-em{font-size:30px;line-height:1}
+.ask-t{font-size:16.5px;font-weight:900;letter-spacing:-.4px;color:#0F172A;margin-top:8px}
+.ask-m{font-size:12.5px;font-weight:700;color:#64748B;line-height:1.62;margin-top:7px}
+.ask-row{display:flex;gap:9px;margin-top:18px}
+.ask-no,.ask-ok{flex:1;min-height:48px;border-radius:14px;border:1.5px solid var(--line);
+  font-family:var(--font);font-size:14.5px;font-weight:900;cursor:pointer}
+.ask-no{background:#F4F7FB;color:#475569;border-bottom-width:3px;border-bottom-color:#DDE5F0}
+.ask-ok{background:var(--cobalt);color:#fff;border-color:var(--cobalt);border-bottom-width:3px;border-bottom-color:var(--cobalt-d);
+  box-shadow:0 6px 14px rgba(37,99,235,.26)}
+.ask-ok.danger{background:var(--coral);border-color:var(--coral);border-bottom-color:var(--coral-d);box-shadow:0 6px 14px rgba(255,107,74,.28)}
+.ask-no:active,.ask-ok:active{transform:translateY(1px)}
+
+/* ---------- ⚔️ 학생별 밀린문제 뱃지 (선생님 화면) ---------- */
+.carrybadge{display:inline-flex;align-items:center;gap:3px;min-height:26px;padding:0 9px;border-radius:99px;
+  border:1.5px solid #F7C3B4;border-bottom-width:3px;border-bottom-color:#EF9E86;background:#FFF1EC;
+  font-family:var(--font);font-size:13px;font-weight:900;color:#C2410C;cursor:pointer;letter-spacing:-.2px}
+.carrybadge b{font-size:15px;font-weight:900}
+.carrybadge.none{background:#F1F5F9;border-color:#E2E8F0;border-bottom-color:#CBD5E1;color:#94A3B8;font-size:11.5px;font-weight:800;min-height:24px}
+.carrybadge:active{transform:translateY(2px);border-bottom-width:1px}
+.stright{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+
+/* ---------- 📚 책 뱃지 (질문·오답 목록에서 어느 책인지) ---------- */
+.bktag{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:6px;margin-right:4px;
+  font-size:10.5px;font-weight:900;letter-spacing:-.2px;vertical-align:1px;white-space:nowrap}
+.bktag-b{background:#E8F0FE;color:#1D4ED8;border:1px solid #C7DBFF}
+.bktag-s{background:#FFF3E2;color:#B45309;border:1px solid #FFDFB8}
+.bktag-m{background:#F1EBFF;color:#6D28D9;border:1px solid #DED0FF}
+.bktag-p{background:#E8FBF4;color:#047857;border:1px solid #BDF0DE}
+.bktag-x{background:#F1F5F9;color:#64748B;border:1px solid #E2E8F0}
+
+/* ---------- 📋 선생님 전용 상세 분석 ---------- */
+.cdet{font-size:12px}
+.cdet-hd{display:flex;align-items:center;gap:7px;padding:2px 0 8px}
+.cdet-hd .t{font-size:12.5px;font-weight:900;color:#1E293B}
+.cdet-block{margin-top:12px}
+.cdet-block:first-child{margin-top:0}
+.cdet-t{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:900;color:#475569;margin-bottom:7px}
+.cdet-t b{color:#C0392B}
+.cdet-row{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px dashed #EEF2F7;font-weight:700;color:#334155}
+.cdet-row:last-child{border-bottom:none}
+.cdet-row .lb{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cdet-row .un{font-size:10.5px;font-weight:700;color:#94A3B8;margin-left:4px}
+.cdet-row .st{font-size:10px;font-weight:900;padding:2px 6px;border-radius:6px;white-space:nowrap}
+.cdet-row .st.open{background:#FEE9E7;color:#B42318}
+.cdet-row .st.fixed{background:#E7F8F0;color:#047857}
+.cdet-row .st.star{background:#FFF4D6;color:#A16207}
+.cdet-row .st.wait{background:#EEF2F7;color:#64748B}
+.cdet-row .st.late{background:#FFF1E6;color:#C2410C}
+.cdet-chips{display:flex;flex-wrap:wrap;gap:5px}
+.cdet-chip{display:inline-flex;align-items:center;gap:2px;padding:4px 7px;border-radius:8px;background:#F4F7FB;
+  border:1px solid #E2E8F0;font-size:11px;font-weight:800;color:#475569}
+.cdet-empty{font-size:11.5px;font-weight:700;color:#A3AAB5;padding:4px 0}
+.cdet-unit{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px dashed #EEF2F7;font-size:11.5px;font-weight:800;color:#334155}
+.cdet-unit:last-child{border-bottom:none}
+.cdet-unit .grow{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cdet-unit .v{font-size:10.5px;font-weight:800;color:#64748B;white-space:nowrap}
+.cdet-unit .v b{color:#C0392B;font-size:12px}
+
+/* ---------- ⚔️ 다시 풀 때 이유 고르기 ---------- */
+.co-whypick{margin-top:9px;padding:10px 11px;border-radius:14px;background:#F8FAFF;border:1px dashed #D3E0FF}
+.co-whypick .q{font-size:11.5px;font-weight:900;color:#475569;margin-bottom:7px}
+.co-whypick .q b{color:var(--cobalt-d)}
+.co-whypick .tagrow{margin:0}
+.carry-why-req{border-color:#F7C3B4;background:#FFF8F5}
+
+/* ---------- 📸 사진 없이 완료 / 보너스 ---------- */
+.photochoice{display:flex;flex-direction:column;gap:9px}
+.photochoice .pc-note{font-size:11.5px;font-weight:700;color:#64748B;line-height:1.55;text-align:center}
+.photochoice .btn-mint{box-shadow:0 6px 14px rgba(16,185,129,.2)}
+.photo-bonus{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:99px;background:#FFF4D6;
+  border:1px solid #FFE1A3;color:#A16207;font-size:11px;font-weight:900}
+.nophoto-pill{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:8px;background:#EEF2F7;color:#64748B;font-size:10.5px;font-weight:800}
+
+/* ---------- 🎟️ 내 쿠폰함 ---------- */
+.couponbox{display:flex;flex-direction:column;gap:7px}
+.couponmine{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:13px;background:#FFFBF3;
+  border:1px solid #FFE6BC;border-bottom-width:3px;border-bottom-color:#FFD79A}
+.couponmine .cm-em{font-size:20px}
+.couponmine .cm-b{flex:1;min-width:0;font-size:12.5px;font-weight:900;color:#7C4A03}
+.couponmine .cm-s{font-size:10px;font-weight:800;color:#B07219;margin-top:2px}
+.couponmine .cm-st{font-size:10px;font-weight:900;color:#A16207;background:#FFF1D6;border-radius:6px;padding:3px 6px}
+.couponmine.used{opacity:.55;background:#F6F8FB;border-color:#E4EAF2;border-bottom-color:#DCE4EE}
+.couponmine.used .cm-b{color:#64748B}
+
+/* ---------- v2.1 — 리포트 단원평가 줄 간격(다닥다닥 붙던 문제) ---------- */
+.report-card .rc-avg{margin-bottom:12px}
+.report-card .rc-unit.exam{padding:9px 0}
+.report-card .rc-sec:last-of-type{padding-bottom:4px}
+.tbtn.undo{background:#FFF3EC;border-color:#F7C3B4;border-bottom-color:#EF9E86;color:#C2410C}
+
+/* ---------- v2.1 — ✏️ 대신 채점 ---------- */
+.proxybtn{display:inline-flex;align-items:center;gap:3px;min-height:28px;padding:0 9px;border-radius:9px;
+  border:1.5px solid #C7DBFF;border-bottom-width:3px;border-bottom-color:#A9C5F7;background:#EFF5FF;
+  font-family:var(--font);font-size:11.5px;font-weight:900;color:#1D4ED8;cursor:pointer;white-space:nowrap}
+.proxybtn:active{transform:translateY(2px);border-bottom-width:1px}
+.tbtn.proxy{background:#EFF5FF;border-color:#C7DBFF;border-bottom-color:#A9C5F7;color:#1D4ED8}
+.px-legend{display:flex;align-items:center;gap:10px;font-size:11px;font-weight:800;color:#64748B;margin:0 0 10px}
+.px-legend .grow{flex:1}
+.px-dot{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px;background:#FFE1D8;border:1px solid #F7B2A0;vertical-align:-1px}
+.px-dot.o{background:#E7F8F0;border-color:#B7E7D2}
+.px-pages{max-height:46vh;overflow-y:auto;padding-right:2px}
+.px-page{margin-bottom:11px}
+.px-pg{font-size:11.5px;font-weight:900;color:#475569;margin-bottom:6px}
+.px-pg small{font-size:10px;font-weight:800;color:#96A4B8;margin-left:3px}
+.px-chips{display:flex;flex-wrap:wrap;gap:5px}
+.px-chip{min-width:44px;min-height:38px;padding:0 9px;border-radius:10px;cursor:pointer;
+  border:1.5px solid #DDE7F3;border-bottom:3px solid #CFDCEC;background:#F8FBFE;
+  font-family:var(--font);font-size:12.5px;font-weight:900;color:#334155}
+.px-chip:active{transform:translateY(2px);border-bottom-width:1px}
+.px-chip.x{background:#FFE9E4;border-color:#F7B2A0;border-bottom-color:#E98D77;color:#B42318}
+.px-chip.x::after{content:" ❌";font-size:10px}
+.px-chip.miss{opacity:.45}
+.px-sum{display:flex;align-items:center;gap:12px;justify-content:center;padding:10px 0 2px;
+  font-size:12.5px;font-weight:900;color:#475569}
+.px-sum .px-x{color:#B42318}
+
+/* ============================================================
+   v2.1 — 한 문제 4개 버튼 (⭕ 맞음 / 🔁 고침 / ❌ 틀림 / ⭐ 질문)
+   윗줄 = 문제번호, 아랫줄 = 버튼 4개 가로 1줄 (375px에서도 줄바꿈 없이)
+   ============================================================ */
+.ox-block{margin-bottom:9px}
+.ox4-hd{display:flex;align-items:center;gap:6px;margin:0 2px 5px}
+.ox4-hd .ox-label{display:inline-flex;align-items:baseline;gap:1px;padding:0;background:none;border:none;
+  border-radius:0;font-size:15px;font-weight:900;letter-spacing:-.4px;color:#1E293B;min-height:0}
+.ox4-hd .ox-label span{font-size:10.5px;font-weight:800;color:#8494A8}
+.ox4-star{font-size:10px;font-weight:900;color:#A16207;background:#FFF4D6;border:1px solid #FFE1A3;
+  border-radius:6px;padding:2px 6px}
+.ox4{display:flex;gap:5px;align-items:stretch}
+.ox4.is-missing{opacity:.45}
+.oxb{flex:1 1 0;min-width:0;min-height:38px;padding:0 3px;border-radius:11px;cursor:pointer;
+  border:1.5px solid var(--line);border-bottom:3px solid #DDE5F0;background:#fff;
+  font-family:var(--font);font-size:11.5px;font-weight:900;letter-spacing:-.4px;color:#64748B;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oxb:active{transform:translateY(2px);border-bottom-width:1px}
+.oxb:disabled{opacity:.45;cursor:default}
+.oxb.o.on{background:linear-gradient(180deg,#3B82F6,#2563EB);border-color:#1D4ED8;border-bottom-color:#163FAE;color:#fff;
+  box-shadow:0 4px 10px rgba(37,99,235,.22)}
+.oxb.f.on{background:linear-gradient(180deg,#34D399,#10B981);border-color:#0E9F6E;border-bottom-color:#0B7F63;color:#fff;
+  box-shadow:0 4px 10px rgba(16,185,129,.22)}
+.oxb.x.on{background:linear-gradient(180deg,#FB7185,#F43F5E);border-color:#E11D48;border-bottom-color:#BE123C;color:#fff;
+  box-shadow:0 4px 10px rgba(244,63,94,.22)}
+.oxb.s.on{background:linear-gradient(180deg,#FCD34D,#F59E0B);border-color:#D97706;border-bottom-color:#B45309;color:#3F2A00;
+  box-shadow:0 4px 10px rgba(245,158,11,.24)}
+@media (max-width:360px){
+  .ox4{gap:4px}
+  .oxb{font-size:10.5px;letter-spacing:-.6px;padding:0 2px}
+}
+
+/* ---------- ✏️ 대신 채점: 문제 한 줄 = 번호 + 버튼 4개 ---------- */
+.px-item{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.px-num{flex:0 0 58px;display:flex;align-items:baseline;justify-content:flex-end;gap:1px;
+  font-size:13.5px;font-weight:900;color:#1E293B;letter-spacing:-.3px;min-width:0;overflow:hidden;white-space:nowrap}
+.px-num span{font-size:9.5px;font-weight:800;color:#8494A8}
+.px-btns{display:flex;gap:4px;flex:1;min-width:0}
+.px-btns.miss{opacity:.45}
+.pxb{flex:1 1 0;min-width:0;min-height:34px;padding:0 2px;border-radius:9px;cursor:pointer;
+  border:1.5px solid var(--line);border-bottom:3px solid #DDE5F0;background:#fff;
+  font-family:var(--font);font-size:10.5px;font-weight:900;letter-spacing:-.5px;color:#64748B;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pxb:active{transform:translateY(2px);border-bottom-width:1px}
+.pxb.o.on{background:#2563EB;border-color:#1D4ED8;border-bottom-color:#163FAE;color:#fff}
+.pxb.f.on{background:#10B981;border-color:#0E9F6E;border-bottom-color:#0B7F63;color:#fff}
+.pxb.x.on{background:#F43F5E;border-color:#E11D48;border-bottom-color:#BE123C;color:#fff}
+.pxb.s.on{background:#F59E0B;border-color:#D97706;border-bottom-color:#B45309;color:#3F2A00}
+.px-legend .px-dot.f{background:#D1FAE5;border-color:#6EE7B7}
+.px-legend .px-dot.s{background:#FEF3C7;border-color:#FCD34D}
+.px-sum{display:flex;align-items:center;gap:9px;justify-content:flex-start;padding:10px 2px 2px;
+  font-size:12px;font-weight:900;color:#475569;flex-wrap:wrap}
+.px-sum .px-o{color:#1D4ED8}
+.px-sum .px-f{color:#047857}
+.px-sum .px-x{color:#BE123C}
+.px-sum .px-s{color:#A16207}
+.px-sum .grow{flex:1}
+
+/* ---------- v2.1 — ❌ 안내 · ✅ 수업에서 같이 풀었어요 · 전체 선택 ---------- */
+.oxnote{margin:8px 2px 0;font-size:11px;font-weight:800;color:#94A3B8;text-align:center;line-height:1.5}
+.oxnote b{color:#C2410C}
+.solvebtn{display:inline-flex;align-items:center;justify-content:center;gap:3px;min-height:32px;padding:0 9px;
+  border-radius:10px;border:1.5px solid #B7E7D2;border-bottom-width:3px;border-bottom-color:#8ADCC4;
+  background:#E9FBF3;color:#047857;font-family:var(--font);font-size:11.5px;font-weight:900;cursor:pointer;white-space:nowrap}
+.solvebtn:active{transform:translateY(2px);border-bottom-width:1px}
+.solvebtn.sm{min-height:28px;font-size:10.5px;padding:0 7px;border-radius:8px}
+.selall{min-height:28px;padding:0 9px;border-radius:9px;border:1.5px solid #C7DBFF;border-bottom-width:3px;
+  border-bottom-color:#A9C5F7;background:#EFF5FF;color:#1D4ED8;font-family:var(--font);font-size:11px;font-weight:900;cursor:pointer;white-space:nowrap}
+.selall.on{background:#2563EB;border-color:#1D4ED8;border-bottom-color:#163FAE;color:#fff}
+.tallrow{display:flex;align-items:center;gap:7px;padding:7px 0;border-bottom:1px dashed #EEF2F7}
+.tallrow:last-of-type{border-bottom:none}
+.tallrow.sel{background:#F4F9FF;border-radius:10px}
+.tlsel{flex:0 0 26px;width:26px;height:26px;border-radius:8px;border:1.5px solid #DDE5F0;background:#fff;
+  color:#fff;font-size:13px;font-weight:900;cursor:pointer;line-height:1}
+.tlsel.on{background:#2563EB;border-color:#1D4ED8}
+.tlmain{min-width:0;display:flex;flex-direction:column;gap:1px;font-size:12px;font-weight:800;color:#334155}
+.tlmain .tlwho{font-size:10.5px;font-weight:700;color:#94A3B8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.px-star{font-size:10px;margin-left:2px;color:#B45309}
+
+/* ---------- v2.1 — 🔁 고침 이유 · 책별 오답 묶음 ---------- */
+.whygrid{display:flex;flex-direction:column;gap:8px}
+.whybtn{display:flex;align-items:center;gap:9px;min-height:50px;padding:0 14px;border-radius:14px;cursor:pointer;
+  border:1.5px solid var(--line);border-bottom-width:4px;border-bottom-color:#DDE5F0;background:#fff;
+  font-family:var(--font);font-size:14px;font-weight:900;color:#334155;text-align:left}
+.whybtn:active{transform:translateY(2px);border-bottom-width:2px}
+.whybtn .we{font-size:19px}
+.whybtn.on{background:#EFF5FF;border-color:#A9C5F7;border-bottom-color:#7FA8F0;color:#1D4ED8}
+.cdet-book{display:flex;align-items:center;gap:5px;margin:8px 0 4px;font-size:11.5px;font-weight:900;color:#475569}
+.cdet-book:first-child{margin-top:0}
+
+/* v2.1 — 전체 오답 목록: 책 뱃지가 줄 전체로 늘어나지 않게 */
+.tlmain{align-items:flex-start}
+.tlmain .bktag{align-self:flex-start}
+.cdet-book .bktag,.cdet-row .bktag,.px-pg .bktag,.cu bktag{flex:0 0 auto}
