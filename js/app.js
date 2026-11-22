@@ -51,13 +51,14 @@ window.EMA = window.EMA || {};
     pinReveal: null,
     reportSid: null, reportRange: 'week', reportImg: null, reportImgName: '',
     petDetail: null, monsterDetail: null, printSid: null, printInput: '',
+    stuResetSid: null,                                         // v1.2 — 학생 기록 초기화
     lastResult: null,
     bigPhotoSid: null, bigPhotoAt: '', bigPhotoFrom: '',
     tOpen: {}, stuOpen: {},
     scrollTarget: null,
     resetScroll: false
   };
-  const MAX_TEACHER_PIN = 6;
+  const MAX_TEACHER_PIN = 4;          // ★ v1.2 — 선생님 PIN도 학생과 똑같이 '딱 4자리'
   const MIN_TEACHER_PIN = 4;
 
   /* =========================================================
@@ -255,23 +256,22 @@ window.EMA = window.EMA || {};
     const bs = store.books(cid);
     if (!bs.length) return '';
     const g = store.gradeOf(cid, sid, 'hw');
-    const rows = [];
-    const add = (u, name, done, total) => {
-      const hit = rows.find(r => r.u === u && r.name === name);
-      if (hit) { hit.done += done; hit.total += total; return; }
-      rows.push({ u, name, done, total });
-    };
+    /* ★ v1.2 — 교재의 모든 단원을 훑지 않고, '오늘 실제 숙제 타일'이 있는 단원만 그립니다.
+       (예전엔 쪽수표 단원을 전부 돌며 이름으로 맞춰 1·2단원이 같이 뜨는 경우가 있었어요) */
+    const map = {};
     bs.forEach(b => {
-      const def = store.book(b.book) || { 단원: {} };
-      const tiles = store.tilesOf(b.book, b.pages, b.mode);
-      Object.keys(def.단원 || {}).sort((a, c) => +a - +c).forEach(u => {
-        const unit = (def.단원 || {})[u] || {};
-        const my = tiles.filter(t => (t.unitName || '') === (unit.이름 || ''));
-        if (!my.length) return;
-        const done = my.filter(t => g.marks[t.key]).length;
-        add(u, unit.이름 || (u + '단원'), done, my.length);
+      store.tilesOf(b.book, b.pages, b.mode).forEach(t => {
+        if (t.missing || t.num == null) return;
+        const ui = store.unitInfoOf(t.book, t.page);
+        if (!ui || !ui.이름) return;
+        const row = map[ui.이름] || (map[ui.이름] = { u: ui.no, name: ui.이름, done: 0, total: 0 });
+        row.total++;
+        if (g.marks[t.key]) row.done++;
       });
     });
+    const rows = Object.values(map)
+      .filter(r => r.total > 0)
+      .sort((a, b) => String(a.u).localeCompare(String(b.u), 'ko', { numeric: true }));
     if (!rows.length) return '';
     return `<div class="card tight mapcard">
       <div class="card-hd"><span class="t">🗺️ 오늘의 학습맵</span><span class="grow"></span><span class="hint">채점하면 채워져요</span></div>
@@ -419,13 +419,13 @@ window.EMA = window.EMA || {};
     if (view.step === 'teacherSetup' || view.step === 'teacherSetup2') {
       const second = view.step === 'teacherSetup2';
       return `<div class="screen no-nav login">
-        ${topbar({ title: second ? '한 번 더 확인' : '선생님 PIN 만들기', sub: second ? '같은 번호를 한 번 더' : MIN_TEACHER_PIN + '~' + MAX_TEACHER_PIN + '자리 숫자', back: true })}
+        ${topbar({ title: second ? '한 번 더 확인' : '선생님 PIN 만들기', sub: second ? '같은 번호를 한 번 더' : '4자리 숫자', back: true })}
         <div class="step" style="margin-top:0">
           <div class="step-t">${second ? '2단계 · 한 번 더 눌러 주세요' : '1단계 · 새 PIN을 정해요'}</div>
           ${pinDotsHtml(MAX_TEACHER_PIN)}
-          <div class="hint center" style="margin:0 0 12px">${second ? '앞에서 정한 PIN과 같아야 해요' : 'PIN 원문은 저장하지 않고 암호(해시)로만 이 기기에 남아요'}</div>
+          <div class="hint center" style="margin:0 0 12px">${second ? '앞에서 정한 PIN과 같아야 해요' : (view.pinLegacy ? '<b>예전 PIN은 5~6자리였어요. 이제 4자리로 새로 정해 주세요.</b>' : 'PIN 원문은 저장하지 않고 암호(해시)로만 이 기기에 남아요')}</div>
           ${keypadHtml()}
-          <button class="btn btn-primary btn-block btn-lg" style="margin-top:12px" data-act="${second ? 'confirmTeacherSetup2' : 'confirmTeacherSetup1'}" ${view.pin.length < MIN_TEACHER_PIN ? 'disabled' : ''}>${second ? '이 PIN으로 시작하기' : '다음'}</button>
+          <button class="btn btn-primary btn-block btn-lg" style="margin-top:12px" data-act="${second ? 'confirmTeacherSetup2' : 'confirmTeacherSetup1'}" ${view.pin.length !== 4 ? 'disabled' : ''}>${second ? '이 PIN으로 시작하기' : '다음'}</button>
         </div>
         ${sheetHtml()}
       </div>`;
@@ -436,8 +436,8 @@ window.EMA = window.EMA || {};
         <div class="step" style="margin-top:0">
           <div class="step-t">1단계 · 비상 복구 키를 넣어 주세요</div>
           <input id="recoverInput" class="tinput" placeholder="예: K7FD-2MQD" autocomplete="off" autocapitalize="characters" style="text-transform:uppercase">
-          <div class="step-t" style="margin-top:20px">2단계 · 새 PIN (${MIN_TEACHER_PIN}~${MAX_TEACHER_PIN}자리)</div>
-          <input id="recoverPin" class="tinput pininput" inputmode="numeric" maxlength="6" placeholder="새 PIN">
+          <div class="step-t" style="margin-top:20px">2단계 · 새 PIN (4자리)</div>
+          <input id="recoverPin" class="tinput pininput" inputmode="numeric" maxlength="4" placeholder="새 PIN 4자리">
           <button class="btn btn-primary btn-block" style="margin-top:14px" data-act="teacherRecoverSave">이 PIN으로 바꾸기</button>
           <div class="hint center" style="margin-top:10px">바꾸면 새 복구 키가 나옵니다. 예전 키는 쓸 수 없어요.</div>
         </div>
@@ -446,12 +446,12 @@ window.EMA = window.EMA || {};
     }
     if (view.step === 'teacherPin') {
       return `<div class="screen no-nav login">
-        ${topbar({ title: '선생님 PIN', sub: MIN_TEACHER_PIN + '~' + MAX_TEACHER_PIN + '자리', back: true })}
+        ${topbar({ title: '선생님 PIN', sub: '4자리 숫자', back: true })}
         <div class="step" style="margin-top:0">
           <div class="step-t">선생님 PIN을 눌러 주세요</div>
           ${pinDotsHtml(MAX_TEACHER_PIN)}
           ${keypadHtml()}
-          <button class="btn btn-primary btn-block btn-lg" style="margin-top:12px" data-act="teacherPinOk" ${view.pin.length < MIN_TEACHER_PIN ? 'disabled' : ''}>확인</button>
+          <button class="btn btn-primary btn-block btn-lg" style="margin-top:12px" data-act="teacherPinOk" ${view.pin.length !== 4 ? 'disabled' : ''}>확인</button>
           <button class="btn btn-ghost btn-block btn-sm" style="margin-top:10px" data-act="teacherRecoverOpen">PIN을 잊었어요 · 복구 키로 다시 설정</button>
         </div>
         ${sheetHtml()}
@@ -473,14 +473,14 @@ window.EMA = window.EMA || {};
                 <span class="nm">${esc(c.name)}</span>
                 <span class="mt">${esc(c.semester)} 과정 · ${esc(c.days)} ${esc(c.time)}</span>
               </span>
-              ${c.active ? '<span class="pill ok">시범 반</span>' : '<span class="pill">준비중</span>'}
+              ${c.active ? (c.localOnly ? '<span class="pill ok">내 공부방</span>' : '<span class="pill ok">시범 반</span>') : '<span class="pill">준비중</span>'}
             </button>`).join('')}
         </div>
         <div class="grow"></div>
         <button class="btn btn-ghost btn-block" data-act="openStory">📖 이야기 보기</button>
         <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="teacherEntry">👩‍🏫 선생님이세요? 선생님 모드</button>
         <div class="pin-hint">학생 PIN은 선생님께 물어보세요 · 내 PIN은 ⚙️ 설정에서 바꿀 수 있어요</div>
-        <div class="verline">v1.1 ${demoChip()}</div>
+        <div class="verline">v1.2 ${demoChip()}</div>
       </div>
       ${sheetHtml()}`;
     }
@@ -590,7 +590,7 @@ window.EMA = window.EMA || {};
             const t = store.tiles(cid, b.book);
             return `<div class="bookrow"><span class="be">${b.book.indexOf('응용') >= 0 ? '📙' : '📘'}</span>
               <span class="bn">${esc(b.book)}</span>
-              <span class="bp">${b.pages.length > 1 ? b.pages[0] + '-' + b.pages[b.pages.length - 1] : b.pages[0]}쪽 · ${t.length}문제</span></div>`;
+              <span class="bp">${pagesText(b.pages)}쪽 · ${t.length}문제</span></div>`;
           }).join('')}
         </div>
         ${timing.kind === 'early' ? '<div class="timing early">⚡ 얼리버드 · 코인 2배</div>'
@@ -820,7 +820,7 @@ window.EMA = window.EMA || {};
       const cls = g.cleanup[t.key] || '';
       rows += `<div class="ox-block">
         <div class="ox-row has-star ${isPrint ? 'compact' : ''} ${t.missing ? 'is-missing' : ''}">
-          <div class="ox-label">${esc(t.label)}<span>번</span></div>
+          <div class="ox-label">${esc(t.label)}${/^확인/.test(String(t.label)) ? '' : '<span>번</span>'}</div>
           <button class="ox o ${m === 'o' ? 'on' : ''}" data-act="mark" data-key="${t.key}" data-m="o" ${t.missing ? 'disabled' : ''} aria-label="${esc(t.label)}번 맞음">⭕ 맞음</button>
           <button class="ox x ${m === 'x' ? 'on' : ''}" data-act="mark" data-key="${t.key}" data-m="x" ${t.missing ? 'disabled' : ''} aria-label="${esc(t.label)}번 틀림">❌ 틀림</button>
           <button class="ox-star ${m === 'o' && cls === 'star' ? 'on' : ''}" data-act="starO" data-key="${t.key}" ${m === 'o' ? '' : 'disabled'} aria-label="${esc(t.label)}번 질문" title="맞았지만 궁금해요">⭐</button>
@@ -1255,8 +1255,21 @@ window.EMA = window.EMA || {};
       <div class="tabs-scroll">
         ${tabs.map(t => `<button class="${view.teacherTab === t.id ? 'on' : ''}" data-act="teacherTab" data-t="${t.id}">${t.em} ${t.label}</button>`).join('')}
       </div>
+      ${missingAlert(c)}
       ${body}
       ${sheetHtml()}
+    </div>`;
+  }
+
+  /** ⚠️ 쪽수표에 없는 쪽 — 선생님 모드에 들어오면 맨 위에서 바로 번호를 넣게 합니다 (v1.2) */
+  function missingAlert(c) {
+    const miss = store.missingPages(c.id);
+    if (!miss.length) return '';
+    const first = miss[0];
+    const label = miss.slice(0, 5).map(x => x.page + '쪽').join(', ');
+    return `<div class="card tight missing-note" style="margin:10px 16px 0">
+      <div class="muted wrap" style="font-size:12px;white-space:normal">⚠️ <b>쪽수표에 없는 ${miss.length}쪽</b>이 있어요 — ${esc(label)}${miss.length > 5 ? ' 외 ' + (miss.length - 5) + '쪽' : ''}<br>${esc(first.book)} · 번호를 넣으면 저장되는 즉시 학생 숙제에 나와요.</div>
+      <button class="btn btn-primary btn-block btn-sm" style="margin-top:8px" data-act="fixMissing" data-b="${esc(first.book)}" data-p="${first.page}">바로 번호 넣기 (${first.page}쪽)</button>
     </div>`;
   }
 
@@ -1612,6 +1625,7 @@ window.EMA = window.EMA || {};
         </div>
         <div class="stuadmin">
           <button class="linkbtn2" data-act="moveOpen" data-id="${s.id}">↪ 반 이동</button>
+          <button class="linkbtn2" data-act="openStuReset" data-id="${s.id}">🔄 기록 초기화</button>
           <button class="linkbtn2 neg" data-act="retire" data-id="${s.id}">🎒 퇴원(보관)</button>
         </div>`).join('')}
       </div>
@@ -1647,7 +1661,7 @@ window.EMA = window.EMA || {};
       story: storySheet, photoconfirm: sheetPhotoConfirm, nextday: sheetNextDay,
       settings: sheetSettings, bigphoto: sheetBigPhoto, recovery: sheetRecovery,
       moveStu: sheetMoveStu, copyLesson: sheetCopyLesson, startfrom: sheetStartFrom,
-      bookall: sheetBookAll, apphelp: sheetAppHelp
+      bookall: sheetBookAll, apphelp: sheetAppHelp, stuReset: sheetStuReset
     };
     const fn = map[view.sheet];
     return fn ? fn() : '';
@@ -2490,7 +2504,7 @@ window.EMA = window.EMA || {};
     const cid = view.classId;
     const s = store.student(cid, view.moveSid);
     if (!s) return '';
-    const others = store.state.classes.filter(c => c.id !== cid);
+    const others = store.state.classes.filter(c => c.id !== cid && !(store.mode === 'api' && c.localOnly));
     return sheetWrap('↪ 반 이동', `
       <div class="sub"><b>${esc(s.name)}</b> 학생을 어느 반으로 옮길까요?</div>
       ${others.map(c => `<button class="pickrow ${view.moveTo === c.id ? 'on' : ''}" data-act="moveTo" data-id="${c.id}">
@@ -2503,10 +2517,29 @@ window.EMA = window.EMA || {};
   }
 
   /** 다른 반에 숙제·쪽수 설정 복사 */
+  /** 🔄 학생 기록 초기화 — 선생님 4자리 PIN을 확인한 뒤 그 학생 기록만 지웁니다 (v1.2) */
+  function sheetStuReset() {
+    const cid = view.classId;
+    const s = store.student(cid, view.stuResetSid);
+    if (!s) return '';
+    const st = store.stats(cid, s.id);
+    const carried = store.carried(cid, s.id).length;
+    return sheetWrap('🔄 ' + esc(s.name) + ' 기록 초기화', `
+      <div class="sub">이 학생의 <b>채점·제출·도장·오답·밀린문제·프린트·출석·펫·코인·XP</b>를 처음 상태로 되돌립니다.<br>이름·PIN·반은 그대로 남아요.</div>
+      <div class="card tight" style="margin-top:10px">
+        <div class="kv"><span class="k">지금 기록</span><span>코인 ${s.coins || 0} · XP ${(s.xp || 0) + (s.bonusXp || 0)} · 펫 ${(s.pets || []).length}마리</span></div>
+        <div class="kv"><span class="k">오늘 채점</span><span>${st.marked}/${st.total}문제 · 밀린문제 ${carried}개</span></div>
+      </div>
+      <div class="hint wrap" style="margin:10px 0 6px">되돌릴 수 없어요. 선생님 4자리 PIN을 넣어 주세요.</div>
+      <input id="stuResetPin" class="tinput pininput" inputmode="numeric" maxlength="4" placeholder="선생님 PIN 4자리" autocomplete="off">
+      <button class="btn btn-primary btn-block" style="margin-top:12px" data-act="stuResetGo" data-id="${s.id}">이 학생 기록 초기화</button>
+    `);
+  }
+
   function sheetCopyLesson() {
     const cid = view.classId;
     const l = store.lesson(cid) || {};
-    const others = store.state.classes.filter(c => c.id !== cid);
+    const others = store.state.classes.filter(c => c.id !== cid && !(store.mode === 'api' && c.localOnly));
     return sheetWrap('📤 다른 반에 숙제 복사', `
       <div class="sub">지금 숙제(<b>${esc((l.books || []).map(b => b.book + ' ' + pagesText(b.pages) + '쪽').join(', ') || l.homework || '')}</b>)를 어느 반에 똑같이 낼까요?</div>
       ${others.map(c => `<button class="pickrow ${view.copyTo === c.id ? 'on' : ''}" data-act="copyTo" data-id="${c.id}">
@@ -2784,20 +2817,26 @@ window.EMA = window.EMA || {};
       view.pin += d.k;
       EMA.ui.sound('tap');
       if (!teacher && view.pin.length === 4) { render(); setTimeout(currentPinVerify, 120); return; }
+      /* ★ v1.2 — 선생님 PIN도 4자리를 다 누르면 바로 확인 (학생과 같은 손맛) */
+      if (teacher && view.step === 'teacherPin' && view.pin.length === 4) { render(); setTimeout(actions.teacherPinOk, 120); return; }
       render();
     },
     pinDel() { view.pin = view.pin.slice(0, -1); render(); },
     pinBack() { view.pin = ''; render(); },
     teacherEntry() {
       view.pinTarget = 'teacher'; view.pin = ''; view.newPin1 = '';
-      view.step = (window.EMA.auth && EMA.auth.needsSetup()) ? 'teacherSetup' : 'teacherPin';
+      /* ★ v1.2 — 예전에 5~6자리로 정한 PIN은 4자리로 다시 정하게 안내합니다 */
+      const cfg = (window.EMA.auth && EMA.auth.config) ? EMA.auth.config() : null;
+      const legacy = !!(cfg && cfg.hash && Number(cfg.len || 0) !== 4);
+      view.pinLegacy = legacy;
+      view.step = (window.EMA.auth && (EMA.auth.needsSetup() || legacy)) ? 'teacherSetup' : 'teacherPin';
       if (view.role !== 'login') view.role = 'login';
       view.sheet = null;
       view.resetScroll = true; render();
     },
     /* ---- 선생님 PIN 첫 설정 (4~6자리 → 해시 저장 → 비상 복구 키 1회 안내) ---- */
     confirmTeacherSetup1() {
-      if (!/^\d{4,6}$/.test(view.pin)) { EMA.ui.toast('숫자 ' + MIN_TEACHER_PIN + '~' + MAX_TEACHER_PIN + '자리로 정해 주세요'); return; }
+      if (!/^\d{4}$/.test(view.pin)) { EMA.ui.toast('숫자 4자리로 정해 주세요'); return; }
       view.newPin1 = view.pin;
       view.pin = '';
       view.step = 'teacherSetup2';
@@ -2805,7 +2844,7 @@ window.EMA = window.EMA || {};
       render();
     },
     async confirmTeacherSetup2() {
-      if (!/^\d{4,6}$/.test(view.pin)) { EMA.ui.toast('숫자 ' + MIN_TEACHER_PIN + '~' + MAX_TEACHER_PIN + '자리로 정해 주세요'); return; }
+      if (!/^\d{4}$/.test(view.pin)) { EMA.ui.toast('숫자 4자리로 정해 주세요'); return; }
       if (view.pin !== view.newPin1) {
         EMA.ui.toast('두 번 누른 PIN이 달라요. 처음부터 다시 해 주세요');
         EMA.ui.sound('wrong');
@@ -2821,7 +2860,7 @@ window.EMA = window.EMA || {};
       render();
     },
     async teacherPinOk() {
-      if (view.pin.length < MIN_TEACHER_PIN) return;
+      if (view.pin.length !== 4) return;          // 4자리를 다 누르면 자동 확인 — 빈 채로 누른 경우는 조용히 무시
       const ok = await EMA.auth.verifyPin(view.pin);
       if (!ok) {
         EMA.ui.toast('선생님 PIN이 달라요');
@@ -2842,7 +2881,7 @@ window.EMA = window.EMA || {};
     async teacherRecoverSave() {
       const code = (document.querySelector('#recoverInput') || {}).value || '';
       const pin = (document.querySelector('#recoverPin') || {}).value || '';
-      if (!/^\d{4,6}$/.test(pin)) { EMA.ui.toast('새 PIN을 숫자 ' + MIN_TEACHER_PIN + '~' + MAX_TEACHER_PIN + '자리로 정해 주세요'); return; }
+      if (!/^\d{4}$/.test(pin)) { EMA.ui.toast('새 PIN을 숫자 4자리로 정해 주세요'); return; }
       const r = await EMA.auth.resetWithRecovery(code, pin);
       if (r.error) { EMA.ui.toast(r.error); EMA.ui.sound('wrong'); return; }
       view.recoveryCode = r.recovery;
@@ -3879,6 +3918,28 @@ window.EMA = window.EMA || {};
       const s = store.restoreStudent(view.classId, d.id);
       EMA.ui.sound('coin');
       EMA.ui.toast(`${s.name} 학생을 다시 재원으로 돌렸어요`);
+      render();
+    },
+    /** ⚠️ 쪽수표에 없는 쪽 번호 바로 넣기 */
+    fixMissing(d) {
+      view.pmBook = d.b;
+      view.pmPage = parseInt(d.p, 10);
+      view.pmInput = '';
+      view.pmList = [];
+      view.sheet = 'pmpage';
+      render();
+    },
+    openStuReset(d) { view.stuResetSid = d.id; view.sheet = 'stuReset'; render(); },
+    async stuResetGo(d) {
+      const pin = String((document.querySelector('#stuResetPin') || {}).value || '').trim();
+      if (!/^\d{4}$/.test(pin)) { EMA.ui.toast('선생님 PIN 4자리를 넣어 주세요'); return; }
+      const ok = await EMA.auth.verifyPin(pin);
+      if (!ok) { EMA.ui.toast('선생님 PIN이 달라요'); EMA.ui.sound('wrong'); return; }
+      const r = store.resetStudentRecords(view.classId, d.id);
+      if (!r) { EMA.ui.toast('학생을 찾지 못했어요'); return; }
+      view.sheet = null;
+      EMA.ui.sound('coin');
+      EMA.ui.toast(`${r.name} 학생 기록을 초기화했어요 (코인 ${r.before.coins} · 펫 ${r.before.pets}마리 → 0)`, 3400);
       render();
     },
     copyLessonOpen() { view.copyTo = null; view.sheet = 'copyLesson'; render(); },

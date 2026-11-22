@@ -319,4 +319,20 @@ window.EMA = window.EMA || {};
       meta: { seededAt: new Date().toISOString(), demo: true, origin: 'seed', model: 'v0.9' }
     }));
   };
+
+  /** 내 공부방 — 중1-1 응용심화 1인 반. 학원 시트·다른 반과 섞이지 않게 localOnly 로 둡니다.
+      보스 HP는 boss() 규칙(50 + 인원×10)대로 1명이면 60이 됩니다. */
+  EMA.buildStudyRoom = function (today) {
+    return {
+      id: 'study1', name: '내 공부방', grade: '중1', semester: '중1-1',
+      days: '월·수·금', time: '20:30~21:30', textbooks: ['중1-1 응용심화'],
+      emoji: '🏠', active: true, localOnly: true, bossHp: 60,
+      students: [{
+        id: 'solo1', name: '도전자', nickname: '도전자', pin: '1234', status: 'active',
+        avatar: '🚀', xp: 0, bonusXp: 0, coins: 0, streak: 0,
+        pets: [], egg: null, bag: { snack: 0, shield: 0, bomb: 0 },
+        purified: {}, titles: [], sick: false
+      }]
+    };
+  };
 })();

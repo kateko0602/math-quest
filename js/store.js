@@ -53,7 +53,7 @@ window.EMA = window.EMA || {};
   const KEY = 'ema.state.v5';           // 저장 칸 이름은 v0.8 그대로 — 기록을 옮기지 않아도 됩니다
   const DEMO_KEY = 'ema.state.demo.v5';       // 연습(?mode=demo)은 실제 운영 데이터와 다른 칸에 쌓입니다
   const LEGACY_KEYS = ['ema.state.v4', 'ema.state.v3'];
-  const SCHEMA = 8;                     // 구조 버전 8 — v1.1 4단계: 열정 알림(effort)·책으로 완료(bookDone)·쪽수표 자동 갱신
+  const SCHEMA = 9;                     // 구조 버전 9 — v1.2: 유령 타일(쪽수표에 없는 쪽) 정리 · 내 공부방(1인 반) 추가
   const PAGE_MAPS_BACKUP = '.pageMaps.old';   // 쪽수표를 갈아 끼우기 전 옛 표를 백업해 두는 칸
   const SESSION = 'ema.session.v2';
   const DOW = ['일', '월', '화', '수', '목', '금', '토'];
@@ -268,10 +268,9 @@ window.EMA = window.EMA || {};
       };
       (pages || []).forEach(p => {
         const info = this.pageInfo(bookName, p);
-        if (!info) {
-          out.push({ key: tileKey(bookName, p, 0), label: '?', page: p, num: null, book: bookName, type: '표없음', unitName: '', missing: true });
-          return;
-        }
+        // ★ v1.2: 쪽수표에 아예 없는 쪽은 타일을 만들지 않습니다(예전엔 '?'·num null 타일이 생겨 '58null'로 보였어요).
+        //        선생님 모드 상단 알림(⚠️ 쪽수표에 없는 N쪽)에서 번호를 넣으면 그때 타일이 생깁니다.
+        if (!info) return;
         // ★ v1.0: 문제가 없는 개념 설명 쪽(예: 응용심화 58·59쪽)은 '58쪽 ?번' 타일을 만들지 않습니다
         const nums = (info.문제 || []).filter(n => String(n == null ? '' : n).trim() !== '');
         if (!nums.length) return;
@@ -284,6 +283,27 @@ window.EMA = window.EMA || {};
     /** 문제가 하나도 없는 쪽(개념 설명만 있는 쪽) — 숙제 범위에 들어와도 자동으로 빠집니다 */
     conceptPages(bookName) {
       return this.pagesOfBook(bookName).filter(p => !(p.problems || []).length).map(p => p.page);
+    }
+    /** 쪽수표에 아예 없는 쪽 — 선생님 모드 '⚠️ 쪽수표에 없는 N쪽' 알림용 */
+    missingPages(classId) {
+      const out = [];
+      this.books(classId).forEach(b => {
+        (b.pages || []).forEach(p => {
+          if (!this.pageInfo(b.book, p)) out.push({ book: b.book, page: p });
+        });
+      });
+      return out;
+    }
+    /** 쪽이 속한 단원 번호·이름 — 오늘의 학습맵이 실제 숙제 타일만 보고 단원을 그릴 때 씁니다 */
+    unitInfoOf(bookName, page) {
+      const b = this.book(bookName);
+      if (!b) return null;
+      const p = parseInt(page, 10);
+      for (const u of Object.keys(b.단원 || {})) {
+        const unit = b.단원[u] || {};
+        if ((unit.쪽 || {})[String(p)]) return { no: u, 이름: unit.이름 || (u + '단원') };
+      }
+      return null;
     }
     /** 문제(교재·쪽)가 속한 단원 이름 — 쪽수표에 없는 쪽은 가장 가까운 단원으로 */
     unitNameOf(bookName, page) {
@@ -1817,6 +1837,31 @@ window.EMA = window.EMA || {};
       if (!st.bossKills) st.bossKills = {};
       if (!st.meta) st.meta = {};
       if (this.demo) { st.meta.demo = true; st.meta.origin = 'demo'; }
+      /* ★ v1.2 — 내 공부방(중1-1 응용심화 1인 반)은 기존 기기에도 한 번만 자동으로 더합니다.
+         localOnly: 학원 관리시트·다른 반과 절대 섞이지 않게 표시해 둡니다. */
+      if (window.EMA.buildStudyRoom && !st.classes.some(c => c.id === 'study1')) {
+        st.classes.push(window.EMA.buildStudyRoom(st.today || todayISO()));
+      }
+      const studyCls = st.classes.find(c => c.id === 'study1');
+      if (studyCls && !st.lessons['study1']) {
+        const base = st.today || todayISO();
+        const dows = [1, 3, 5];                       // 월·수·금
+        let dueDay = '';
+        for (let i = 1; i <= 14; i++) {
+          const cand = shiftISO(base, i);
+          if (dows.indexOf(new Date(cand + 'T12:00:00').getDay()) >= 0) { dueDay = cand; break; }
+        }
+        dueDay = dueDay || shiftISO(base, 1);
+        const dueAt = dueDay + ' 20:30';
+        st.lessons['study1'] = {
+          date: base,
+          lesson: '중1-1 응용심화 : 1단원 소수와 거듭제곱 (4-6쪽)',
+          homework: '중1-1 응용심화 4-6쪽',
+          books: [{ book: '중1-1 응용심화', pages: [4, 5, 6] }],
+          assignedAt: base, dueAt, dueDate: dueAt.slice(0, 10),
+          due: '다음 수업(' + dueAt.slice(5) + ') 전까지'
+        };
+      }
       st.classes.forEach(c => {
         c.students = c.students || [];
         c.textbooks = c.textbooks || [];
@@ -1863,7 +1908,67 @@ window.EMA = window.EMA || {};
         if (!sub) return;
         if (sub.photoId) { sub.photoSubmitted = true; if (!sub.photoAt) sub.photoAt = sub.at || ''; }
       });
+      /* ★ v1.2 — 예전에 생긴 유령 기록(쪽수표에 없는 쪽 · 문제 없는 개념쪽 · num null)을 자동 정리 */
+      this._cleanPhantom(st);
       return st;
+    }
+
+    /** v1.2 — '58쪽 ?번'·'58null' 같은 유령 기록 정리.
+        쪽수표에 없는 쪽, 문제가 없는 개념 설명 쪽에서 만들어진 밀린문제·몬스터·채점 키를 지웁니다.
+        (지우기 전 원본은 migrate 가 ema.state.v5.migrate.v<이전버전> 으로 백업합니다) */
+    _cleanPhantom(st) {
+      const MAP = (st.pageMaps && st.pageMaps.교재) || {};
+      const pageInfo = (book, page) => {
+        const b = MAP[book];
+        if (!b) return null;
+        const key = String(page);
+        for (const u of Object.keys(b.단원 || {})) {
+          const cell = (b.단원[u].쪽 || {})[key];
+          if (cell) return cell;
+        }
+        return null;
+      };
+      const numBad = n => n == null || String(n).trim() === '' || String(n) === 'null' || String(n) === 'undefined';
+      const valid = (book, page, num) => {
+        if (book === '프린트') return !numBad(num);
+        if (numBad(num)) return false;
+        const inf = pageInfo(book, page);
+        return !!(inf && (inf.문제 || []).length);
+      };
+      let dropped = 0;
+      ['carried', 'solvedCarried', 'monsters'].forEach(field => {
+        const M = st[field];
+        if (!M) return;
+        Object.keys(M).forEach(sid => {
+          const list = M[sid] || [];
+          M[sid] = list.filter(m => {
+            const keep = valid(m && m.book, m && m.page, m && m.num);
+            if (!keep) dropped++;
+            return keep;
+          });
+        });
+      });
+      Object.keys(st.grades || {}).forEach(k => {
+        const g = st.grades[k];
+        if (!g) return;
+        ['marks', 'cleanup', 'tags', 'excl'].forEach(f => {
+          const obj = g[f];
+          if (!obj) return;
+          Object.keys(obj).forEach(key => {
+            const parts = String(key).split(':');
+            const bp = parts[0] || '';
+            const cut = bp.indexOf('|');
+            if (cut < 0) return;                     // 옛 형식 키는 손대지 않습니다
+            const book = bp.slice(0, cut), page = bp.slice(cut + 1);
+            if (book === '프린트') return;
+            const inf = pageInfo(book, page);
+            const idx = Number(parts[1] || 0);
+            if (!inf || !(inf.문제 || []).length || idx >= (inf.문제 || []).length) { delete obj[key]; dropped++; }
+          });
+        });
+      });
+      if (dropped) console.info('v1.2 유령 기록 정리:', dropped, '건');
+      return dropped;
     }
 
     async init() {
@@ -2132,6 +2237,7 @@ window.EMA = window.EMA || {};
       const g = this.grade(classId, sid);
       let n = 0;
       this.tiles(classId).forEach(t => {
+        if (t.missing || t.num == null) return;        // v1.2 — 쪽수표에 없는 쪽은 밀린문제로 넘기지 않습니다
         if (g.marks[t.key]) return;
         if ((g.excl || {})[t.key]) return;             // 🏫 수업에서 푼 문제는 밀린문제가 아닙니다
         if (this._hasCarry(sid, this.hwDate(classId), t.key)) return;
@@ -2184,6 +2290,7 @@ window.EMA = window.EMA || {};
         const g = this.grade(classId, s.id);
         let n = 0;
         this.tiles(classId).forEach(t => {
+          if (t.missing || t.num == null) return;      // v1.2 — 유령 타일 제외
           const mark = g.marks[t.key];
           if (mark === 'o') return;
           if (mark === 'x' && g.cleanup[t.key] === 'fixed') return;
@@ -2472,6 +2579,9 @@ window.EMA = window.EMA || {};
       return ((this.state.lateUploads || {})[K(classId, y, sid)]) || null;
     }
     yesterdayFlameMissing(classId, sid) {
+      /* v1.2 — 아직 한 번도 쓴 적 없는 학생(새 반·새 기기)에게는 '어제 불꽃' 안내를 띄우지 않습니다 */
+      const any = (this.state.history[sid] || []).length || Object.keys((this.state.activity || {})[sid] || {}).length;
+      if (!any) return false;
       const y = shiftISO(this.state.today, -1);
       const hist = this.state.history[sid] || [];
       const row = hist.find(h => h.date === y);
@@ -2799,6 +2909,40 @@ window.EMA = window.EMA || {};
       if (!s) return null;
       s.pin = String(Math.floor(1000 + Math.random() * 9000));
       this.save(); return s.pin;
+    }
+    /** 🔄 이 학생 기록 초기화 (선생님 PIN 확인 뒤) — 이 학생의 학습 기록만 지우고 이름·PIN·반은 유지
+        채점·제출·도장·오답·밀린문제·프린트·미션·펫·코인·XP·출석 기록이 모두 처음 상태가 됩니다. */
+    resetStudentRecords(classId, sid) {
+      const s = this.student(classId, sid);
+      if (!s) return null;
+      const before = {
+        coins: s.coins || 0, xp: (s.xp || 0) + (s.bonusXp || 0),
+        pets: (s.pets || []).length, streak: s.streak || 0,
+        carried: ((this.state.carried || {})[sid] || []).length
+      };
+      const st = this.state;
+      const drop = obj => Object.keys(obj || {}).forEach(k => {
+        const p = String(k).split('|');
+        if (p[0] === classId && p[2] === sid) delete obj[k];
+      });
+      drop(st.grades); drop(st.submissions); drop(st.prints); drop(st.lateUploads);
+      Object.keys(st.carryResolve || {}).forEach(k => { const p = String(k).split('|'); if (p[1] === sid) delete st.carryResolve[k]; });
+      Object.keys(st.effort || {}).forEach(k => { if (String(k).split('|')[1] === sid) delete st.effort[k]; });
+      st.carried[sid] = [];
+      st.solvedCarried[sid] = [];
+      st.monsters[sid] = [];
+      st.history[sid] = [];
+      if (st.activity) st.activity[sid] = {};
+      if (st.missions) delete st.missions[sid];
+      if (st.weekBonus) delete st.weekBonus[sid];
+      if (st.petXp) delete st.petXp[sid];
+      s.xp = 0; s.bonusXp = 0; s.coins = 0; s.streak = 0;
+      s.pets = []; s.egg = null; s.purified = {}; s.titles = [];
+      s.bag = { snack: 0, shield: 0, bomb: 0 };
+      s.sick = false; s.bombGiven = 0;
+      delete s.leftAt;
+      this.save();
+      return { name: s.name, before };
     }
     setPageProblem(book, page, list) {
       const b = this.book(book);
