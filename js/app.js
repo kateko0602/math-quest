@@ -602,7 +602,7 @@ window.EMA = window.EMA || {};
     const chapters = st.chapters || [];
     return sheetWrap('📖 ' + (st.title || '숫자 왕국 구출 대작전'), `
       <div class="storybox">
-        <div class="s-em">🌑</div>
+        <div class="s-em">🏰</div>
         ${lines.map(l => `<p class="s-line">${esc(l)}</p>`).join('')}
       </div>
       ${chapters.length ? `<div class="sect-t" style="margin-top:14px"><span>보스 스토리</span><span class="grow"></span><span class="hint">4장</span></div>
