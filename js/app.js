@@ -4674,6 +4674,9 @@ window.EMA = window.EMA || {};
     },
     pickAvatar(d) {
       if (!CH() || !CH().byId[d.a]) return;
+      /* 온보딩·프로필 시트에서 캐릭터를 먼저 골라도 입력하던 닉네임이 지워지지 않게 */
+      const ni = document.querySelector('#nickInput');
+      if (ni) view.pending.nickname = ni.value;
       const me = store.student(view.classId, view.studentId);
       const before = me ? charIdOf(me) : null;
       view.pending.avatar = d.a;
