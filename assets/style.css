@@ -3637,15 +3637,10 @@ body.sheet-open .fabtop{display:none !important}
   border-radius:999px;padding:2px 9px;margin-top:4px;white-space:nowrap;
 }
 .hero-char:active .hc-plate{transform:scale(.95)}
-.hero-char .hc-bub{
-  position:absolute;left:calc(100% - 4px);top:14px;
-  background:#fff;color:#20304A;font-size:10.5px;font-weight:900;line-height:1.35;
-  border-radius:12px;padding:6px 10px;white-space:normal;text-align:left;word-break:keep-all;
-  width:158px;box-shadow:0 6px 16px rgba(6,20,52,.3);
-  opacity:0;transition:opacity .18s;pointer-events:none;z-index:4;
-}
-.hero-char .hc-bub::after{content:"";position:absolute;left:-6px;top:14px;border:6px solid transparent;border-right-color:#fff;border-left:0}
-.hero-char.show .hc-bub{opacity:1}
+.hero-char .hc-nm .nm-cheer{display:none}
+.hero-char.show .hc-nm .nm-def{display:none}
+.hero-char.show .hc-nm .nm-cheer{display:inline}
+.hero-char.show .hc-nm{background:#fff;color:#20304A;border-color:#fff;white-space:normal;max-width:150px;line-height:1.35;padding:4px 9px}
 /* v2.3 — 히어로 안쪽 점선 스티치 제거(더 깔끔하게) */
 .hero2::after{display:none}
 
@@ -3741,3 +3736,13 @@ body.sheet-open .fabtop{display:none !important}
 .bigceleb .bc-card .bc-em{filter:drop-shadow(0 8px 14px rgba(15,23,42,.2))}
 .bigceleb .charparty{margin:0 0 8px}
 .bigceleb .bc-fw,.bigceleb .bc-sparkles{position:absolute;inset:0;pointer-events:none}
+
+/* v2.3 — 대표 캐릭터는 히어로 '오른쪽'에 (오늘 목표 링은 아래 왼쪽으로) */
+.hero2 .hero-top{align-items:flex-start}
+.hero2 .hero-top .hero-char{flex:0 0 auto;margin-top:2px}
+.hero2 .hero-char .hc-plate{width:92px;height:92px}
+.hero2 .hero-char img{width:78px;height:78px}
+.hero2 .hero-bot{align-items:flex-end;justify-content:space-between}
+.hero2 .hero-bot .hero-goalbox{flex:0 0 auto;align-items:flex-start;gap:2px;padding-bottom:2px}
+.hero2 .hero-bot .hero-goalbox .hring{width:68px;height:68px}
+.hero2 .hero-bot .hero-goalnum{font-size:10.5px;padding-left:2px}

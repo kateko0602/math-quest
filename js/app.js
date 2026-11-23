@@ -266,18 +266,15 @@ window.EMA = window.EMA || {};
           <div class="hero-title">안녕하세요, <em>${esc(me.nickname || me.name || '')}</em>!<br>오늘도 한 걸음 더 👊</div>
           <div class="hero-sub">못 고친 오답을 고치면 펫이 진화해요</div>
         </div>
-        <div class="hero-goalbox">
-          ${ringSvg(g.pct, { size: 78, sw: 8, cls: 'hring', text: g.pct + '%', sub: '오늘 목표' })}
-          <div class="hero-goalnum"><b>${g.done}</b><span>/${g.total}</span></div>
-        </div>
+        ${who ? `<button class="hero-char ${view.charTap ? 'show' : ''}" data-act="charTap" aria-label="${esc(who.nick)} — 내 캐릭터 바꾸기">
+          <span class="hc-plate">${charImg(who.id, 80, view.charTap ? 'avatar-jelly-tap' : 'avatar-float')}</span>
+          <span class="hc-nm"><span class="nm-def">${esc(who.nick)} · 바꾸기</span><span class="nm-cheer">${esc(bub)}</span></span>
+        </button>` : mascotSvg()}
       </div>
       <div class="hero-bot">
-        <div class="hero-art2">
-          ${who ? `<button class="hero-char ${view.charTap ? 'show' : ''}" data-act="charTap" aria-label="${esc(who.nick)} — 내 캐릭터 바꾸기">
-            <span class="hc-bub">${esc(bub)}</span>
-            <span class="hc-plate">${charImg(who.id, 84, view.charTap ? 'avatar-jelly-tap' : 'avatar-float')}</span>
-            <span class="hc-nm">${esc(who.nick)} · 바꾸기</span>
-          </button>` : mascotSvg()}
+        <div class="hero-goalbox">
+          ${ringSvg(g.pct, { size: 68, sw: 7, cls: 'hring', text: g.pct + '%', sub: '오늘 목표' })}
+          <div class="hero-goalnum"><b>${g.done}</b><span>/${g.total}</span></div>
         </div>
         <div class="hero-side">
           ${(() => { const lv2 = store.level(cid, sid), st2 = store.stats(cid, sid);
@@ -1096,7 +1093,7 @@ window.EMA = window.EMA || {};
           <span class="co-left">남은 ${list.length}개</span>
         </div>
         <div class="co-em villain">${villainImg(CH() ? CH().minionFor(m.why) : 'minion_01_slime', 92, 'villain-float')}</div>
-        <div class="co-nm">${esc(CH() ? CH().info(CH().minionFor(m.why)).name : (m.name || '못 고친 오답'))}</div>
+        <div class="co-nm">${esc(CH() && m.why ? CH().info(CH().minionFor(m.why)).name : (m.name || '못 고친 오답'))}</div>
         <div class="co-lb">${esc(m.book === '프린트' ? '' : m.book + ' ')}<b>${m.page}쪽 ${esc(m.num)}번</b></div>
         <div class="co-meta">${esc(m.date.slice(5))} · ${reasonTxt[m.reason] || '❌'}${tries}</div>
         ${overdueText(m) ? `<div class="co-late">⏰ ${esc(overdueText(m).replace(' · ', ''))}</div>` : ''}
@@ -1142,7 +1139,7 @@ window.EMA = window.EMA || {};
           <div class="carrycard">
             <div class="cc-em villain">${villainImg(CH() ? CH().minionFor(m.why) : 'minion_01_slime', 40)}</div>
             <div class="grow">
-              <div class="cc-nm">${esc(CH() ? CH().info(CH().minionFor(m.why)).name : (m.name || '못 고친 오답'))}${whyDef ? `<span class="whybadge">${whyDef.em} ${esc(whyDef.label)}</span>` : ''}</div>
+              <div class="cc-nm">${esc(CH() && m.why ? CH().info(CH().minionFor(m.why)).name : (m.name || '못 고친 오답'))}${whyDef ? `<span class="whybadge">${whyDef.em} ${esc(whyDef.label)}</span>` : ''}</div>
               <div class="cc-lb">${esc(m.book === '프린트' ? '' : m.book + ' ')}${m.page}쪽 ${esc(m.num)}번 <span class="dot">·</span> ${esc(m.date.slice(5))} <span class="dot">·</span> ${reasonTxt[m.reason] || '❌'}${tries}${overdueText(m) ? `<br><span class="late-note">⏰ ${esc(overdueText(m).replace(' · ', ''))}</span>` : ''}</div>
             </div>
             <div class="cc-do">
