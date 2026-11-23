@@ -2845,3 +2845,700 @@ body{
 .tlmain{align-items:flex-start}
 .tlmain .bktag{align-self:flex-start}
 .cdet-book .bktag,.cdet-row .bktag,.px-pg .bktag,.cu bktag{flex:0 0 auto}
+
+/* ============================================================================
+   v2.2 — 모바일 네이티브 앱 개편 (1안: 토스 × 듀오링고 3D 깔끔형)
+   ─ 선은 걷고, 면과 그림자로 층을 만든다 · 아이콘은 컬러 3D SVG
+   ─ 하단 탭·상단 바는 화면 끝에 고정 + safe-area · 모달은 바텀 시트
+   ─ 기능·클래스 이름은 그대로: 이 층은 '보이는 방식'만 바꿉니다.
+   ============================================================================ */
+:root{
+  --r-card:22px;
+  --r-pill:999px;
+  --elev-1:0 1px 2px rgba(15,23,42,.05), 0 6px 14px -6px rgba(15,23,42,.10);
+  --elev-2:0 1px 2px rgba(15,23,42,.05), 0 14px 28px -10px rgba(15,23,42,.14);
+  --elev-3:0 2px 6px rgba(15,23,42,.06), 0 24px 48px -16px rgba(15,23,42,.22);
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);
+}
+
+/* ---------- ① 공통: 테두리 선 → 면 + 부드러운 그림자 ---------- */
+.card,
+.sturow,.stuadmin,.setrow,.kv,.gitem-row,.biglist .bigrow,.report-card,.photo-open,
+.tstat,.dashcard,.dash-kpis,.wallet,.helpbox,.storybox,.pethero,.petshow,.sumcard,
+.segmented,.htabs,.carry-mode,.km{ border:none !important; }
+.card{
+  border-radius:var(--r-card);
+  box-shadow:var(--elev-1);
+  padding:17px 16px 16px;
+  transition:box-shadow .18s ease, transform .12s ease;
+}
+.card.tight{padding:14px 15px}
+.card-hd .t{font-size:15px;letter-spacing:-.35px}
+.card-hd .s{font-size:11.5px;font-weight:800;color:#8A99AD}
+/* 쿨그레이 바탕 위 흰 카드가 떠 보이게 — 아주 옅은 윗면 하이라이트 */
+.card::after{content:none}
+.sturow{
+  background:#fff;border-radius:18px;box-shadow:var(--elev-1);
+  margin:0 0 10px;padding:12px 13px;
+}
+.sturow.open{box-shadow:var(--elev-2)}
+.divider{background:#EDF1F7}
+.hero{border-radius:26px;box-shadow:0 18px 36px -14px rgba(37,99,235,.55), inset 0 1px 0 rgba(255,255,255,.4)}
+.hero::after{border-color:rgba(255,255,255,.3)}
+.topbar{border-bottom:none;box-shadow:0 1px 0 rgba(15,23,42,.04), 0 8px 20px -14px rgba(15,23,42,.28)}
+.topbar .ttl{font-size:19px;font-weight:900;letter-spacing:-.6px}
+.icon-btn{border:none;box-shadow:var(--elev-1);background:#fff}
+.icon-btn:active{transform:scale(.94)}
+.chip{border:none;box-shadow:var(--elev-1)}
+
+/* 상단·하단 바를 화면 끝에 딱 붙게 + 노치/홈바 여백 */
+.topbar{
+  padding-top:calc(11px + var(--safe-t));
+  padding-bottom:10px;
+}
+.screen{padding-bottom:calc(92px + var(--safe-b))}
+.screen.no-nav{padding-bottom:calc(16px + var(--safe-b))}
+.nav{
+  padding:8px 8px calc(8px + var(--safe-b));
+  border-top:none;
+  box-shadow:0 -1px 0 rgba(15,23,42,.05), 0 -14px 30px -18px rgba(15,23,42,.30);
+  background:#fff;
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+}
+.nav-item{min-height:52px;border-radius:16px}
+.nav-item.on{background:#EAF1FF;color:#1D4ED8}
+.nav-item .i{display:grid;place-items:center;width:26px;height:26px}
+.nav-item .i .svic{width:25px;height:25px;filter:none;opacity:1}
+.nav-item:not(.on) .i .svic{filter:saturate(.35) opacity(.55)}
+.nav-item.on .i .svic{filter:drop-shadow(0 3px 5px rgba(37,99,235,.28))}
+.nav-item.on .i{transform:translateY(-1px) scale(1.06)}
+
+/* ---------- ① 컬러 3D 아이콘 공통 ---------- */
+.svic{display:inline-block;width:1.3em;height:1.3em;vertical-align:-.28em;flex:0 0 auto}
+.svic.sm{width:1.1em;height:1.1em;vertical-align:-.22em}
+.btn .svic{margin-right:5px;vertical-align:-.24em}
+.tabs-scroll button .ti{display:inline-grid;place-items:center;width:18px;height:18px;margin-right:5px;vertical-align:-4px}
+.tabs-scroll button .ti .svic{width:18px;height:18px}
+.tabs-scroll button.on .ti .svic{filter:drop-shadow(0 2px 3px rgba(255,255,255,.25))}
+.bookrow .be{display:inline-grid;place-items:center;width:20px;height:20px}
+.bookrow .be .svic{width:18px;height:18px}
+.quickrow .btn{display:inline-flex;align-items:center;gap:6px}
+.quickrow .btn .svic{margin:0;width:17px;height:17px}
+.mline .mt{display:inline-flex;align-items:center;gap:5px}
+.mline .mt .svic{width:17px;height:17px}
+.kingdom .kcast{display:grid;place-items:center;width:34px;height:34px}
+.kingdom .kcast .svic{width:28px;height:28px}
+
+/* ---------- 주요 지표: 큰 숫자 + 옅은 설명 ---------- */
+.stat{
+  border-radius:18px;box-shadow:var(--elev-1);padding:13px 8px 11px;background:#fff;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+}
+.stat .sic{display:grid;place-items:center;width:30px;height:30px;margin-bottom:2px}
+.stat .sic .svic{width:25px;height:25px}
+.stat .v{font-size:24px;font-weight:900;letter-spacing:-.9px;color:var(--navy);line-height:1.1}
+.stat .v>span{font-size:11.5px;font-weight:800;color:#8A99AD;margin-left:2px;letter-spacing:0}
+.stat .l{font-size:10.5px;font-weight:800;color:#8A99AD;letter-spacing:-.1px}
+.dash-kpis{border-radius:18px;box-shadow:none;background:transparent;display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.dash-kpis .kpi{
+  background:#fff;border-radius:18px;padding:13px 12px 11px;box-shadow:var(--elev-1);
+  display:flex;flex-direction:column;align-items:flex-start;gap:1px;
+}
+.dash-kpis .kpi .kic{display:grid;place-items:center;width:30px;height:30px;border-radius:11px;margin-bottom:5px}
+.dash-kpis .kpi .kic .svic{width:22px;height:22px}
+.dash-kpis .kpi .kic.c{background:#EAF1FF}
+.dash-kpis .kpi .kic.f{background:#FFF0EB}
+.dash-kpis .kpi .kic.m{background:#E6F9F3}
+.dash-kpis .kpi .kic.g{background:#FFF6E0}
+.dash-kpis .kpi b{font-size:26px;font-weight:900;letter-spacing:-1.1px;color:var(--navy);line-height:1.05}
+.dash-kpis .kpi span{font-size:11.5px;font-weight:800;color:#6E7F94}
+.dash-kpis .kpi small{font-size:10.5px;font-weight:800;color:#9AA8BC}
+.hpn{font-size:23px;letter-spacing:-.9px}
+.bigrow .bno,.tlno{font-weight:900}
+
+/* ---------- ③ 선생님 오늘: 카드 정보/버튼 다이어트 ---------- */
+.sturow .stuhd{gap:10px;background:none;border-radius:0}
+.sturow .stuhb{grid-template-columns:auto 1fr}
+.sturow .stuhd .nm{font-size:14px;letter-spacing:-.3px}
+.sturow .stuhd .cnts{gap:7px;margin-top:4px;font-size:11px}
+.sturow .stright{flex-direction:row;align-items:center;gap:5px;flex-wrap:nowrap}
+.sturow .more{
+  width:40px;height:40px;border-radius:14px;border:none;background:#F2F6FC;
+  font-size:19px;font-weight:900;color:#5B6B80;line-height:1;
+  transition:background .15s ease, transform .1s ease;
+}
+.sturow.open .more{background:#EAF1FF;color:#1D4ED8}
+.sturow .more:active{transform:scale(.94)}
+.carrybadge{min-height:32px;border-radius:12px;padding:0 10px 0 8px;display:inline-flex;align-items:center;gap:4px;box-shadow:var(--elev-1)}
+.sturow .pill{min-height:28px;display:inline-flex;align-items:center;border-radius:10px}
+
+/* 카드에 남는 핵심 액션 1~2개 */
+.stucore{display:flex;gap:8px;margin-top:10px}
+.stucore .tcore{
+  flex:1;min-height:46px;border:none;border-radius:15px;font-family:var(--font);
+  font-size:14px;font-weight:900;letter-spacing:-.3px;display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  cursor:pointer;transition:transform .08s ease, box-shadow .15s ease;
+}
+.stucore .tcore .svic{width:20px;height:20px;margin:0}
+.stucore .tcore.stamp{
+  color:#fff;background:linear-gradient(180deg,#40E0B4,#14B98C 60%,#0E9F7C);
+  box-shadow:0 6px 14px -4px rgba(14,159,124,.55), inset 0 1px 0 rgba(255,255,255,.35);
+}
+.stucore .tcore.proxy{
+  color:#1D4ED8;background:#EFF5FF;box-shadow:inset 0 0 0 1.5px #CFE0FF, 0 4px 10px -6px rgba(37,99,235,.4);
+}
+.stucore .tcore:active{transform:scale(.975)}
+/* ⋯ 안의 보조 도구: 3열 균등 그리드로 정돈 */
+.sturow .tbtns{
+  display:none;margin-top:10px;padding-top:10px;border-top:1px solid #EEF2F8;
+  display:none;grid-template-columns:1fr 1fr 1fr;gap:6px;
+}
+.sturow.open .tbtns{display:grid}
+.sturow .tbtns .tbtn{width:100%;min-height:38px;font-size:11.5px;padding:6px 4px}
+.tbtn{border:none;border-radius:11px;box-shadow:var(--elev-1);background:#F7FAFE;color:#4B5B70;font-weight:900}
+.tbtn:active{transform:scale(.97)}
+.tbtn.primary{background:linear-gradient(180deg,#40E0B4,#14B98C);color:#fff}
+.tbtn.on{background:#EAF9F2;color:#0B7F63;box-shadow:inset 0 0 0 1.5px #BFEBD8}
+.tbtn.proxy{background:#EFF5FF;color:#1D4ED8}
+.tbtn.bookdone{background:#F1FBF6;color:#0B7A55}
+.tabs-scroll button{border-radius:14px}
+.tabs-scroll button.on{box-shadow:0 6px 14px -6px rgba(37,99,235,.6)}
+.bigstamp{border-radius:20px;box-shadow:0 14px 30px -12px rgba(31,199,154,.65), inset 0 1px 0 rgba(255,255,255,.4)}
+
+/* ---------- ④ 바텀 시트 ---------- */
+.sheet{background:rgba(15,23,42,.46);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);align-items:flex-end}
+.sheet .body{
+  border-radius:26px 26px 0 0;
+  border-top:none;
+  padding:0;
+  max-height:90%;
+  box-shadow:0 -18px 60px -20px rgba(15,23,42,.55);
+  animation:sheetUp .30s cubic-bezier(.22,.9,.28,1.04) both;
+  overscroll-behavior:contain;
+}
+.sheet .body::before{
+  content:"";position:absolute;top:8px;left:50%;transform:translateX(-50%);
+  width:44px;height:5px;border-radius:99px;background:#D8E1EE;z-index:4;
+}
+.sheet .body.wide{max-height:93%}
+.sheet .body.full{max-height:96%;height:96%}
+.sheet-hd{padding:18px 16px 10px;position:sticky;top:0;background:#fff;border-bottom:none;border-radius:26px 26px 0 0;z-index:3}
+.sheet-hd::after{content:"";position:absolute;left:16px;right:16px;bottom:0;height:1px;background:#EEF2F8}
+.sheet-hd h3{font-size:18.5px;font-weight:900;letter-spacing:-.6px}
+.sheet-x{width:38px;height:38px;border-radius:13px;background:#F2F6FC;color:#5B6B80;font-size:15px}
+.sheet-scroll{padding:14px 17px calc(20px + var(--safe-b))}
+@keyframes sheetUp{from{transform:translateY(102%)}to{transform:translateY(0)}}
+.sheet .backdrop{background:rgba(15,23,42,.02);animation:fadeIn .2s ease both}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* ---------- ④ 모션 ---------- */
+.btn{transition:transform .09s ease, box-shadow .16s ease, filter .15s ease}
+.btn:active{transform:translateY(2px)}
+.card,.sturow,.stat,.kpi,.petcard,.booktab{transition:box-shadow .18s ease, transform .12s ease}
+.sturow:active{transform:scale(.997)}
+@keyframes popIn{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
+.screen>.card,.screen>.sect-t,.screen>.pad{animation:popIn .22s ease both}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+  .sheet .body{animation:none}
+}
+
+/* ---------- ④ 홈 화면 설치 안내 ---------- */
+.install{margin:10px 0 2px;border-radius:18px;background:#fff;box-shadow:var(--elev-1);overflow:hidden}
+.install.open{box-shadow:var(--elev-2)}
+.install-btn{
+  width:100%;display:flex;align-items:center;gap:10px;border:none;background:none;
+  font-family:var(--font);text-align:left;padding:12px 13px;cursor:pointer;
+}
+.install-btn .ib-ic{display:grid;place-items:center;width:38px;height:38px;border-radius:13px;background:#EAF1FF;flex:0 0 auto}
+.install-btn .ib-ic .svic{width:24px;height:24px}
+.install-btn b{display:block;font-size:13px;font-weight:900;color:var(--navy);letter-spacing:-.3px;line-height:1.35}
+.install-btn small{display:block;font-size:11px;font-weight:800;color:#8A99AD;margin-top:2px}
+.install-btn .ib-ch{font-size:11.5px;font-weight:900;color:#2563EB;background:#EAF1FF;border-radius:999px;padding:5px 10px;flex:0 0 auto}
+.install-steps{padding:2px 14px 14px;animation:popIn .2s ease both}
+.install-steps .ist{display:flex;gap:9px;align-items:flex-start;padding:7px 0;border-top:1px solid #F1F5FB}
+.install-steps .ist:first-child{border-top:none}
+.install-steps .ist .n{
+  flex:0 0 auto;width:22px;height:22px;border-radius:8px;background:#EAF1FF;color:#1D4ED8;
+  display:grid;place-items:center;font-size:11.5px;font-weight:900;margin-top:1px;
+}
+.install-steps .ist b{display:block;font-size:12.5px;font-weight:900;color:#334155;letter-spacing:-.2px}
+.install-steps .ist small{display:block;font-size:11px;font-weight:700;color:#8A99AD;margin-top:2px}
+.install-steps .ist .sh{background:#EAF1FF;color:#1D4ED8;border-radius:6px;padding:1px 5px;font-weight:900}
+.install-steps .ihint{font-size:11px;font-weight:800;color:#94A3B8;margin-top:8px}
+.login .install{margin-bottom:12px}
+
+/* ---------- 좁은 화면 보정 ---------- */
+@media (max-width:380px){
+  .dash-kpis .kpi b{font-size:23px}
+  .stat .v{font-size:22px}
+  .sturow .tbtns{grid-template-columns:1fr 1fr}
+}
+
+/* ---------- v2.2 — 홈 진도·숙제 카드: 숙제 소제목 + 책 줄 ---------- */
+.lesson-card{padding-bottom:15px}
+.lesson-card .ln{padding:5px 0}
+.lesson-card .ln .k{font-size:11.5px;font-weight:900;color:#8494A8;letter-spacing:0}
+.lesson-card .ln .v{font-size:14.5px;font-weight:900;color:var(--navy);letter-spacing:-.3px}
+.hwblock{margin-top:10px;padding-top:11px;border-top:1px solid #EEF2F8}
+.hwhead{display:flex;align-items:center;gap:6px;margin-bottom:7px}
+.hwhead .svic{width:16px;height:16px}
+.hwhead span{font-size:11.5px;font-weight:900;color:#8494A8;letter-spacing:.1px}
+.lesson-card .booklist{margin-top:0}
+.lesson-card .bookrow{
+  background:#F7FAFE;border-radius:14px;padding:9px 11px;margin-top:6px;
+  display:flex;align-items:center;gap:8px;
+}
+.lesson-card .bookrow .bn{font-size:13px;font-weight:900;color:#22314A;letter-spacing:-.25px}
+.lesson-card .bookrow .bmode{
+  font-style:normal;font-size:10px;font-weight:900;color:#1D4ED8;background:#EAF1FF;
+  border-radius:6px;padding:1.5px 5px;margin-left:3px;vertical-align:1px;
+}
+.lesson-card .bookrow .bp{margin-left:auto;font-size:11px;font-weight:800;color:#8494A8;white-space:nowrap}
+
+/* ---------- v2.2 — 선생님 카드: 한 줄에 이름·상태·핵심 버튼(높이 ↓) ---------- */
+.sturow .stuhd{align-items:center;gap:8px;flex-wrap:nowrap}
+.sturow .stuhb{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:8px;background:none;border:none;padding:0;text-align:left}
+.sturow .stright{flex:0 0 auto;flex-direction:row;align-items:center;gap:4px}
+.sturow .stright .pill{font-size:10.5px;padding:4px 8px;min-height:26px}
+.sturow .stright .carrybadge.none{opacity:.45}
+.stucore{display:flex;flex:0 0 auto;gap:5px;margin:0;align-items:center}
+.stucore .tcore{flex:0 0 auto;min-height:40px;padding:0 12px;border-radius:13px;font-size:12.5px;gap:5px;white-space:nowrap}
+.stucore .tcore .svic{width:17px;height:17px}
+.sturow .more{width:38px;height:38px;border-radius:13px;flex:0 0 auto}
+@media (max-width:392px){
+  .stucore .tcore{padding:0 10px;font-size:12px}
+  .sturow .stright .pill{padding:3px 6px;font-size:10px}
+  .sturow .stuhd .cnts{gap:5px;font-size:10px}
+}
+.sturow .stuhd .cnts{overflow:hidden;white-space:nowrap}
+.sturow .stuhd .cnts .none{color:#A9B5C6;font-weight:800;font-size:10px}
+
+/* ---------- v2.2 — 선생님 카드 2줄 구조: (이름·상태) / (숫자·밀린문제·핵심 버튼) ---------- */
+.sturow .stuhd{gap:8px}
+.sturow .stuhb{gap:9px}
+.sturow .stumeta{display:flex;align-items:center;gap:8px;margin-top:9px;min-width:0}
+.sturow .stumeta .cnts{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:900;white-space:nowrap}
+.sturow .stumeta .cnts .none{color:#A9B5C6;font-size:10px}
+.sturow .stumeta .grow{flex:1 1 auto;min-width:0}
+.sturow .stumeta .carrybadge{flex:0 0 auto}
+.stucore{margin:0}
+.stucore .tcore{min-height:38px;padding:0 14px;font-size:12.5px}
+.sturow .stright{flex:0 0 auto}
+.sturow .stright .pill{font-size:10.5px;padding:4px 9px;min-height:28px}
+.sturow .stuhd{background:none;border:none;border-radius:0;padding:0}
+.sturow .stuhb{border:none;background:none;font-family:var(--font)}
+.sturow .stumeta .cnts{flex:0 0 auto}
+.sturow .stumeta .carrybadge{margin-left:3px;min-height:28px;padding:0 8px;font-size:11px}
+.sturow .stumeta{min-height:38px}
+
+/* ============================================================================
+   v2.2 — 🏫 수업 탭 (선생님): 칼판 질문 TOP 5 · 오늘 숙제 문제판 · 빠른 도장
+   ============================================================================ */
+.clsmiss .missrow{display:flex;flex-wrap:wrap;gap:7px}
+.clsmiss.none{text-align:center}
+.misschip{
+  display:inline-flex;align-items:center;gap:6px;border:none;border-radius:14px;
+  background:#EFF5FF;color:#1D4ED8;font-family:var(--font);font-size:12px;font-weight:900;
+  padding:6px 10px 6px 6px;cursor:pointer;box-shadow:0 2px 0 #D3E2FF;
+}
+.misschip:active{transform:translateY(1px);box-shadow:none}
+.misschip b{font-size:12.5px;letter-spacing:-.2px}
+.misschip span{font-size:10.5px;font-weight:800;color:#5B87E0;background:#fff;border-radius:8px;padding:2px 6px}
+.card-hd .btn-sm{min-height:34px;padding:6px 12px;font-size:12px;border-radius:11px}
+.clsrow{display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid #F1F5FB}
+.clsrow:first-of-type{border-top:none}
+.clsrow .no{
+  width:24px;height:24px;border-radius:9px;background:#EAF1FF;color:#1D4ED8;
+  display:grid;place-items:center;font-size:11.5px;font-weight:900;flex:0 0 auto;
+}
+.clsrow .lb{flex:1;min-width:0;font-size:12.5px;font-weight:800;color:#334155;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.clsrow .lb small{font-size:11px;font-weight:900;color:#B4720A;background:#FFF6E0;border-radius:8px;padding:1px 6px}
+.clsrow .solvebtn.sm{min-height:34px;padding:0 10px;font-size:11.5px;border-radius:11px}
+
+.bxpg{margin-bottom:10px}
+.bxpg-h{font-size:11.5px;font-weight:900;color:#8494A8;margin:0 2px 6px}
+.bxpg-h small{font-size:10px;font-weight:800;color:#A9B5C6;margin-left:3px}
+.bxgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.bx{
+  position:relative;min-height:56px;border:none;border-radius:14px;background:#F5F9FF;
+  box-shadow:inset 0 0 0 1.5px #E1EBF9;color:#334155;font-family:var(--font);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  padding:7px 4px 6px;cursor:pointer;transition:transform .08s ease, background .15s ease, box-shadow .15s ease;
+}
+.bx:active{transform:scale(.96)}
+.bx .bn{font-size:13px;font-weight:900;letter-spacing:-.3px;line-height:1}
+.bx .bb{display:flex;gap:3px;flex-wrap:wrap;justify-content:center}
+.bx .bb i{font-style:normal;font-size:9.5px;font-weight:900;border-radius:6px;padding:1px 4px;line-height:1.35}
+.bx .bb .bb-x{background:#FFEEEC;color:#C93A2A}
+.bx .bb .bb-s{background:#FFF6E0;color:#8A6414}
+.bx.on{background:linear-gradient(180deg,#40E0B4,#12B98C);box-shadow:0 6px 14px -6px rgba(18,185,140,.65);color:#fff}
+.bx.on .bn::after{content:" ✓";font-size:11px}
+.bx.on .bb i{background:rgba(255,255,255,.26);color:#fff}
+.bxsum{
+  display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #F1F5FB;
+  font-size:11.5px;font-weight:900;color:#5B6B80;
+}
+.bxsum b{color:#1D4ED8;font-size:13px}
+.bxsum .btn{margin-left:auto}
+@media (max-width:360px){.bxgrid{grid-template-columns:repeat(3,1fr)}}
+.bxnote{white-space:normal;line-height:1.55;word-break:keep-all}
+.clsrow .lb{white-space:normal}
+
+/* ============================================================================
+   v2.2 — 📊 반 대시보드: 표 → 숫자 타일 · 빈 상태 컴팩트 · 오답 알약 칩
+   ============================================================================ */
+.duechip{
+  display:flex;align-items:center;gap:7px;margin:2px 0 11px;
+  background:#F7FAFF;border-radius:13px;padding:9px 11px;
+}
+.duechip .svic{width:17px;height:17px}
+.duechip b{font-size:12.5px;font-weight:900;color:#22314A;letter-spacing:-.2px}
+.duechip span{font-size:11px;font-weight:800;color:#7C8AA0;margin-left:auto;text-align:right}
+.duechip.late{background:#FFF3F0}
+.duechip.late b{color:#C93A2A}
+.duechip.late span{color:#D2705F}
+.duechip.none{background:#F5F7FB}
+.dgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.dtile{
+  background:linear-gradient(180deg,#FFFFFF,#F7FAFF);
+  border-radius:16px;padding:12px 13px 11px;
+  box-shadow:0 1px 2px rgba(15,23,42,.04), 0 8px 18px -12px rgba(15,23,42,.22);
+  display:flex;flex-direction:column;gap:1px;
+}
+.dtile b{font-size:26px;font-weight:900;letter-spacing:-1.2px;color:var(--navy);line-height:1.05}
+.dtile b em{font-style:normal;font-size:12px;font-weight:900;color:#8494A8;letter-spacing:0;margin-left:1px}
+.dtile span{font-size:11.5px;font-weight:900;color:#5B6B80;letter-spacing:-.2px}
+.dtile small{font-size:10.5px;font-weight:800;color:#9AA8BC;margin-top:2px;line-height:1.4;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dtile.bad{background:linear-gradient(180deg,#FFFBFA,#FFF1EE)}
+.dtile.bad b{color:#C93A2A}
+.dtile.good b{color:#0B7F63}
+.tlist.empty1{
+  display:flex;align-items:center;gap:8px;padding:9px 13px;min-height:44px;
+  box-shadow:0 1px 2px rgba(15,23,42,.03);
+}
+.tlist.empty1 .t{font-size:12.5px;font-weight:900;color:#5B6B80}
+.tlist.empty1 .hint{font-size:11px}
+
+/* 학생별 못 고친 오답 — 이름 + 뱃지 + 알약 칩 + 성취도 */
+.wrow{
+  display:grid;grid-template-columns:minmax(84px,auto) 1fr auto;gap:8px;align-items:center;
+  padding:10px 0;border-top:1px solid #F1F5FB;
+}
+.wrow:first-of-type{border-top:none}
+.whd{display:flex;align-items:center;gap:6px;min-width:0}
+.whd b{font-size:12.5px;font-weight:900;color:#22314A;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.whd .wn{
+  font-style:normal;font-size:10.5px;font-weight:900;color:#C93A2A;background:#FFEEEC;
+  border-radius:999px;padding:2px 7px;flex:0 0 auto;
+}
+.wchips{display:flex;flex-wrap:wrap;gap:4px;min-width:0}
+.wchip{
+  display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:900;color:#334155;
+  background:#F4F7FC;border-radius:999px;padding:4px 8px;white-space:nowrap;
+}
+.wchip .bktag{font-size:9px;padding:0 4px;border-radius:5px}
+.wchip em{font-style:normal;font-size:9.5px;color:#B4720A}
+.wchip em.car{color:#C93A2A}
+.wmore{font-size:10px;font-weight:900;color:#8494A8;background:#F1F5F9;border-radius:999px;padding:4px 8px}
+.wgo{
+  border:none;background:#EFF5FF;color:#1D4ED8;border-radius:11px;padding:0 10px;min-height:32px;
+  font-family:var(--font);font-size:11.5px;font-weight:900;cursor:pointer;white-space:nowrap;
+}
+.wgo:active{transform:scale(.96)}
+@media (max-width:360px){
+  .wrow{grid-template-columns:1fr auto;grid-template-areas:"hd go" "chips chips"}
+  .whd{grid-area:hd}.wchips{grid-area:chips}.wgo{grid-area:go}
+}
+
+/* ---------- v2.2 — 반 대시보드: 오늘 타일(큰 숫자) + 범위 요약(작게) ---------- */
+.dashhd{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.dashhd .t{font-size:15px;font-weight:900;letter-spacing:-.4px;color:var(--navy)}
+.dashhd .hint{font-size:10.5px;font-weight:800;color:#9AA8BC}
+.dtile{position:relative;padding-top:11px}
+.dtile .dic{position:absolute;top:11px;right:11px;width:26px;height:26px;display:grid;place-items:center;opacity:.9}
+.dtile .dic .svic{width:20px;height:20px}
+.dash-kpis.mini.rangesum{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;background:transparent;border-radius:0;box-shadow:none;
+}
+.dash-kpis.mini .kpi{
+  display:grid;grid-template-columns:auto 1fr;grid-template-areas:"v l" "v s";
+  align-items:center;column-gap:7px;row-gap:0;background:transparent;box-shadow:none;border-radius:0;padding:0;
+}
+.dash-kpis.mini .kpi b{grid-area:v;font-size:19px;font-weight:900;letter-spacing:-.7px;color:var(--cobalt-dd);line-height:1.1}
+.dash-kpis.mini .kpi>span{grid-area:l;font-size:11px;font-weight:900;color:#5B6B80}
+.dash-kpis.mini .kpi small{grid-area:s;font-size:10px;font-weight:800;color:#9AA8BC}
+.dash-kpis.mini .kpi .kic{display:none}
+.dash-kpis.mini .kpi{border:none !important;background:transparent !important;box-shadow:none !important;padding:0 !important}
+.dash-kpis.mini{background:transparent !important;border:none !important;box-shadow:none !important}
+
+/* ============================================================================
+   v2.2 — 레이아웃 버그: 라벨이 세로로 쪼개지지 않게 · 긴 안내문이 잘리지 않게
+   ============================================================================ */
+/* ① 키-값 행의 왼쪽 라벨은 절대 줄바꿈하지 않음 (숙/제 처럼 쪼개지던 문제) */
+.kv .k,
+.kv>span:first-child,
+.kv .k *{
+  white-space:nowrap;
+  flex-shrink:0;
+  word-break:keep-all;
+}
+.kv>span:not(.k),.kv .v{min-width:0;overflow-wrap:break-word;word-break:keep-all}
+.kv{align-items:flex-start;line-height:1.5}
+
+/* ② 카드 안내문·보조 문구는 폭 안에서 자연스럽게 줄바꿈 */
+.hint,.muted,.sub,.foot-note,.hintbar,.empty,.empty-note,.empty1 .hint{
+  white-space:normal;
+  word-break:keep-all;
+  overflow-wrap:break-word;
+}
+.card-hd .hint,.sect-t .hint{min-width:0;flex-shrink:1;text-align:right}
+/* 분할 표(table) 안의 긴 문구도 카드 밖으로 나가지 않게 */
+.dashrow span,.tbl td,.dtrow span,.tlwho,.kgrow{min-width:0;overflow-wrap:break-word}
+.rc-books{
+  margin-top:7px;display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;
+  font-size:11.5px;font-weight:800;color:#334155;background:#F4F7FC;border-radius:10px;padding:6px 9px;
+}
+.rc-books b{font-size:10.5px;font-weight:900;color:#1D4ED8;background:#EAF1FF;border-radius:7px;padding:2px 6px}
+.rc-books small{font-size:10.5px;font-weight:800;color:#8494A8}
+
+/* ---------- v2.2 — 세그먼트 버튼이 왼쪽에 몰리지 않고 폭을 꽉 채우게 (사진 인증 2개 등) ---------- */
+.segmented.mode4{display:flex;width:100%;gap:4px}
+.segmented.mode4 button{
+  flex:1 1 0;min-width:0;white-space:nowrap;text-align:center;
+  padding:10px 6px;font-size:12px;
+}
+.sheet .segmented.mode4{margin:0}
+/* 시트가 열리면 '맨 위로' 버튼은 숨김(시트 위로 떠 보이던 문제) */
+body.sheet-open .fabtop{display:none !important}
+
+/* ============================================================================
+   v2.2 — 홈 다이어트: ① 히어로(인사·마스코트·오늘 목표 링·연속) ② 오늘의 숙제 카드 ③ 보너스 미션 1줄
+   ============================================================================ */
+.hero.hero2{padding:16px 16px 13px;margin-bottom:12px}
+.hero2 .hero-top{display:flex;gap:10px;align-items:flex-start;position:relative;z-index:2}
+.hero2 .hero-tx{flex:1;min-width:0}
+.hero2 .hero-title{font-size:19px;line-height:1.32;margin-top:8px}
+.hero2 .hero-sub{margin-top:4px}
+.hero-goalbox{flex:0 0 92px;display:flex;flex-direction:column;align-items:center;gap:3px}
+.hero-goalbox .ring{background:rgba(255,255,255,.10);border-radius:50%}
+.hring circle:first-of-type{stroke:rgba(255,255,255,.26)}
+.hring circle:last-of-type{stroke:#FFD98A}
+.hring .rc b{color:#fff;font-size:17px;letter-spacing:-.4px}
+.hring .rc small{color:#D6E4FF;font-size:9.5px;font-weight:900}
+.hero-goalnum{font-size:11px;font-weight:900;color:#D6E4FF;letter-spacing:-.2px}
+.hero-goalnum b{font-size:13px;color:#fff}
+.hero2 .hero-bot{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:6px;position:relative;z-index:2}
+.hero-art2{flex:0 0 auto;display:flex;align-items:flex-end;position:relative;padding-bottom:2px}
+.hero-art2 .hero-mascot{width:92px}
+.hero2 .hero-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;padding-bottom:6px}
+.hero-streak{
+  display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.16);
+  border:1px solid rgba(255,255,255,.24);border-radius:999px;padding:5px 11px 5px 8px;
+  font-size:11.5px;font-weight:900;color:#FFE3A8;
+}
+.hero-streak .svic{width:16px;height:16px}
+.hero-streak b{font-size:14px;color:#fff}
+.hero-mix{font-size:10.5px;font-weight:800;color:#CFE0FF;text-align:right}
+
+/* ② 오늘의 숙제 카드 1장 */
+.hwcard{padding:16px 16px 15px}
+.hwcard .card-hd{margin-bottom:8px}
+.hwlesson{display:flex;gap:8px;align-items:flex-start;margin:2px 0 8px}
+.hwlesson .k{
+  flex:0 0 auto;font-size:10.5px;font-weight:900;color:#1D4ED8;background:#EAF1FF;
+  border-radius:7px;padding:2px 7px;margin-top:1px;white-space:nowrap;
+}
+.hwlesson .v{font-size:12.5px;font-weight:800;color:#334155;line-height:1.45;
+  word-break:keep-all;overflow-wrap:break-word;min-width:0}
+.hwempty{font-size:12.5px;font-weight:800;color:#8494A8;padding:6px 0 2px}
+.duepill{
+  display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:900;
+  color:#1D4ED8;background:#EAF1FF;border-radius:999px;padding:4px 9px;white-space:nowrap;
+}
+.duepill .svic{width:13px;height:13px}
+.duepill.late{color:#C93A2A;background:#FFEEEC}
+.hwprog{margin:12px 0 10px}
+.hwbar{height:9px;border-radius:99px;background:#EDF2F9;overflow:hidden}
+.hwbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#5B9BFF,#2563EB);transition:width .45s cubic-bezier(.3,1,.4,1)}
+.hwptx{font-size:11px;font-weight:800;color:#8494A8;margin-top:6px}
+.hwptx b{font-size:13px;font-weight:900;color:#22314A;letter-spacing:-.3px}
+.hwchips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 12px}
+.hchip{
+  display:inline-flex;align-items:center;gap:5px;border:none;border-radius:12px;
+  background:#F3F7FD;color:#41546E;font-family:var(--font);font-size:11.5px;font-weight:900;
+  padding:8px 11px;cursor:pointer;white-space:nowrap;
+}
+.hchip .svic{width:15px;height:15px}
+.hchip:active{transform:scale(.97)}
+.hchip.warn{background:#FFF1EC;color:#C4502A}
+.hwgo{min-height:56px;font-size:17px;border-radius:17px}
+.hwsub{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:10px}
+.hlink{
+  border:none;background:none;color:#1D4ED8;font-family:var(--font);font-size:11.5px;
+  font-weight:900;padding:4px 2px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;
+}
+.yflame.slim{width:calc(100% - 32px);margin:0 16px 12px;min-height:52px;padding:8px 12px}
+
+/* ③ 보너스 미션 1줄 */
+.missionline{
+  display:flex;align-items:center;gap:7px;padding:11px 13px !important;min-height:48px;
+}
+.missionline .mi{display:grid;place-items:center;width:24px;height:24px;flex:0 0 auto}
+.missionline .mi .svic{width:20px;height:20px}
+.missionline .mt{font-size:12px;font-weight:900;color:#22314A;letter-spacing:-.2px;white-space:nowrap}
+.missionline .mdots{display:flex;gap:3px;flex:0 0 auto}
+.missionline .mdots i{width:6px;height:6px;border-radius:99px;background:#DDE6F2}
+.missionline .mdots i.on{background:#2563EB}
+.missionline .mnum{font-size:11.5px;font-weight:900;color:#1D4ED8;white-space:nowrap}
+.missionline .grow{flex:1}
+.missionline .mreward{font-size:11px;font-weight:900;color:#B4720A;background:#FFF6E0;border-radius:999px;padding:3px 8px;white-space:nowrap}
+.missionline .mweek{font-size:10px;font-weight:800;color:#9AA8BC;white-space:nowrap}
+.missionline.done{background:linear-gradient(180deg,#F3FCF8,#FFFFFF)}
+.missionline.done .mreward{color:#0B7F63;background:#E6F9F3}
+@media (max-width:380px){
+  .hero2 .hero-title{font-size:17.5px}
+  .missionline .mweek{display:none}
+}
+
+/* ---------- v2.2 — 📖 이야기 카드: 흰 바탕에 흰 글씨로 안 보이던 문제 ---------- */
+.storybox{
+  background:linear-gradient(160deg,#1E3A8A 0%,#2563EB 62%,#1D4ED8 100%) !important;
+  color:#fff !important;border:none !important;
+  box-shadow:0 16px 32px -16px rgba(30,58,138,.75), inset 0 1px 0 rgba(255,255,255,.22);
+}
+.storybox::after{background:rgba(255,255,255,.10)}
+.storybox .s-title{color:#fff}
+.storybox .s-line{color:rgba(255,255,255,.94);opacity:1}
+.storybox .s-em{filter:drop-shadow(0 6px 10px rgba(0,0,0,.25))}
+.storybox.small{background:linear-gradient(160deg,#1E3A8A,#2563EB) !important}
+
+/* ============================================================================
+   v2.2 — 🎯 밀린문제 '한 문제씩': 이유 3개 한 줄 · 두 버튼이 한 화면에 (카드 압축)
+   ============================================================================ */
+.carryone{padding:12px 14px 13px;border-radius:20px}
+.carryone .co-bar{margin-bottom:6px}
+.carryone .co-em{font-size:34px;line-height:1;margin:2px 0 4px}
+.carryone .co-nm{font-size:17px;line-height:1.3}
+.carryone .co-lb{margin-top:5px;font-size:12px}
+.carryone .co-lb b{display:inline;margin:0 0 0 3px;font-size:17px}
+.carryone .co-meta{margin-top:3px}
+.carryone .co-late{margin-top:6px;padding:4px 9px;font-size:11px}
+.carryone .co-whypick{margin-top:8px}
+.carryone .co-whypick .q{font-size:11.5px;line-height:1.45;margin-bottom:6px}
+.carryone .co-tags{display:flex;flex-direction:row;flex-wrap:nowrap;gap:5px;justify-content:stretch;padding:0}
+.carryone .co-tags .tag{
+  flex:1 1 0;min-width:0;white-space:nowrap;min-height:42px;font-size:11.5px;
+  padding:0 5px;justify-content:center;gap:3px;overflow:hidden;
+}
+.carryone .co-tags .tag .svic{display:none}
+.carryone .co-ok{margin-top:10px;min-height:52px}
+.carryone .co-no{margin-top:6px;min-height:44px;padding:10px}
+@media (max-width:360px){
+  .carryone .co-tags .tag{font-size:10.5px;padding:0 3px}
+}
+
+/* ============================================================================
+   v2.2 — 색 대비 폴리싱: 민트 버튼은 진한 글씨 · 보조 글씨는 한 단계 진하게
+   ============================================================================ */
+.btn-mint{color:#06382A !important;text-shadow:none}
+.btn-mint .svic{filter:none}
+.ff-mint{color:#06382A !important}
+.bigstamp{color:#06382A !important}
+.stucore .tcore.stamp{color:#06382A !important}
+.tbtn.primary{color:#06382A !important}
+.misschip span{color:#3E67B8}
+
+/* 보조 글씨 — 흰 바탕에서 3.0 이상 */
+.hint,.muted,.sub{color:#6F8098}
+.hint,.oxnote{color:#6F8098}
+.chev,.ar{color:#8A99AD}
+.gd,.tlwho,.step .lb,.stepper .lb{color:#7F8FA6}
+.rank-num{color:#8A98AC}
+.v-k{color:#5B7FA6}
+.rc-sub{color:#7C8AA0}
+.dtile small,.dash-kpis.mini .kpi small,.missionline .mweek,.bxpg-h small{color:#7B8CA3}
+.carrybadge.none{opacity:.62}
+.carryone{border-left:none !important}
+.cx-dot,.dot{color:#A7B4C6}
+
+/* ---------- 히어로 대비(흰 글씨가 더 또렷하게) ---------- */
+.hero{
+  background:
+    radial-gradient(120% 96% at 84% 8%, rgba(255,255,255,.20) 0%, rgba(255,255,255,0) 56%),
+    radial-gradient(90% 70% at 8% 100%, rgba(45,212,160,.24) 0%, rgba(45,212,160,0) 62%),
+    linear-gradient(158deg,#2E6FE0 0%,#1F51C9 46%,#16309B 100%) !important;
+}
+.hero-kicker{color:#F4F8FF;background:rgba(9,26,64,.32);border-color:rgba(255,255,255,.30)}
+.hero-sub{color:#E9F1FF}
+.hero-streak{background:rgba(9,26,64,.36);border-color:rgba(255,255,255,.30);color:#FFE9B8}
+.hero-streak b{color:#fff}
+.hero-mix,.hero-goalnum{color:#E9F1FF}
+.hero-goalnum b{color:#fff}
+
+/* ---------- 남은 저대비 보조 글씨 ---------- */
+.setrow .chev,.sheet .chev,.sethd .chev{color:#8A99AD}
+.tlist .tlwho{color:#7B8CA3}
+.dashhd .hint{color:#7B8CA3}
+.carrybadge.none{color:#7C8CA3 !important;opacity:1 !important}
+.v-k,.verify .v-k{color:#5B7FA6}
+.pin-hint{color:#6F8098}
+.verline{color:#7B8CA3}
+.pe-stage i{color:#8A98AC}
+.co-skipnote{
+  margin:8px 0 2px;text-align:center;font-size:11.5px;font-weight:900;color:#0B7F63;
+  background:#E9F9F3;border-radius:11px;padding:8px 10px;
+}
+
+/* ---------- 남은 저대비 마무리 ---------- */
+.chev,.ar{color:#8A99AD !important}
+.card .muted,.card .hint,.card small:not(.bmode),.card .small,
+.sheet .muted,.sheet .hint,.sheet small{color:#6F8098}
+.pe-stage i{color:#8A98AC !important}
+.oxnote{color:#6F8098 !important}
+.petevo .pe-stage i{color:#8A98AC !important}
+.v-k,.verify .v-k{color:#5B7FA6 !important}
+.card span.muted,.card small.muted,.tlist .muted,.tlist small{color:#6F8098 !important}
+
+/* ============================================================================
+   v2.2 — 나란히 놓인 버튼은 한 줄·같은 높이 (이미지로 저장이 두 줄로 접히던 문제)
+   ============================================================================ */
+.row{gap:8px}
+.row>.btn,.row>button.btn{
+  flex:1 1 0;min-width:0;white-space:nowrap;text-align:center;justify-content:center;
+  font-size:13px;padding-left:8px;padding-right:8px;letter-spacing:-.3px;
+  display:inline-flex;align-items:center;gap:0;
+}
+.row>.btn.btn-sm{font-size:12px;padding-left:6px;padding-right:6px}
+.row>.btn.grow{flex:1 1 0}
+@media (max-width:360px){
+  .row>.btn{font-size:12px;padding-left:5px;padding-right:5px}
+}
+/* 같은 줄에 있는 버튼은 높이도 같게 */
+.row{align-items:stretch}
+/* 히어로 아치(마스코트 뒤) — v2.2 위치 보정 */
+.hero2 .hero-arch{bottom:-4px;width:96px;height:104px;border-radius:999px 999px 14px 14px}
+.hero2 .hero-art2{position:relative;padding-bottom:2px}
+.hero2 .hero-art2 .hero-arch{left:50%;transform:translateX(-50%)}
+.hero2{background:
+  radial-gradient(120% 96% at 84% 8%, rgba(255,255,255,.20) 0%, rgba(255,255,255,0) 56%),
+  radial-gradient(90% 70% at 8% 100%, rgba(45,212,160,.22) 0%, rgba(45,212,160,0) 62%),
+  linear-gradient(158deg,#2E6FE0 0%,#2563EB 48%,#1B3FA8 100%) !important}
+/* v2.2 — 히어로 Lv·XP 칩 · 홈 높이 압축 */
+.hero-lv{
+  font-size:10.5px;font-weight:900;color:#D6E4FF;background:rgba(9,26,64,.28);
+  border-radius:999px;padding:3px 9px;white-space:nowrap;
+}
+.hero-lv b{color:#fff}
+.hero2 .hero-sub{margin-top:3px;font-size:11px}
+.hero2{padding:14px 15px 11px !important}
+.hero2 .hero-art2 .hero-mascot{width:84px}
+.hero2 .hero-arch{width:88px;height:96px}
+.hero2 .hero-streak{padding:4px 10px 4px 7px;font-size:11px}
+.hero2 .hero-side{gap:5px}
+.hwcard{padding:14px 15px 13px}
+.hwlesson{margin-bottom:6px}
+.hwprog{margin:10px 0 8px}
+.hwgo{min-height:54px}

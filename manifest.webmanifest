@@ -1,0 +1,21 @@
+{
+  "name": "숙제대소동 — 숫자 왕국 구출 대작전",
+  "short_name": "숙제대소동",
+  "description": "초등 수학 숙제를 게임처럼: ⭕/🔁/❌/⭐ 채점, 사진 인증, 못 고친 오답을 고치면 펫이 진화하는 펫 도감, 반 협동 보스전.",
+  "lang": "ko-KR",
+  "dir": "ltr",
+  "id": "/math-quest/",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "theme_color": "#2563EB",
+  "background_color": "#F4F6FA",
+  "categories": ["education", "kids", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

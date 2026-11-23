@@ -20,6 +20,8 @@
 window.EMA = window.EMA || {};
 (function () {
   const esc = EMA.ui.esc;
+  /* v2.2 — 컬러 3D 아이콘 (js/icons.js). 없으면 빈 문자열이라 화면이 깨지지 않습니다 */
+  const ic = (name, cls) => (window.EMA && EMA.icons ? EMA.icons.html(name, cls) : '');
   const GAME = () => window.EMA_GAME || { pets: [], shop: [], bosses: [], titles: [], rarity: {}, dailyTitles: [], monsters: [], tags: [], story: {} };
   const STORY = () => GAME().story || {};
   const MIN = 3;
@@ -62,7 +64,7 @@ window.EMA = window.EMA || {};
     whyKey: null, whyKind: 'hw',                               // v2.1 — 🔁 고침 때 틀린 이유 고르기
     lastResult: null,
     bigPhotoSid: null, bigPhotoAt: '', bigPhotoFrom: '',
-    tOpen: {}, stuOpen: {},
+    tOpen: {}, stuOpen: {}, installOpen: false,
     scrollTarget: null,
     resetScroll: false
   };
@@ -204,25 +206,72 @@ window.EMA = window.EMA || {};
     </div>`;
   }
 
-  /** 홈 히어로 — 몬스터 아카데미 아치 창 + 이번 주 목표 */
-  function heroBanner(cid, sid) {
-    const m = store.missionInfo(cid, sid);
-    const pct = Math.round(Math.min(1, m.weekDays / Math.max(1, m.weekNeed)) * 100);
-    const dots = Array.from({ length: m.weekNeed }, (_, i) => `<i class="${i < m.weekDays ? 'on' : ''}"></i>`).join('');
-    return `<div class="hero">
-      <div class="hero-in">
+  /** 오늘 목표 = 오늘 숙제 + 오답프린트 + 아직 안 고친 밀린 오답 (학생마다 다름) */
+  function todayGoal(cid, sid) {
+    const st = store.stats(cid, sid);
+    const ps = store.printStats(cid, sid);
+    const carryOpen = store.carried(cid, sid).length;
+    const carryDone = store.carrySolvedToday(sid);
+    const hwTotal = st.total || 0, hwDone = st.marked || 0;
+    const prTotal = ps.total || 0, prDone = ps.marked || 0;
+    const done = hwDone + prDone + carryDone;
+    const total = hwTotal + prTotal + carryOpen + carryDone;
+    return {
+      done, total, pct: total ? Math.round(done / total * 100) : 0,
+      hwTotal, hwDone, prTotal, prDone, carryOpen, carryDone
+    };
+  }
+
+  /** 홈 히어로 (v2.2) — 왼쪽 인사·마스코트, 오른쪽 오늘 목표 링 + 연속 일수 */
+  function heroBanner(cid, sid, streak) {
+    const me = store.student(cid, sid) || {};
+    const g = todayGoal(cid, sid);
+    return `<div class="hero hero2">
+      <div class="hero-top">
         <div class="hero-tx">
           <span class="hero-kicker">🐾 몬스터 수학 아카데미</span>
-          <div class="hero-title">오늘도 <em>한 걸음</em><br>더 나아가요 👊</div>
+          <div class="hero-title">안녕하세요, <em>${esc(me.nickname || me.name || '')}</em>!<br>오늘도 한 걸음 더 👊</div>
           <div class="hero-sub">못 고친 오답을 고치면 펫이 진화해요</div>
-          <div class="hero-goal">
-            <div class="gl"><span>이번 주 목표</span><span class="grow"></span><b>${m.weekDays}/${m.weekNeed}일</b><span class="pct">${pct}%</span></div>
-            <div class="hero-track"><i style="width:${pct}%"></i></div>
-            <div class="hero-dots">${dots}</div>
-          </div>
         </div>
-        <div class="hero-art"><div class="hero-arch"></div>${mascotSvg()}</div>
+        <div class="hero-goalbox">
+          ${ringSvg(g.pct, { size: 78, sw: 8, cls: 'hring', text: g.pct + '%', sub: '오늘 목표' })}
+          <div class="hero-goalnum"><b>${g.done}</b><span>/${g.total}</span></div>
+        </div>
       </div>
+      <div class="hero-bot">
+        <div class="hero-art2"><div class="hero-arch"></div>${mascotSvg()}</div>
+        <div class="hero-side">
+          ${(() => { const lv2 = store.level(cid, sid), st2 = store.stats(cid, sid);
+            return `<span class="hero-lv">Lv.${lv2.lv} · <b>${st2.xp}</b> XP</span>`; })()}
+          <span class="hero-streak">${ic('flame')}<b>${streak}</b>일째</span>
+          <span class="hero-mix">${g.carryOpen
+            ? `숙제 ${g.hwTotal} + 밀린 오답 ${g.carryOpen}`
+            : `오늘 숙제 ${g.total}문제`}</span>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  /** 🐲 반 협동 보스 — 내 도감 탭으로 (v2.2 홈 다이어트) */
+  function bossCard(cid, sid) {
+    const boss = store.boss(cid);
+    if (!boss || !boss.total) return '';
+    const mine = store.myDamage(cid, sid);
+    const ch = (STORY().chapters || [])[new Date(store.state.today + 'T12:00:00').getDate() % Math.max(1, (STORY().chapters || [1]).length)];
+    return `<div class="boss">
+      <div class="hd">
+        <div class="boss-em">${boss.def.em || '👾'}</div>
+        <div class="grow">
+          <div class="nm">${esc(boss.def.name || '보스')}</div>
+          <div class="taunt">${esc((boss.def.taunts || [''])[new Date(store.state.today + 'T12:00:00').getDate() % Math.max(1, (boss.def.taunts || ['']).length)])}</div>
+        </div>
+        <div class="hpn">${boss.hp}<span>%</span></div>
+      </div>
+      <div class="hpbar"><div class="fill" style="width:${boss.hp}%"></div></div>
+      <div class="hplb"><span>도장 ${boss.stamped}/${boss.total}${boss.hpMax && boss.hpMax < 100 ? ` · 보스 체력 ${boss.hpMax}` : ''}</span><span>🎯 내가 ${mine}%</span></div>
+      <div class="combat">🐾 내 펫 ${store.myPets(cid, sid).length}마리 · 공격력 +${store.companionPct(cid, sid)}%</div>
+      ${ch ? `<button class="bossstory" data-act="openStory">📖 ${esc(ch.t)} <span class="chev">›</span></button>` : ''}
+      ${boss.killed ? '<div class="bosskill">🏆 우리 반이 보스를 잡았어요!</div>' : ''}
     </div>`;
   }
 
@@ -284,7 +333,7 @@ window.EMA = window.EMA || {};
   /** 🏰 나의 숫자 왕국 — 12월 오픈 예고 (한 곳에만) */
   function kingdomCard(coins) {
     return `<button class="kingdom" data-act="kingdom" aria-label="나의 숫자 왕국 미리보기">
-      <span class="kcast">🏰</span>
+      <span class="kcast">${ic('castle')}</span>
       <span class="ktx">
         <span class="kt">나의 숫자 왕국 <span class="soon">12월 오픈</span></span>
         <span class="ks">지금 모은 <b>${coins}코인</b>이 건축 재료가 돼요</span>
@@ -312,7 +361,7 @@ window.EMA = window.EMA || {};
     const kind = act || 'tab';
     return `<div class="nav ${items.length === 5 ? 'nav5' : ''}" style="grid-template-columns:repeat(${items.length},1fr)">${items.map(it =>
       `<button class="nav-item ${it.id === active ? 'on' : ''}" data-act="${kind}" ${kind === 'teacherTab' ? 'data-t="' + it.id + '"' : 'data-tab="' + it.id + '"'} aria-label="${it.label}">
-        <span class="i">${it.em}</span>${it.label}</button>`).join('')}</div>`;
+        <span class="i">${it.ic ? ic(it.ic) : it.em}</span>${it.label}</button>`).join('')}</div>`;
   }
   function avatarHtml(stu, size) {
     const sz = size || 36;
@@ -456,26 +505,22 @@ window.EMA = window.EMA || {};
     if (m.done) return `<b>완료</b> · 이번 주 ${m.weekDays}/${m.weekNeed}일${m.weekRewarded ? ' 🏅' : ''}`;
     return `${m.count}/${m.need} · ${m.left}문제 더 풀면 +${m.coins}코인`;
   }
-  /** 홈의 미션 카드 — 오늘 미션 3문제 · 이번 주 5일 · 복귀 응원 */
+  /** 홈 하단 컴팩트 보너스 미션 1줄 (v2.2) */
   function missionCard(cid, sid) {
     const m = store.missionInfo(cid, sid);
-    const dots = (n, total, on) => Array.from({ length: total }, (_, i) => `<i class="${i < n ? 'on ' + (on || '') : ''}"></i>`).join('');
-    return `<div class="card tight mission ${m.done ? 'done' : ''}">
-      <div class="mline">
-        <span class="mt">${m.done ? '✅ 오늘 미션 완료' : '🎯 오늘 미션'}</span>
-        <span class="mdots inline">${dots(Math.min(m.count, m.need), m.need, 'big')}</span>
-        <span class="mnum">${Math.min(m.count, m.need)}/${m.need}</span>
-        <span class="grow"></span>
-        <span class="week">이번 주 <b>${m.weekDays}</b>/${m.weekNeed}일 ${m.weekRewarded ? '🏅' : '+30'}</span>
-      </div>
-      <div class="mline sub">
-        <span>${m.done ? (m.scored ? '+' + m.scored + '코인 받았어요' : '3문제 채웠어요') : `${m.left}문제 더 풀면 +${m.coins}코인`}</span>
-        <span class="grow"></span>
-        <span class="mdots wk">${dots(m.weekDays, m.weekNeed)}</span>
-      </div>
-      ${m.comeback ? `<div class="mcome">🌈 이틀 쉬었어요 · 3문제 풀면 <b>+${m.comebackCoins}코인</b> 응원 보너스!</div>` : ''}
+    const n = Math.min(m.count, m.need);
+    const dots = Array.from({ length: m.need }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('');
+    return `<div class="card tight missionline ${m.done ? 'done' : ''}">
+      <span class="mi">${ic(m.done ? 'check' : 'target')}</span>
+      <span class="mt">오늘의 보너스 미션</span>
+      <span class="mdots">${dots}</span>
+      <b class="mnum">${n}/${m.need}</b>
+      <span class="grow"></span>
+      <span class="mreward">${m.done ? '완료!' : `+${m.coins}코인`}</span>
+      <span class="mweek">주 ${m.weekDays}/${m.weekNeed}일</span>
     </div>`;
   }
+
   /** 🗺️ 오늘의 학습맵 — 오늘 숙제한 단원을 막대 하나로 가볍게 (과하지 않게) */
   function learningMap(cid, sid) {
     const bs = store.books(cid);
@@ -573,6 +618,24 @@ window.EMA = window.EMA || {};
   }
 
   /* ⚙️ 설정 시트 — 소리·이야기·로그아웃은 전부 여기로 */
+  /* ★ v2.2 — PWA: 홈 화면에 앱으로 설치하면 주소창 없는 전체 화면으로 열립니다 */
+  function installGuide() {
+    const open = !!view.installOpen;
+    return `<div class="install ${open ? 'open' : ''}">
+      <button class="install-btn" data-act="installGuide" aria-expanded="${open ? 'true' : 'false'}">
+        <span class="ib-ic">${ic('phone')}</span>
+        <span class="grow"><b>아이폰 홈 화면에 앱으로 설치하기</b><small>주소창 없이 앱처럼 열려요</small></span>
+        <span class="ib-ch">${open ? '접기' : '보기'}</span>
+      </button>
+      ${open ? `<div class="install-steps">
+        <div class="ist"><span class="n">1</span><div><b>사파리 아래 가운데 <span class="sh">공유</span> 버튼</b><small>네모 위로 화살표 모양이에요</small></div></div>
+        <div class="ist"><span class="n">2</span><div><b>[홈 화면에 추가] 누르기</b><small>목록을 아래로 내리면 있어요</small></div></div>
+        <div class="ist"><span class="n">3</span><div><b>[추가] → 홈 화면의 숙제대소동</b><small>주소창 없이 전체 화면으로 열려요</small></div></div>
+        <div class="ihint">안드로이드 크롬은 오른쪽 위 ⋮ → [앱 설치]</div>
+      </div>` : ''}
+    </div>`;
+  }
+
   function sheetSettings() {
     const cid = view.classId, sid = view.studentId;
     const me = sid ? store.student(cid, sid) : null;
@@ -595,7 +658,9 @@ window.EMA = window.EMA || {};
       <button class="setrow" data-act="logout"><span class="se">↩️</span><span class="st">로그아웃</span><span class="chev">›</span></button>
       <button class="setrow danger" data-act="resetDemo"><span class="se">🧹</span><span class="st">연습 데이터 초기화</span></button>
       <div class="hint wrap" style="margin:6px 6px 0">초기화하면 지금 데이터를 먼저 이 기기에 백업해 두고, 이 화면에서만 새로 시작해요.</div>
-      <div class="hint center" style="margin-top:12px">숙제 대소동 v1.1 · 숫자 왕국 구출 대작전 ${demoChip()}</div>
+      <div class="sethd">앱</div>
+      ${installGuide()}
+      <div class="hint center" style="margin-top:12px">숙제 대소동 v2.2 · 숫자 왕국 구출 대작전 ${demoChip()}</div>
     `);
   }
 
@@ -710,10 +775,11 @@ window.EMA = window.EMA || {};
             </button>`).join('')}
         </div>
         <div class="grow"></div>
-        <button class="btn btn-ghost btn-block" data-act="openStory">📖 이야기 보기</button>
+        ${installGuide()}
+        <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="openStory">📖 이야기 보기</button>
         <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="teacherEntry">👩‍🏫 선생님이세요? 선생님 모드</button>
         <div class="pin-hint">학생 PIN은 선생님께 물어보세요 · 내 PIN은 ⚙️ 설정에서 바꿀 수 있어요</div>
-        <div class="verline">v2.1 ${demoChip()}</div>
+        <div class="verline">v2.2 ${demoChip()}</div>
       </div>
       ${sheetHtml()}`;
     }
@@ -783,19 +849,12 @@ window.EMA = window.EMA || {};
         sub: `${c.name} · ${EMA.ui.kdate(store.state.today)} ${EMA.ui.kdow(store.state.today)}`,
         right: `${coinChip(cid, sid)}${gearBtn()}`
       })}
-      <div class="hello">
-        <div class="who"><span class="hi">안녕하세요!</span> ${esc(me.nickname || me.name)} <span class="lv">Lv.${lv.lv}</span></div>
-        <div class="chips">
-          <span class="chip streak">🔥 ${streak}일</span>
-          <span class="chip xp">✨ ${st.xp}</span>
-        </div>
-      </div>
       ${homeTabs(cid, sid)}
       ${body}
       ${nav([
-        { id: 'home', em: '🔥', label: '숙제' },
-        { id: 'record', em: '🐾', label: '내 도감' },
-        { id: 'rank', em: '🏆', label: '랭킹' }
+        { id: 'home', ic: 'home', em: '🔥', label: '숙제' },
+        { id: 'record', ic: 'paw', em: '🐾', label: '내 도감' },
+        { id: 'rank', ic: 'trophy', em: '🏆', label: '랭킹' }
       ], view.tab)}
       <input type="file" class="photo-input" data-target="clean" accept="image/*" aria-hidden="true">
       ${sheetHtml()}
@@ -831,136 +890,81 @@ window.EMA = window.EMA || {};
     const l = store.lesson(cid);
     const bs = store.books(cid);
     const tiles = store.tiles(cid);
-    const boss = store.boss(cid);
-    const mine = store.myDamage(cid, sid);
     const carried = store.carried(cid, sid);
     const missingY = store.yesterdayFlameMissing(cid, sid);
     const timing = store.timing(cid);
     const due = store.dueInfo(cid);
-    const prog = store.progressInfo(cid, sid);
-
-    const lessonHtml = l ? `
-      <div class="card lesson-card">
-        <div class="ln"><div class="k">진도</div><div class="v">${esc(stripBookLead(l.lesson, bs))}</div></div>
-        <div class="ln"><div class="k">숙제</div><div class="v">${esc(stripBookLead(l.homework, bs))}</div></div>
-        <div class="booklist">
-          ${bs.map(b => {
-            const t = store.tiles(cid, b.book);
-            return `<div class="bookrow"><span class="be">${b.book.indexOf('응용') >= 0 ? '📙' : '📘'}</span>
-              <span class="bn">${esc(b.book)}</span>
-              <span class="bp">${pagesText(b.pages)}쪽 · ${t.length}문제</span></div>`;
-          }).join('')}
-        </div>
-        ${timing.kind === 'early' ? '<div class="timing early">⚡ 얼리버드 · 코인 2배</div>'
-          : timing.kind === 'shield' ? '<div class="timing shield">🛡️ 수업 당일 · 보스·코인 50%</div>' : ''}
-      </div>` : `<div class="card"><div class="empty">📭 오늘은 숙제가 없어요</div></div>`;
-
-    /** 📘 진행 중 / ⏰ 기한 지남 — 남은 시간·지난 시간과 푼 문제 수 */
-    const dueCard = (l && due.has) ? `
-      <div class="card tight duecard ${due.passed ? 'late' : 'open'}">
-        <div class="card-hd"><span class="t">${due.passed ? '⏰ 기한 지난 숙제' : '📘 진행 중인 숙제'}</span><span class="grow"></span>
-          <span class="hint">${prog.hwMarked}/${prog.hwTotal}문제</span></div>
-        <div class="dueflex">
-          <div class="duetx">
-            <div class="dueline">${esc(due.label)}까지</div>
-            <div class="duesub ${due.passed ? 'late' : 'left'}">${due.passed ? esc(due.lateText) : esc(due.leftText)}</div>
-          </div>
-          ${ringSvg(prog.pct, { size: 62, sw: 6, text: prog.pct + '%', sub: '진행', cls: due.passed ? 'late' : '' })}
-        </div>
-        <div class="pbar"><i style="width:${prog.pct}%"></i></div>
-        <div class="hint" style="margin-top:6px">${due.passed ? '기한 전에 못 푼 문제는 ⚔️ 밀린문제로 넘어갔어요' : '기한 전에는 못 푼 문제가 밀린문제로 넘어가지 않아요'}</div>
-      </div>` : '';
-
+    const g = todayGoal(cid, sid);
+    const printInfo = store.printInfo(cid, sid);
+    const printCnt = store.printCounts(cid, sid);
+    const up = store.reuploadInfo(cid, sid, 'hw');
     const hasHw = tiles.length > 0;
     const hasHwText = !!(l && String(l.homework || '').trim());
-    const up = store.reuploadInfo(cid, sid, 'hw');
-    let cta, ctaAct = 'startGrade';
+    const modeLabel = m => m === 'yooh' ? '유제만' : m === 'odd' ? '홀수' : m === 'even' ? '짝수' : '';
+
+    /* 큰 버튼 하나 — 상태에 따라 시작 / 이어하기 / 제출 보기 */
+    let cta = '숙제 시작 →', ctaAct = 'startGrade';
     if (!hasHw) {
-      cta = hasHwText ? '📘 숙제 쪽수를 선생님이 정하면 채점할 수 있어요' : '📭 오늘은 숙제가 없어요';
+      cta = hasHwText ? '숙제 쪽수를 선생님이 정하면 채점할 수 있어요' : '오늘은 숙제가 없어요';
       ctaAct = 'noHomework';
-    } else if (sub && sub.stampAt) {
-      cta = '✅ 도장 완료 · 채점 보기';
-    } else if (sub) {
-      cta = st.marked ? '📸 제출 완료 · 다시 보기' : '📝 숙제 채점 시작';
-    } else if (st.marked) {
-      cta = `📝 채점 이어서 (⭕${st.c1} ❌${st.c2 + st.c4})`;
-    } else {
-      cta = '📝 숙제 채점 시작';
-    }
+    } else if (sub && sub.stampAt) cta = '채점 다시 보기 →';
+    else if (sub) cta = '낸 숙제 다시 보기 →';
+    else if (st.marked) cta = '숙제 이어하기 →';
+
+    const subRow = sub ? `<div class="hwsub">
+        <span class="pill ${sub.stampAt ? 'ok' : sub.status === 'resubmit' ? 'bad' : 'warn'}">${sub.stampAt ? '✅ 도장 완료' : sub.status === 'resubmit' ? '재제출 요청' : sub.status === 'unlocked' ? '다시 내기' : '🕒 도장 대기'}</span>
+        ${store.photo(sub.photoId) ? `<button class="hlink" data-act="photoBig" data-sid="${sid}" data-at="${esc(sub.at)}">📸 낸 사진 보기</button>` : ''}
+        ${up.ok ? `<button class="hlink" data-act="reupload">📸 사진 다시 (${up.mins}분)</button>` : ''}
+      </div>` : '';
+
+    const bookRows = bs.length ? `<div class="booklist">
+        ${bs.map(b => {
+          const t = store.tiles(cid, b.book);
+          const ml = modeLabel(b.mode);
+          return `<div class="bookrow"><span class="be">${ic(b.book.indexOf('응용') >= 0 ? 'bookWarm' : 'book')}</span>
+            <span class="bn">${esc(b.book)}${ml ? ` <em class="bmode">${ml}</em>` : ''}</span>
+            <span class="bp">${pagesText(b.pages)}쪽 · ${t.length}문제</span></div>`;
+        }).join('')}
+      </div>` : '';
 
     return `
-      ${heroBanner(cid, sid)}
-      ${missingY ? `<button class="yflame" data-act="yesterday">
+      ${heroBanner(cid, sid, streak)}
+
+      ${missingY ? `<button class="yflame slim" data-act="yesterday">
         <span class="em">🔥</span>
         <span class="grow"><b>어제 불꽃 살리기</b><small>어제 푼 사진을 올리면 살아나요</small></span>
         <span class="go">올리기</span></button>` : ''}
 
-      ${lessonHtml}
-      ${learningMap(cid, sid)}
-      ${dueCard}
-
-      <div class="cta-wrap">
-        <button class="btn btn-primary btn-block btn-xl" data-act="${ctaAct}" ${!hasHw ? 'style="filter:grayscale(.25);opacity:.8"' : ''}>${cta}</button>
-        ${(due.has && !due.passed && st.marked && !sub) ? '<button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="saveTemp">💾 오늘 한 만큼 임시 저장 (기한까지 이어서)</button>' : ''}
-        <div class="quickrow">
-          <button class="btn btn-ghost btn-sm" data-act="gallery">👀 친구들 풀이</button>
-          <button class="btn btn-ghost btn-sm" data-act="openShop">🛍️ 상점</button>
-          <button class="btn btn-ghost btn-sm" data-act="appHelp">❓ 앱이 이상해요</button>
+      <div class="card hwcard">
+        <div class="card-hd">
+          <span class="t">오늘의 숙제</span><span class="grow"></span>
+          ${due.has ? `<span class="duepill ${due.passed ? 'late' : ''}">${ic('clock')}${esc(due.passed ? (due.closed ? '마감됨' : due.lateText) : due.leftText)}</span>` : ''}
         </div>
+        ${(l && String(l.lesson || '').trim()) ? `<div class="hwlesson"><span class="k">진도</span><span class="v">${esc(stripBookLead(l.lesson, bs))}</span></div>` : ''}
+        ${bookRows}
+        ${!bs.length && hasHwText ? `<div class="hwlesson"><span class="k">숙제</span><span class="v">${esc(l.homework)}</span></div>` : ''}
+        ${(!bs.length && !hasHwText) ? '<div class="hwempty">오늘은 숙제가 없어요</div>' : ''}
+
+        <div class="hwprog">
+          <div class="hwbar"><i style="width:${g.pct}%"></i></div>
+          <div class="hwptx"><b>${g.done}</b>/${g.total}문제 완료${g.carryOpen ? ` · 밀린 오답 ${g.carryOpen}개 포함` : ''}</div>
+        </div>
+
+        <div class="hwchips">
+          ${carried.length ? `<button class="hchip warn" data-act="homeTab" data-t="carry">⚔️ 밀린문제 ${carried.length}</button>` : ''}
+          ${printInfo ? `<button class="hchip" data-act="homeTab" data-t="print">📝 프린트 ${printCnt.marked}/${printCnt.total}</button>` : ''}
+          <button class="hchip" data-act="gallery">${ic('users')}친구들 풀이</button>
+          <button class="hchip" data-act="openShop">${ic('gift')}상점</button>
+        </div>
+
+        <button class="btn btn-primary btn-block btn-xl hwgo" data-act="${ctaAct}" ${!hasHw ? 'style="filter:grayscale(.2);opacity:.85"' : ''}>${cta}</button>
+        ${(due.has && !due.passed && st.marked && !sub) ? '<button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="saveTemp">💾 오늘 한 만큼 임시 저장</button>' : ''}
+        ${subRow}
+        ${timing.kind === 'early' ? '<div class="timing early">⚡ 얼리버드 · 코인 2배</div>' : timing.kind === 'shield' ? '<div class="timing shield">🛡️ 수업 당일 · 보스·코인 50%</div>' : ''}
       </div>
 
       ${missionCard(cid, sid)}
-
-      <div class="boss">
-        <div class="hd">
-          <div class="boss-em">${boss.def.em || '👾'}</div>
-          <div class="grow">
-            <div class="nm">${esc(boss.def.name || '보스')}</div>
-            <div class="taunt">${esc((boss.def.taunts || [''])[new Date(store.state.today + 'T12:00:00').getDate() % Math.max(1, (boss.def.taunts || ['']).length)])}</div>
-          </div>
-          <div class="hpn">${boss.hp}<span>%</span></div>
-        </div>
-        <div class="hpbar"><div class="fill" style="width:${boss.hp}%"></div></div>
-        <div class="hplb"><span>도장 ${boss.stamped}/${boss.total}${boss.hpMax && boss.hpMax < 100 ? ` · 보스 체력 ${boss.hpMax}` : ''}</span><span>🎯 내가 ${mine}%</span></div>
-        <div class="combat">🐾 내 펫 ${store.myPets(cid, sid).length}마리 · 공격력 +${store.companionPct(cid, sid)}%</div>
-        ${(() => {
-          const ch = (STORY().chapters || [])[new Date(store.state.today + 'T12:00:00').getDate() % Math.max(1, (STORY().chapters || [1]).length)];
-          return ch ? `<button class="bossstory" data-act="openStory">📖 ${esc(ch.t)} <span class="chev">›</span></button>` : '';
-        })()}
-        ${boss.killed ? '<div class="bosskill">🏆 우리 반이 보스를 잡았어요!</div>' : ''}
-      </div>
-
-      ${petEvo(cid, sid)}
-
-      ${kingdomCard(store.coins(cid, sid))}
-
-      ${st.marked ? `<div class="card tight sumcard">
-        <div class="sumline">
-          <span class="sumc o">⭕ ${st.c1}</span>
-          <span class="sumc x">❌ ${st.c2 + st.c4}</span>
-          <span class="sumc f">🔁 ${st.c3}</span>
-          <span class="sumc q">⭐ ${st.c4}</span>
-          <span class="sumc c">⏭️ ${st.c5}</span>
-        </div>
-      </div>` : ''}
-
-      ${sub ? `<div class="card tight">
-        <div class="card-hd"><span class="t">📸 낸 사진</span><span class="grow"></span>
-          ${sub.stampAt ? `<span class="pill ok">✅ 도장 ${esc(sub.stampAt)}</span>` : sub.status === 'resubmit' ? `<span class="pill bad">재제출</span>` : sub.status === 'unlocked' ? `<span class="pill warn">🔓 다시 내기</span>` : `<span class="pill warn">🕒 도장 대기</span>`}
-        </div>
-        ${store.photo(sub.photoId) ? `<button class="photo-open" data-act="photoBig" data-sid="${sid}" data-at="${esc(sub.at)}"><img src="${store.photo(sub.photoId).data}" alt="내가 낸 사진"><span class="zoom">확대</span></button>`
-          : `<div class="muted wrap" style="font-size:12px;white-space:normal">🗑 사진은 보관 기간(7일)이 지나 앱에서 지웠어요 · 제출·채점 기록은 그대로 있어요</div>`}
-        <div class="row" style="margin-top:10px">
-          <button class="btn btn-ghost grow" data-act="gallery">👀 친구들 풀이</button>
-          ${up.ok ? `<button class="btn btn-primary grow" data-act="reupload">📸 사진 다시 (${up.mins}분)</button>`
-            : sub.status === 'resubmit' || sub.status === 'unlocked' ? `<button class="btn btn-primary grow" data-act="startGrade">다시 내기</button>` : ''}
-        </div>
-      </div>` : ''}
-      ${carried.length ? `<div class="card tight">
-        <div class="card-hd"><span class="t">⚔️ 밀린문제 ${carried.length}개</span><span class="grow"></span>
-          <button class="linkbtn" style="width:auto;padding:0" data-act="homeTab" data-t="carry">고치기 →</button></div>
-        <div class="muted" style="font-size:12px">${carried.slice(0, 2).map(m => esc(m.label) + (m.overdue && m.dueAt ? ' · 기한 지남' : '')).join(' · ')}${carried.length > 2 ? ' 외 ' + (carried.length - 2) + '개' : ''}</div>
-      </div>` : ''}`;
+    `;
   }
 
   function homePrint(cid, sid) {
@@ -1044,16 +1048,17 @@ window.EMA = window.EMA || {};
         <div class="co-lb">${esc(m.book === '프린트' ? '' : m.book + ' ')}<b>${m.page}쪽 ${esc(m.num)}번</b></div>
         <div class="co-meta">${esc(m.date.slice(5))} · ${reasonTxt[m.reason] || '❌'}${tries}</div>
         ${overdueText(m) ? `<div class="co-late">⏰ ${esc(overdueText(m).replace(' · ', ''))}</div>` : ''}
-        <div class="co-whypick ${m.why ? '' : 'carry-why-req'}">
+        ${m.reason === 'skip' ? `<div class="co-skipnote">⏭️ 처음 푸는 문제예요 · 이유는 묻지 않아요</div>` : ``}
+        <div class="co-whypick ${m.reason === 'skip' ? 'hidden' : (m.why ? '' : 'carry-why-req')}">
           <div class="q">다시 풀어 봤나요? <b>왜 틀렸었는지</b> 하나 고르고 ⭕/❌를 눌러요</div>
           <div class="tagrow co-tags" style="margin:0">
             ${tagDefs.map(td => `<button class="tag ${m.why === td.id ? 'on' : ''}" data-act="carryWhySet" data-id="${m.id}" data-t="${td.id}">${td.em} ${esc(td.label)}</button>`).join('')}
           </div>
         </div>
-        <button class="btn btn-mint btn-block btn-lg co-ok" data-act="resolveCarry" data-id="${m.id}">⭕ 맞았어요</button>
-        <button class="btn btn-ghost btn-block co-no" data-act="carryWrong" data-id="${m.id}">❌ 또 틀림</button>
+        <button class="btn btn-mint btn-block btn-lg co-ok" data-act="resolveCarry" data-id="${m.id}">${m.reason === 'skip' ? '⭕ 맞았어요' : '🌈 고쳤어요'}</button>
+        <button class="btn btn-ghost btn-block co-no" data-act="carryWrong" data-id="${m.id}">${m.reason === 'skip' ? '❌ 틀림' : '❌ 또 틀림'}</button>
       </div>
-      <div class="hint center" style="margin:0 16px 10px">다시 풀어 <b>⭕ 맞았어요</b>를 누르면 해결! · 오늘 정식 보상 <b>${Math.min(doneToday, 5)}/5</b>개</div>`;
+      <div class="hint center" style="margin:0 16px 10px">다시 풀어 맞히면 <b>해결!</b> · 오늘 정식 보상 <b>${Math.min(doneToday, 5)}/5</b>개</div>`;
   }
 
   function homeCarry(cid, sid) {
@@ -1075,7 +1080,7 @@ window.EMA = window.EMA || {};
     if (one) return carryOneCard(cid, sid, list, solved, doneToday, reasonTxt, tagDefs);
     return `${carryModeSw()}` +
       `<div class="card tight" style="margin-bottom:10px">
-        <div class="muted wrap" style="font-size:12px;white-space:normal">다시 풀어 <b>⭕ 맞았어요</b>를 누르면 해결! · 오늘 정식 보상 <b>${Math.min(doneToday, 5)}/5</b>개</div>
+        <div class="muted wrap" style="font-size:12px;white-space:normal">다시 풀어 맞히면 <b>해결!</b> · 오늘 정식 보상 <b>${Math.min(doneToday, 5)}/5</b>개</div>
       </div>
       ${list.map(m => {
         const open = view.carryWhy === m.id;
@@ -1089,11 +1094,12 @@ window.EMA = window.EMA || {};
               <div class="cc-lb">${esc(m.book === '프린트' ? '' : m.book + ' ')}${m.page}쪽 ${esc(m.num)}번 <span class="dot">·</span> ${esc(m.date.slice(5))} <span class="dot">·</span> ${reasonTxt[m.reason] || '❌'}${tries}${overdueText(m) ? `<br><span class="late-note">⏰ ${esc(overdueText(m).replace(' · ', ''))}</span>` : ''}</div>
             </div>
             <div class="cc-do">
-              <button class="btn btn-mint btn-sm" data-act="resolveCarry" data-id="${m.id}">⭕ 맞았어요</button>
-              <button class="btn btn-ghost btn-sm" data-act="carryWrong" data-id="${m.id}">❌ 틀렸어요</button>
+              <button class="btn btn-mint btn-sm" data-act="resolveCarry" data-id="${m.id}">${m.reason === 'skip' ? '⭕ 맞았어요' : '🌈 고쳤어요'}</button>
+              <button class="btn btn-ghost btn-sm" data-act="carryWrong" data-id="${m.id}">${m.reason === 'skip' ? '❌ 틀림' : '❌ 또 틀림'}</button>
             </div>
           </div>
-          ${open ? `<div class="card tight carry-why ${m.why ? '' : 'carry-why-req'}">
+          ${open && m.reason === 'skip' ? `<div class="card tight carry-why skipnote"><div class="hint">⏭️ 처음 푸는 문제예요 — 이유는 묻지 않아요. 다시 풀고 ⭕/❌만 눌러 주세요.</div></div>` : ''}
+          ${open && m.reason !== 'skip' ? `<div class="card tight carry-why ${m.why ? '' : 'carry-why-req'}">
             <div class="hint" style="margin-bottom:8px">왜 틀렸는지 하나 골라 두면 다음에 같은 실수를 줄일 수 있어요</div>
             <div class="tagrow" style="margin:0">
               <span class="tag-list">${tagDefs.map(td => `<button class="tag ${m.why === td.id ? 'on' : ''}" data-act="carryWhySet" data-id="${m.id}" data-t="${td.id}">${td.em} ${esc(td.label)}</button>`).join('')}</span>
@@ -1190,7 +1196,7 @@ window.EMA = window.EMA || {};
         </div>
         <div class="ox4 ${isPrint ? 'compact' : ''} ${t.missing ? 'is-missing' : ''}">
           <button class="oxb o ${st === 'o' ? 'on' : ''}" data-act="markState" data-key="${t.key}" data-s="o" ${t.missing ? 'disabled' : ''} aria-label="${esc(t.label)}번 맞음">⭕ 맞음</button>
-          <button class="oxb f ${st === 'fixed' ? 'on' : ''}" data-act="markState" data-key="${t.key}" data-s="fixed" ${t.missing ? 'disabled' : ''} aria-label="${esc(t.label)}번 다시 풀어 맞춤">🔁 고침</button>
+          <button class="oxb f ${st === 'fixed' ? 'on' : ''}" data-act="markState" data-key="${t.key}" data-s="fixed" ${t.missing ? 'disabled' : ''} aria-label="${esc(t.label)}번 다시 풀어 맞춤">🌈 고침</button>
           <button class="oxb x ${st === 'x' ? 'on' : ''}" data-act="markState" data-key="${t.key}" data-s="x" ${t.missing ? 'disabled' : ''} aria-label="${esc(t.label)}번 틀림">❌ 틀림</button>
           <button class="oxb s ${star ? 'on' : ''}" data-act="markState" data-key="${t.key}" data-s="star" ${t.missing ? 'disabled' : ''} aria-label="${esc(t.label)}번 질문" title="선생님께 물어보고 싶어요">⭐ 질문</button>
         </div>
@@ -1236,7 +1242,7 @@ window.EMA = window.EMA || {};
       ${oxSum(cnt)}
       <div class="card oxcard">
         <div class="hint center" style="margin:0">❌ 틀린 것만 톡톡 누르고, 나머지는 아래 <b>✨ 나머지 전부 ⭕</b> 버튼 한 번!<br>왜 틀렸는지는 <b>⚔️ 밀린문제에서 다시 풀 때</b> 골라요</div>
-        <div class="oxnote">❌ 틀림은 다시 고쳐 맞힐 때까지 <b>⚔️ 밀린문제</b>에 쌓여요 · 🔁 고침은 다시 풀어 맞힌 문제</div>
+        <div class="oxnote">❌ 틀림은 다시 고쳐 맞힐 때까지 <b>⚔️ 밀린문제</b>에 쌓여요 · 🌈 고침은 다시 풀어 맞힌 문제</div>
         <div class="rows ${isPrint ? 'gridrows' : ''}">${rows}</div>
       </div>
       <div class="flowfoot gradefoot">
@@ -1282,7 +1288,7 @@ window.EMA = window.EMA || {};
       return `<div class="clean-row">
         <div class="cl-label">${bkLabel(t)}${isPrint ? '' : t.page + '쪽 '}<b>${esc(t.label)}</b>번</div>
         <div class="cl-btns">
-          <button class="clb fix ${cl === 'fixed' ? 'on' : ''}" data-act="cleanup" data-key="${t.key}" data-k="fixed">🔁 해결!</button>
+          <button class="clb fix ${cl === 'fixed' ? 'on' : ''}" data-act="cleanup" data-key="${t.key}" data-k="fixed">🌈 해결!</button>
           <button class="clb star ${((g.stars || {})[t.key] || cl === 'star') ? 'on' : ''} ${starCnt >= STAR_MAX && !((g.stars || {})[t.key] || cl === 'star') ? 'is-full' : ''}" data-act="cleanup" data-key="${t.key}" data-k="star">⭐ 질문</button>
         </div>
       </div>`;
@@ -1395,7 +1401,7 @@ window.EMA = window.EMA || {};
         <div class="sumline">
           <span class="sumc o">⭕ ${st.c1}</span>
           <span class="sumc x">❌ ${st.c2 + st.c4}</span>
-          <span class="sumc f">🔁 ${st.c3}</span>
+          <span class="sumc f">🌈 ${st.c3}</span>
           <span class="sumc q">⭐ ${st.c4}</span>
           <span class="sumc c">⏭️ ${st.c5}</span>
         </div>
@@ -1529,9 +1535,9 @@ window.EMA = window.EMA || {};
         </div>
       </div>
       <div class="pad"><div class="stat-grid">
-        <div class="stat"><div class="v">🔥 ${streak}</div><div class="l">연속 불꽃</div></div>
-        <div class="stat"><div class="v">🐾 ${pets.length}</div><div class="l">내 펫</div></div>
-        <div class="stat"><div class="v">⚠️ ${eggs.length}</div><div class="l">못 고친 오답</div></div>
+        <div class="stat"><div class="sic">${ic('flame')}</div><div class="v">${streak}<span>일</span></div><div class="l">연속 불꽃</div></div>
+        <div class="stat"><div class="sic">${ic('paw')}</div><div class="v">${pets.length}<span>마리</span></div><div class="l">내 펫</div></div>
+        <div class="stat"><div class="sic">${ic('alert')}</div><div class="v">${eggs.length}<span>개</span></div><div class="l">못 고친 오답</div></div>
       </div></div>
 
       ${weakCard(cid, sid)}
@@ -1559,6 +1565,9 @@ window.EMA = window.EMA || {};
         </div>
         <div class="hint" style="margin-top:10px">펫 ${pets.length}마리 · 보스 공격력 +${power}%</div>
       </div>
+
+      ${bossCard(cid, sid)}
+      ${kingdomCard(store.coins(cid, sid))}
 
       <div class="sect-t"><span>❌ 못 고친 오답 ${eggs.length}</span><span class="grow"></span><span class="hint">고치면 펫 알 부화!</span></div>
       <div class="hint wrap" style="margin:-2px 18px 8px">오늘 숙제에서 틀린 문제는 <b>② 정리 화면</b>에서, 지난 오답은 <b>⚔️ 밀린문제</b>에서 고쳐요.</div>
@@ -1598,9 +1607,9 @@ window.EMA = window.EMA || {};
         }).join('')}
       </div>` : ''}
       ${nav([
-        { id: 'home', em: '🔥', label: '숙제' },
-        { id: 'record', em: '🐾', label: '내 도감' },
-        { id: 'rank', em: '🏆', label: '랭킹' }
+        { id: 'home', ic: 'home', em: '🔥', label: '숙제' },
+        { id: 'record', ic: 'paw', em: '🐾', label: '내 도감' },
+        { id: 'rank', ic: 'trophy', em: '🏆', label: '랭킹' }
       ], view.tab)}
       ${sheetHtml()}
     </div>`;
@@ -1641,9 +1650,9 @@ window.EMA = window.EMA || {};
         <div class="hint" style="margin-top:6px">닉네임으로만 보여요</div>
       </div>
       ${nav([
-        { id: 'home', em: '🔥', label: '숙제' },
-        { id: 'record', em: '🐾', label: '내 도감' },
-        { id: 'rank', em: '🏆', label: '랭킹' }
+        { id: 'home', ic: 'home', em: '🔥', label: '숙제' },
+        { id: 'record', ic: 'paw', em: '🐾', label: '내 도감' },
+        { id: 'rank', ic: 'trophy', em: '🏆', label: '랭킹' }
       ], view.tab)}
       ${sheetHtml()}
     </div>`;
@@ -1658,15 +1667,17 @@ window.EMA = window.EMA || {};
     const c = store.getClass(cid);
     const boss = store.boss(cid);
     const tabs = [
-      { id: 'today', em: '📋', label: '오늘' },
-      { id: 'dash', em: '📊', label: '반 대시보드' },
-      { id: 'top5', em: '⭐', label: '질문' },
-      { id: 'report', em: '🧾', label: '성취도' },
-      { id: 'admin', em: '⚙️', label: '관리' }
+      { id: 'today', ic: 'clipboard', em: '📋', label: '오늘' },
+      { id: 'class', ic: 'users', em: '🏫', label: '수업' },
+      { id: 'dash', ic: 'chart', em: '📊', label: '반 대시보드' },
+      { id: 'top5', ic: 'star', em: '⭐', label: '질문' },
+      { id: 'report', ic: 'medal', em: '🧾', label: '성취도' },
+      { id: 'admin', ic: 'gear', em: '⚙️', label: '관리' }
     ];
     if (!tabs.find(t => t.id === view.teacherTab)) view.teacherTab = 'today';
     let body = '';
-    if (view.teacherTab === 'top5') body = teacherTop5(c);
+    if (view.teacherTab === 'class') body = teacherClass(c);
+    else if (view.teacherTab === 'top5') body = teacherTop5(c);
     else if (view.teacherTab === 'dash') body = teacherDashboard(c);
     else if (view.teacherTab === 'report') body = teacherReport(c);
     else if (view.teacherTab === 'admin') body = teacherAdmin(c);
@@ -1679,7 +1690,7 @@ window.EMA = window.EMA || {};
         right: `<button class="icon-btn" data-act="teacherExit" aria-label="선생님 모드 나가기">✕</button>`
       })}
       <div class="tabs-scroll">
-        ${tabs.map(t => `<button class="${view.teacherTab === t.id ? 'on' : ''}" data-act="teacherTab" data-t="${t.id}">${t.em} ${t.label}</button>`).join('')}
+        ${tabs.map(t => `<button class="${view.teacherTab === t.id ? 'on' : ''}" data-act="teacherTab" data-t="${t.id}"><span class="ti">${t.ic ? ic(t.ic) : t.em}</span>${t.label}</button>`).join('')}
       </div>
       ${missingAlert(c)}
       ${body}
@@ -1699,11 +1710,22 @@ window.EMA = window.EMA || {};
     </div>`;
   }
 
+  /* ★ v2.2 — 카드에는 '지금 가장 많이 쓰는' 버튼만 (도장 / 대신 채점).
+     나머지 도구는 ⋯ 안으로 → 관리자 웹처럼 보이지 않고 앱처럼 보입니다. */
+  function stuCoreButtons(cid, r) {
+    const s = r.student, sub = r.sub;
+    const out = [];
+    if (sub && sub.status === 'submitted' && !sub.stampAt)
+      out.push(`<button class="tcore stamp" data-act="stamp" data-id="${s.id}">${ic('check')}<span>도장</span></button>`);
+    if (!sub)
+      out.push(`<button class="tcore proxy" data-act="proxyOpen" data-id="${s.id}">${ic('pencil')}<span>대신 채점</span></button>`);
+    return out.length ? `<div class="stucore">${out.join('')}</div>` : '';
+  }
+
   function stuQuickButtons(cid, r) {
     const s = r.student;
     const sub = r.sub;
     const out = [];
-    if (sub && sub.status === 'submitted') out.push(`<button class="tbtn primary" data-act="stamp" data-id="${s.id}">✅ 도장</button>`);
     /* ★ v2.1 — 잘못 찍은 도장은 '도장 취소'로 바로 되돌립니다 (재제출·풀림과 다름) */
     if (sub && sub.stampAt) {
       out.push(`<button class="tbtn undo" data-act="unStamp" data-id="${s.id}">↩️ 도장 취소</button>`);
@@ -1711,10 +1733,9 @@ window.EMA = window.EMA || {};
     }
     if (sub && !sub.stampAt && sub.status !== 'submitted') out.push(`<button class="tbtn" data-act="resubmit" data-id="${s.id}">📷 재제출</button>`);
     out.push(`<button class="tbtn ${s.sick ? 'on' : ''}" data-act="toggleSick" data-id="${s.id}">🤒 아픔${s.sick ? ' ON' : ''}</button>`);
-    if (sub && store.photo(sub.photoId)) out.push(`<button class="tbtn" data-act="photoBig" data-sid="${s.id}" data-at="${esc(sub.at)}">📸 사진</button>`);
     out.push(`<button class="tbtn ${store.hasPrint(cid, s.id) ? 'on' : ''}" data-act="openPrintSet" data-id="${s.id}">📝 프린트${store.hasPrint(cid, s.id) ? ' ' + store.printInfo(cid, s.id).count : ''}</button>`);
     out.push(`<button class="tbtn" data-act="openReport" data-id="${s.id}">📊 성취도</button>`);
-    out.push(`<button class="tbtn proxy" data-act="proxyOpen" data-id="${s.id}">✏️ 대신 채점</button>`);
+    if (sub) out.push(`<button class="tbtn proxy" data-act="proxyOpen" data-id="${s.id}">✏️ 대신 채점</button>`);
     /* ✅ 책으로 완료 — 앱 오류·사진 문제로 제출이 막혔을 때 (밀린문제는 건드리지 않음) */
     out.push(`<button class="tbtn bookdone" data-act="bookDone" data-id="${s.id}">✅ 책으로 완료</button>`);
     return `<div class="tbtns">${out.join('')}</div>`;
@@ -1749,19 +1770,110 @@ window.EMA = window.EMA || {};
                 ${avatarHtml(r.student, 32)}
                 <span class="grow" style="min-width:0">
                   <span class="nm">${esc(r.student.nickname || r.student.name)}${r.student.nickname ? ` <small>${esc(r.student.name)}</small>` : ''}${r.student.sick ? ' 🤒' : ''}</span>
-                  <span class="cnts"><span class="o">⭕${r.c1}</span><span class="x">❌${r.c2}</span><span class="f">🔁${r.c3}</span><span class="q">⭐${r.c4}</span><span class="c">⏭️${r.c5}</span></span>
                 </span>
               </button>
               <div class="stright">
-                ${shown ? '' : `<button class="proxybtn" data-act="proxyOpen" data-id="${r.student.id}" aria-label="${esc(r.student.nickname || r.student.name)} 대신 채점">✏️ 대신 채점</button>`}
-                <button class="carrybadge ${carryN ? '' : 'none'}" data-act="stuCarry" data-id="${r.student.id}" aria-label="${esc(r.student.nickname || r.student.name)} 밀린문제 ${carryN}개 보기">⚔️ <b>${carryN}</b></button>
                 ${status}${(sub && psub) ? '<span class="pill info">📝+</span>' : ''}
               </div>
-              <button class="more" data-act="stuTools" data-id="${r.student.id}" aria-label="도구">⋯</button>
+              <button class="more" data-act="stuTools" data-id="${r.student.id}" aria-label="도구 더 보기" aria-expanded="${open ? 'true' : 'false'}">⋯</button>
+            </div>
+            <div class="stumeta">
+              <span class="cnts">${(() => {
+                /* ★ v2.2 — 0인 항목은 빼고 눈에 띄는 숫자만 (카드 정리) */
+                const bits = [];
+                if (r.c1) bits.push(`<span class="o">⭕${r.c1}</span>`);
+                if (r.c2) bits.push(`<span class="x">❌${r.c2}</span>`);
+                if (r.c3) bits.push(`<span class="f">🌈${r.c3}</span>`);
+                if (r.c4) bits.push(`<span class="q">⭐${r.c4}</span>`);
+                if (r.c5) bits.push(`<span class="c">⏭️${r.c5}</span>`);
+                return bits.length ? bits.join('') : '<span class="none">아직 채점 전</span>';
+              })()}</span>
+              <button class="carrybadge ${carryN ? '' : 'none'}" data-act="stuCarry" data-id="${r.student.id}" aria-label="${esc(r.student.nickname || r.student.name)} 밀린문제 ${carryN}개 보기">⚔️ <b>${carryN}</b></button>
+              <span class="grow"></span>
+              ${stuCoreButtons(cid, r)}
             </div>
             ${stuQuickButtons(cid, r)}
           </div>`;
         }).join('')}
+      </div>`;
+  }
+
+  /** 오늘 반 전체에서 문제별로 몇 명이 틀렸는지·질문했는지 (🏫 수업 탭) */
+  function classTally(cid) {
+    const m = {};
+    store.activeStudents(cid).forEach(s => {
+      const g = store.grade(cid, s.id);
+      if (!g) return;
+      const cl = g.cleanup || {}, stars = g.stars || {};
+      Object.keys(g.marks || {}).forEach(k => {
+        const rec = m[k] || (m[k] = { x: 0, s: 0, f: 0 });
+        if (g.marks[k] === 'x') { if (cl[k] === 'fixed' || (g.classSolved || {})[k]) rec.f++; else rec.x++; }
+        if (stars[k] || cl[k] === 'star') rec.s++;
+      });
+    });
+    return m;
+  }
+
+  /** ★ v2.2 — 🏫 수업 탭: 수업 시간에 쓰는 것만 한 화면에 (칼판 질문·문제판·제출 도장) */
+  function teacherClass(c) {
+    const cid = c.id;
+    const rows = store.classDay(cid);
+    const pending = rows.filter(r => (r.sub && r.sub.status === 'submitted') || (r.printSub && r.printSub.status === 'submitted')).length;
+    const missing = rows.filter(r => !r.sub && !r.printSub);
+    const top = store.top5(cid);
+    /* 문제판은 이미 뺀 문제도 다시 되돌릴 수 있게 '전체 범위'로 그립니다 (store.tiles()는 뺀 것을 감춥니다) */
+    const tiles = [];
+    store.books(cid).forEach(b => store.tilesOf(b.book, b.pages, b.mode).forEach(t => tiles.push(t)));
+    const ex = store.classExclKeys(cid);
+    const exN = store.classExclCount(cid);
+    const tally = classTally(cid);
+    const allOn = tiles.length > 0 && exN >= tiles.length;
+    const groups = [];
+    tiles.forEach(t => {
+      let g2 = groups.find(x => x.page === t.page);
+      if (!g2) { g2 = { page: t.page, type: t.type, list: [] }; groups.push(g2); }
+      g2.list.push(t);
+    });
+    const solveBtn = t => `<button class="solvebtn sm" data-act="classSolve" data-key="${esc(t.key)}" aria-label="${esc(String(t.page))}쪽 ${esc(String(t.num))}번 반 전체 해결">✅ 반 전체 해결</button>`;
+    return `
+      <button class="bigstamp" data-act="stampAll">✅ 오늘 제출 확인 & 한꺼번에 도장${pending ? ` <small>${pending}장</small>` : ''}</button>
+
+      ${missing.length ? `<div class="card tight clsmiss">
+        <div class="card-hd"><span class="t">✏️ 미제출 ${missing.length}명 · 바로 대신 채점</span><span class="grow"></span><span class="hint">쉬는 시간에 1분</span></div>
+        <div class="missrow">
+          ${missing.map(r => `<button class="misschip" data-act="proxyOpen" data-id="${r.student.id}">
+            ${avatarHtml(r.student, 24)}<b>${esc(r.student.nickname || r.student.name)}</b><span>대신 채점</span></button>`).join('')}
+        </div>
+      </div>` : `<div class="card tight clsmiss none"><div class="muted">🎉 오늘 미제출이 없어요 — 전원 제출!</div></div>`}
+
+      <div class="card">
+        <div class="card-hd"><span class="t">⭐ 칼판 질문 TOP 5</span><span class="grow"></span>
+          <button class="btn btn-navy btn-sm" data-act="bigTop5">📺 크게 보기</button></div>
+        ${top.length ? top.map((t, i) => `<div class="clsrow">
+          <span class="no">${i + 1}</span>
+          <span class="lb">${placeHtml(t.book, t.page, t.num)} <small>${t.count}명</small></span>
+          ${solveBtn(t)}
+        </div>`).join('') : '<div class="empty">오늘 ⭐ 질문이 없어요</div>'}
+        <div class="hint" style="margin-top:8px">✅ 를 누르면 그 문제가 반 전체 밀린문제에서 ‘수업에서 해결’로 내려가요.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-hd"><span class="t">🏫 오늘 숙제 문제판</span><span class="grow"></span>
+          <button class="selall ${allOn ? 'on' : ''}" data-act="classExclAll" data-on="${allOn ? '0' : '1'}">☑️ ${allOn ? '전체 해제' : '전체 선택'}</button></div>
+        <div class="hint bxnote" style="margin-bottom:10px">칼판에서 같이 풀이 준 문제를 콕콕 누르면 <b>오늘 숙제에서 빠지고</b>, 이미 ❌·⭐ 를 누른 학생의 <b>밀린문제도 해결</b>로 처리돼요. 다시 누르면 되돌아가요.</div>
+        ${groups.length ? groups.map(g2 => `<div class="bxpg">
+          <div class="bxpg-h">${g2.page}쪽${g2.type && g2.type !== '표없음' ? ` <small>${esc(g2.type)}</small>` : ''}</div>
+          <div class="bxgrid">${g2.list.map(t => {
+            const n = tally[t.key] || { x: 0, s: 0, f: 0 };
+            const on = !!ex[t.key];
+            return `<button class="bx ${on ? 'on' : ''}" data-act="classExclSet" data-key="${esc(t.key)}" aria-pressed="${on ? 'true' : 'false'}" aria-label="${esc(t.label)}번 수업에서 같이 풀었어요">
+              <span class="bn">${esc(t.label)}</span>
+              ${(n.x || n.s) ? `<span class="bb">${n.x ? `<i class="bb-x">❌${n.x}</i>` : ''}${n.s ? `<i class="bb-s">⭐${n.s}</i>` : ''}</span>` : ''}
+            </button>`;
+          }).join('')}</div>
+        </div>`).join('') : '<div class="hint">오늘 숙제 범위가 없어요 — ⚙️ 관리 → 오늘 진도·숙제에서 정해 주세요.</div>'}
+        ${exN ? `<div class="bxsum">🏫 수업에서 같이 풀이 <b>${exN}</b>문제 제외됨
+          <button class="btn btn-ghost btn-sm" data-act="classExclClear">↩️ 모두 되돌리기</button></div>` : ''}
       </div>`;
   }
 
@@ -1929,19 +2041,47 @@ window.EMA = window.EMA || {};
       </div></div>
 
       <div class="card dashcard">
-        <div class="dash-kpis">
-          <div class="kpi"><b>${d.submitRate}%</b><span>숙제 제출률</span><small>${d.submitted}/${d.total}명</small></div>
-          <div class="kpi"><b>${d.fixRate}%</b><span>오답 수정률</span><small>${d.wrongFixed}/${d.wrongTotal}개</small></div>
-          <div class="kpi"><b>${d.solved}</b><span>반 학습량</span><small>${rangeName} 문항</small></div>
-          <div class="kpi"><b>${d.avgHw}%</b><span>숙제 수행률</span><small>${rangeName}</small></div>
-        </div>
-        <div class="divider"></div>
-        <div class="dashrow"><span class="k">📘 숙제 기한</span><b>${due.has ? esc(due.label) + '까지' : '오늘 숙제 없음'}</b></div>
-        <div class="dashrow"><span class="k">${due.passed ? '⏰' : '⏳'} 기한</span><span class="${due.passed ? 'neg' : 'pos'}">${esc(due.has ? (due.passed ? due.lateText : due.leftText) : '선생님이 숙제를 내면 기한이 생겨요')}</span></div>
-        <div class="dashrow"><span class="k">❌ 미제출</span><b>${d.missing.length}명</b><span class="grow"></span>${d.missing.length ? `<span class="hint">${d.missing.map(r => nm(r.student)).join(', ')}</span>` : '<span class="pos">전원 제출 🎉</span>'}</div>
-        <div class="dashrow"><span class="k">오답 3단</span><span>전체 <b>${d.wrongTotal}</b> · 아직 <b class="neg">${d.wrongOpen}</b> · 고침 <b class="pos">${d.wrongFixed}</b></span></div>
-        <div class="dashrow"><span class="k">✅ 도장</span><span>${d.stamped}/${d.total}명</span></div>
-        <div class="dashrow"><span class="k">🔥 연속 숙제 수행</span><span>최고 <b>${Math.max.apply(null, d.rows.map(r => r.streak).concat([0]))}일</b> · 평균 ${Math.round(d.rows.reduce((a, r) => a + r.streak, 0) / (d.rows.length || 1))}일</span></div>
+        <div class="dashhd"><span class="t">오늘 반 상태</span><span class="grow"></span>
+          <span class="hint">${rangeName} 요약은 아래</span></div>
+        ${(() => {
+          /* ★ v2.2 — 노셐 같은 가로줄 표 → 숫자 강조 타일 2×2 + 기한 배지 */
+          const maxStreak = Math.max.apply(null, d.rows.map(r => r.streak).concat([0]));
+          const avgStreak = Math.round(d.rows.reduce((a, r) => a + r.streak, 0) / (d.rows.length || 1));
+          return `<div class="duechip ${due.has ? (due.passed ? 'late' : 'open') : 'none'}">
+            ${ic('clock')}
+            <b>${due.has ? esc(due.label) + '까지' : '오늘 숙제 없음'}</b>
+            <span>${esc(due.has ? (due.passed ? due.lateText : due.leftText) : '선생님이 숙제를 내면 기한이 생겨요')}</span>
+          </div>
+          <div class="dgrid">
+            <div class="dtile ${d.missing.length ? 'bad' : 'good'}">
+              <span class="dic">${ic('alert')}</span>
+              <b>${d.missing.length}<em>명</em></b><span>미제출</span>
+              <small>${d.missing.length ? d.missing.map(r => nm(r.student)).slice(0, 3).join(', ') + (d.missing.length > 3 ? ' 외 ' + (d.missing.length - 3) : '') : '전원 제출'}</small>
+            </div>
+            <div class="dtile ${d.wrongOpen ? '' : 'good'}">
+              <span class="dic">${ic('flame')}</span>
+              <b>${d.wrongOpen}<em>개</em></b><span>못 고친 오답</span>
+              <small>전체 ${d.wrongTotal} · 고침 ${d.wrongFixed}</small>
+            </div>
+            <div class="dtile">
+              <span class="dic">${ic('check')}</span>
+              <b>${d.stamped}<em>/${d.total}</em></b><span>도장</span>
+              <small>${d.submitted}명 제출</small>
+            </div>
+            <div class="dtile">
+              <span class="dic">${ic('star')}</span>
+              <b>${maxStreak}<em>일</em></b><span>최고 연속</span>
+              <small>평균 ${avgStreak}일</small>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="dash-kpis mini rangesum">
+            <div class="kpi"><b>${d.submitRate}%</b><span>제출률</span><small>${d.submitted}/${d.total}명</small></div>
+            <div class="kpi"><b>${d.fixRate}%</b><span>오답 수정률</span><small>${d.wrongFixed}/${d.wrongTotal}개</small></div>
+            <div class="kpi"><b>${d.solved}</b><span>학습량</span><small>${rangeName} 문항</small></div>
+            <div class="kpi"><b>${d.avgHw}%</b><span>수행률</span><small>${rangeName}</small></div>
+          </div>`;
+        })()}
       </div>
 
       <div class="sect-t"><span>⭐ 질문 · ❌ 많이 틀린 문제 · 📋 못 고친 오답</span><span class="grow"></span><span class="hint">선생님만 보여요</span></div>
@@ -1991,37 +2131,41 @@ window.EMA = window.EMA || {};
       ? `${placeHtml(t.book, t.page, null)} <small class="muted">(번호 확인 필요)</small>`
       : placeHtml(t.book, t.page, t.num);
     const solveBtn = t => `<button class="solvebtn sm" data-act="classSolve" data-key="${esc(t.key)}">✅ 반 전체 해결</button>`;
+    /* ★ v2.2 — 비어 있을 때는 커다란 빈 박스 대신 한 줄짜리 카드 (여백 낭비 없게) */
+    const listCard = (title, hint, rowsHtml, emptyTxt) => rowsHtml
+      ? `<div class="card tight tlist"><div class="card-hd"><span class="t">${title}</span><span class="grow"></span><span class="hint">${hint}</span></div>${rowsHtml}</div>`
+      : `<div class="card tight tlist empty1"><span class="t">${title}</span><span class="grow"></span><span class="hint">${emptyTxt}</span></div>`;
     return `
-      <div class="card tight tlist">
-        <div class="card-hd"><span class="t">⭐ 질문 TOP 5</span><span class="grow"></span><span class="hint">⭕ 맞은 문제 질문 포함</span></div>
-        ${q.length ? q.map((t, i) => `<div class="tlwrap">
+      ${listCard('⭐ 질문 TOP 5', '⭕ 맞은 문제 질문 포함', q.length ? q.map((t, i) => `<div class="tlwrap">
           <div class="tlrow"><span class="tlno">${i + 1}</span>
             <span class="grow"><b>${where(t)}</b> ${t.type ? `<small class="muted">${esc(t.type)}</small>` : ''}</span>
             <span class="tlct">${t.count}명${t.kinds && t.kinds.o ? ` <small class="okc">⭕${t.kinds.o}</small>` : ''}${t.kinds && t.kinds.x ? ` <small class="badc">❌${t.kinds.x}</small>` : ''}</span>
             ${solveBtn(t)}
           </div>
           <div class="tlwho">${t.students.map(nm).join(', ')}</div>
-        </div>`).join('') : '<div class="empty">오늘 올라온 질문이 없어요</div>'}
-      </div>
-      <div class="card tight tlist">
-        <div class="card-hd"><span class="t">❌ 반 전체 많이 틀린 문제 TOP 5</span><span class="grow"></span><span class="hint">질문 안 눌러도 집계</span></div>
-        ${w.length ? w.map((t, i) => `<div class="tlwrap">
+        </div>`).join('') : '', '오늘 올라온 질문이 없어요')}
+      ${listCard('❌ 반 전체 많이 틀린 문제 TOP 5', '질문 안 눌러도 집계', w.length ? w.map((t, i) => `<div class="tlwrap">
           <div class="tlrow"><span class="tlno bad">${i + 1}</span>
             <span class="grow"><b>${where(t)}</b> ${t.type ? `<small class="muted">${esc(t.type)}</small>` : ''}</span>
             <span class="tlct">${t.count}명 틀림${t.fixed ? ` <small class="okc">고침 ${t.fixed}</small>` : ''}</span>
             ${solveBtn(t)}
           </div>
           <div class="tlwho">${t.students.map(nm).join(', ')}</div>
-        </div>`).join('') : '<div class="empty">아직 틀린 문제가 없어요</div>'}
-      </div>
-      <div class="card tight tlist">
+        </div>`).join('') : '', '아직 틀린 문제가 없어요')}
+      ${open.length ? `<div class="card tight tlist">
         <div class="card-hd"><span class="t">📋 학생별 못 고친 오답</span><span class="grow"></span><span class="hint">${open.length}명</span></div>
-        ${open.length ? open.map(r => `<div class="tlwrap">
-          <div class="tlrow"><span class="grow"><b>${nm(r.student)}</b> <small class="muted">${r.rows.length}문제</small></span>
-            <button class="btn btn-ghost btn-sm" data-act="openReport" data-id="${r.student.id}">성취도 ›</button></div>
-          <div class="tlwho">${r.rows.slice(0, 8).map(x => `${bookTag(x.book)}${esc(x.label)}${x.star ? '⭐' : ''}${x.carried ? ' ·밀린' : ''}`).join(', ')}${r.rows.length > 8 ? ` 외 ${r.rows.length - 8}문제` : ''}</div>
-        </div>`).join('') : '<div class="empty">못 고친 오답이 없어요 🌟</div>'}
-      </div>`;
+        ${open.map(r => {
+          const n = r.rows.length;
+          return `<div class="wrow">
+            <div class="whd"><b>${nm(r.student)}</b><i class="wn">${n}</i></div>
+            <div class="wchips">
+              ${r.rows.slice(0, 3).map(x => `<span class="wchip">${bookTag(x.book)}${esc(x.label)}${x.star ? '<em>⭐</em>' : ''}${x.carried ? '<em class="car">밀린</em>' : ''}</span>`).join('')}
+              ${n > 3 ? `<span class="wmore">외 ${n - 3}개</span>` : ''}
+            </div>
+            <button class="wgo" data-act="openReport" data-id="${r.student.id}">성취도 ›</button>
+          </div>`;
+        }).join('')}
+      </div>` : `<div class="card tight tlist empty1"><span class="t">📋 학생별 못 고친 오답</span><span class="grow"></span><span class="hint">못 고친 오답이 없어요 🌟</span></div>`}`;
   }
 
   function teacherReport(c) {
@@ -2451,7 +2595,7 @@ window.EMA = window.EMA || {};
     const g = store.gradeOf(cid, sid, kind);
     const cur = (g.tags || {})[view.whyKey] || '';
     const defs = GAME().tags || [];
-    return sheetWrap('🔁 고침 — 왜 틀렸었나요?', `
+    return sheetWrap('🌈 고침 — 왜 틀렸었나요?', `
       <div class="sub">다시 풀어 맞혔어요! 처음에 왜 틀렸는지 하나만 골라 두면 다음에 같은 실수를 줄여요. <b>건너뛰어도 돼요.</b></div>
       <div class="whygrid">
         ${defs.map(td => `<button class="whybtn ${cur === td.id ? 'on' : ''}" data-act="whyFixSet" data-t="${td.id}">
@@ -2483,9 +2627,9 @@ window.EMA = window.EMA || {};
     const doneN = tiles.filter(t => g.marks[t.key]).length;
     const starN = tiles.filter(t => stars[t.key]).length;
     return sheetWrap('✏️ ' + esc(s.nickname || s.name) + ' 대신 채점', `
-      <div class="sub">집에서 못 눌렀어도 괜찮아요. 문제마다 <b>⭕ 맞음 / 🔁 고침 / ❌ 틀림 / ⭐ 질문</b> 중 하나를 누르고
+      <div class="sub">집에서 못 눌렀어도 괜찮아요. 문제마다 <b>⭕ 맞음 / 🌈 고침 / ❌ 틀림 / ⭐ 질문</b> 중 하나를 누르고
         아래 버튼을 누르면 <b>바로 도장</b>까지 찍혀요. (사진 인증 없이)</div>
-      <div class="px-legend"><span><i class="px-dot o"></i>⭕ 맞음</span><span><i class="px-dot f"></i>🔁 고침</span><span><i class="px-dot"></i>❌ 틀림</span><span><i class="px-dot s"></i>⭐ ${starN}/5</span><span class="grow"></span><span class="hint">이미 채점 ${doneN}개</span></div>
+      <div class="px-legend"><span><i class="px-dot o"></i>⭕ 맞음</span><span><i class="px-dot f"></i>🌈 고침</span><span><i class="px-dot"></i>❌ 틀림</span><span><i class="px-dot s"></i>⭐ ${starN}/5</span><span class="grow"></span><span class="hint">이미 채점 ${doneN}개</span></div>
       <div class="px-pages">
         ${groups.map(grp => `<div class="px-page">
           <div class="px-pg">${bookTagHtml(grp.book)}${grp.page}쪽${grp.type && grp.type !== '표없음' ? ` <small>${esc(grp.type)}</small>` : ''}</div>
@@ -2495,7 +2639,7 @@ window.EMA = window.EMA || {};
               <div class="px-num">${esc(t.label)}${/^확인/.test(String(t.label)) ? '' : '<span>번</span>'}${stars[t.key] ? '<span class="px-star">⭐</span>' : ''}</div>
               <div class="px-btns ${t.missing ? 'miss' : ''}">
                 <button class="pxb o ${cur === 'o' ? 'on' : ''}" data-act="proxyState" data-key="${esc(t.key)}" data-s="o" ${t.missing ? 'disabled' : ''}>⭕ 맞음</button>
-                <button class="pxb f ${cur === 'fixed' ? 'on' : ''}" data-act="proxyState" data-key="${esc(t.key)}" data-s="fixed" ${t.missing ? 'disabled' : ''}>🔁 고침</button>
+                <button class="pxb f ${cur === 'fixed' ? 'on' : ''}" data-act="proxyState" data-key="${esc(t.key)}" data-s="fixed" ${t.missing ? 'disabled' : ''}>🌈 고침</button>
                 <button class="pxb x ${cur === 'x' ? 'on' : ''}" data-act="proxyState" data-key="${esc(t.key)}" data-s="x" ${t.missing ? 'disabled' : ''}>❌ 틀림</button>
                 <button class="pxb s ${stars[t.key] ? 'on' : ''}" data-act="proxyState" data-key="${esc(t.key)}" data-s="star" ${t.missing ? 'disabled' : ''}>⭐ 질문</button>
               </div>
@@ -2503,7 +2647,7 @@ window.EMA = window.EMA || {};
           }).join('')}
         </div>`).join('')}
       </div>
-      <div class="px-sum"><span class="px-o">⭕ ${cnt('o')}</span><span class="px-f">🔁 ${cnt('fixed')}</span><span class="px-x">❌ ${cnt('x')}</span><span class="px-s">⭐ ${starN}/5</span><span class="grow"></span><span>나머지 ${Math.max(0, tiles.length - cnt('o') - cnt('fixed') - cnt('x') - tiles.filter(t => stars[t.key]).length)}개 → ⭕</span></div>
+      <div class="px-sum"><span class="px-o">⭕ ${cnt('o')}</span><span class="px-f">🌈 ${cnt('fixed')}</span><span class="px-x">❌ ${cnt('x')}</span><span class="px-s">⭐ ${starN}/5</span><span class="grow"></span><span>나머지 ${Math.max(0, tiles.length - cnt('o') - cnt('fixed') - cnt('x') - tiles.filter(t => stars[t.key]).length)}개 → ⭕</span></div>
       <button class="btn btn-mint btn-block btn-lg" style="margin-top:10px" data-act="proxySave" data-stamp="1">✨ 나머지 전부 ⭕ & 바로 도장</button>
       <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="proxySave" data-stamp="0">💾 채점만 저장 (도장은 나중에)</button>
       <div class="hint center" style="margin-top:8px">코인·XP·오답 기록도 학생 계정에 그대로 반영돼요</div>
@@ -2546,8 +2690,16 @@ window.EMA = window.EMA || {};
     </div>`;
   }
 
+  /** ★ v2.2 — 성적표에 '사용 교재 · 학기'를 함께 (월·학기 범위에서 특히 필요) */
+  function booksTextOf(cid) {
+    try {
+      return (store.books(cid) || []).map(b => String(b.book || '').trim()).filter(Boolean).join(' · ');
+    } catch (e) { return ''; }
+  }
+
   function reportCardHtml(s, c, r) {
     const nm = s.nickname && s.nickname !== s.name ? `<span class="rc-nick">${esc(s.nickname)}</span>` : '';
+    const booksText = booksTextOf(c.id);
     const tags = r.tags.map(t => `<div class="rc-tag">
         <div class="rc-tagline">
           <span class="rc-dot" style="background:${TAG_COLOR[t.id] || '#334155'}"></span>
@@ -2602,6 +2754,7 @@ window.EMA = window.EMA || {};
       <div class="rc-who">
         <div class="rc-name">${esc(s.name)}${nm}</div>
         <div class="rc-class">${esc(c.name || '')}${c.days ? ` · ${esc(c.days)}` : ''}${c.time ? ` ${esc(c.time)}` : ''}</div>
+        ${booksText ? `<div class="rc-books"><b>사용 교재</b> ${esc(booksText)}${c.semester ? ` <small>${esc(c.semester)} 학기</small>` : ''}</div>` : ''}
       </div>
       <div class="rc-sec">
         <div class="rc-t">${r.label} 학습 참여도</div>
@@ -2716,6 +2869,14 @@ window.EMA = window.EMA || {};
       }
       y += 15;
       txt(`${c.name || ''}${c.days ? ' · ' + c.days : ''}${c.time ? ' ' + c.time : ''}`, PAD, y, 9, 500, MUTED);
+      /* ★ v2.2 — 사용 교재 · 학기 */
+      const booksTxt = booksTextOf(c.id);
+      if (booksTxt) {
+        y += 12;
+        txt('사용 교재', PAD, y, 8, 800, '#8A94A6');
+        const semSuffix = c.semester ? ` · ${c.semester} 학기` : '';
+        txt(booksTxt + semSuffix, PAD + 38, y, 8.5, 600, INK);
+      }
 
       /* 이번 주 학습 참여도 */
       section(r.label + ' 학습 참여도');
@@ -2930,7 +3091,7 @@ window.EMA = window.EMA || {};
               <div class="cdet-row">
                 <span class="lb">${esc(String(w.page))}쪽 ${esc(String(w.num))}번${w.unit ? `<span class="un">${esc(w.unit)}</span>` : ''}</span>
                 ${w.why && whyTxt[w.why] ? `<span class="st wait">${whyTxt[w.why]}</span>` : ''}
-                ${w.status === 'fixed' ? `<span class="st fixed">🔁 고침${w.classSolved ? ' · 수업' : ''}</span>` : '<span class="st open">❌ 못 고침</span>'}
+                ${w.status === 'fixed' ? `<span class="st fixed">🌈 고침${w.classSolved ? ' · 수업' : ''}</span>` : '<span class="st open">❌ 못 고침</span>'}
                 ${w.status !== 'fixed' ? `<button class="solvebtn sm" data-act="classSolveStu" data-key="${esc(w.key)}" data-sid="${sid}">✅ 수업에서</button>` : ''}
               </div>`).join('')}`).join('')}</div>`;
         })() : '<div class="cdet-empty">틀린 문제가 없어요 🎉</div>'}
@@ -3296,6 +3457,22 @@ window.EMA = window.EMA || {};
   }
 
   /** ⬆️ 긴 목록을 볼 때만 나타나는 '맨 위로' 버튼 — 화면과 따로 살아서 스크롤을 따라가지 않습니다 */
+  /** ★ v2.2 — 올백 보너스(오답 0개) 결과를 축하로 보여 줍니다 */
+  function perfectToast() {
+    const pb = store.takePerfectBonus ? store.takePerfectBonus() : null;
+    if (!pb) return;
+    const pet = (pb.hatch && (pb.hatch.pet || pb.hatch)) || null;
+    if (pet && pet.name) {
+      EMA.ui.toast(`🎉 오답 0개 올백! ${pet.name} 부화 · 도감에 담았어요 (+${pb.coins}코인)`, 4600);
+      EMA.ui.sound('legendary');
+      EMA.ui.fx.confetti && EMA.ui.fx.confetti(80);
+    } else {
+      EMA.ui.toast(`🎉 오답 0개 올백! 펫 경험치 +${pb.xp || 50} · 코인 +${pb.coins}`, 4200);
+      EMA.ui.sound('crit');
+      EMA.ui.fx.confetti && EMA.ui.fx.confetti(50);
+    }
+  }
+
   function topButton() {
     const app = document.getElementById('app');
     let b = app.querySelector('.fabtop');
@@ -3318,8 +3495,18 @@ window.EMA = window.EMA || {};
     const prev = app.querySelector('.screen');
     const y = prev ? prev.scrollTop : 0;
     // ★ v1.1 — 모달(책 전체 보기·쪽수표·숙제 편집) 안에서 버튼을 눌러도 스크롤이 0으로 튀지 않게 위치를 기억합니다
-    const prevSheet = app.querySelector('.sheet-scroll');
-    const sy = prevSheet ? prevSheet.scrollTop : 0;
+    // ★ v2.2 — 시트 안에서 문제 상태 버튼을 누르면 시트를 다시 그리는데, 그때 스크롤이 맨 위로
+    //   올라가던 문제. 시트 안의 스크롤 영역(본문 · ✏️ 대신 채점 문제 목록 · 책 전체 보기 등)의
+    //   위치를 통째로 기억했다가 그대로 되돌립니다. (같은 시트를 다시 그리므로 순서가 같습니다)
+    const SHEET_SCROLL_SEL = ['.sheet-scroll', '.px-pages', '.sheet .body', '.biglist', '.gallery', '.glist'];
+    const keepScroll = [];
+    if (app.querySelector('.sheet')) {
+      SHEET_SCROLL_SEL.forEach(sel => {
+        Array.prototype.forEach.call(app.querySelectorAll(sel), (el, i) => {
+          if (el.scrollTop > 0) keepScroll.push([sel, i, el.scrollTop]);
+        });
+      });
+    }
     let html = '';
     if (view.role === 'login') html = renderLogin();
     else if (view.role === 'teacher') html = renderTeacher();
@@ -3342,8 +3529,11 @@ window.EMA = window.EMA || {};
         view.scrollTarget = null;
       }
     }
-    const sheetSc = app.querySelector('.sheet-scroll');
-    if (sheetSc && sy) sheetSc.scrollTop = sy;
+    /* ★ v2.2 — 시트 스크롤 위치 복원 (맨 위로 튀지 않게) */
+    keepScroll.forEach(item => {
+      const el = app.querySelectorAll(item[0])[item[1]];
+      if (el) el.scrollTop = item[2];
+    });
     /* ★ v2.0 — 선생님 탭 줄: 고른 탭이 화면 밖으로 잘리지 않게 가로로 맞춰 줍니다 */
     const tstrip = app.querySelector('.tabs-scroll');
     const ton = tstrip ? tstrip.querySelector('button.on') : null;
@@ -3695,6 +3885,7 @@ window.EMA = window.EMA || {};
       const mx = store.ensureMission(cid, sid);
       if (mx && mx.then) mx.then(r => r && missionToast(r));
       else if (mx) missionToast(mx);
+      setTimeout(perfectToast, 60);
     },
     mark(d, el) {
       const kind = view.gradeSource === 'print' ? 'print' : 'hw';
@@ -3852,6 +4043,7 @@ window.EMA = window.EMA || {};
       if (mx && mx.then) mx.then(r2 => r2 && missionToast(r2));
       else if (mx) missionToast(mx);
       render();
+      setTimeout(perfectToast, 60);
     },
     undoFill() {
       if (!view.undoFill) return;
@@ -4224,6 +4416,8 @@ window.EMA = window.EMA || {};
     photoBig(d) { view.bigPhotoFrom = view.sheet === 'gallery' ? 'gallery' : ''; view.bigPhotoSid = d.sid || view.studentId; view.bigPhotoAt = d.at || ''; view.sheet = 'bigphoto'; EMA.ui.sound('tap'); render(); },
     tGroup(d) { view.tOpen[d.k] = !view.tOpen[d.k]; EMA.ui.sound('tap'); render(); },
     stuTools(d) { view.stuOpen[d.id] = !view.stuOpen[d.id]; EMA.ui.sound('tap'); render(); },
+    /* ★ v2.2 — 설정·로그인 화면의 [아이폰 홈 화면에 앱으로 설치하기] 펼치기 */
+    installGuide() { view.installOpen = !view.installOpen; EMA.ui.haptic(); EMA.ui.sound('tap'); render(); },
     growCompanion(d) {
       const r = store.growCompanion(view.classId, view.studentId, d.id);
       if (r.error) { EMA.ui.toast(r.error); EMA.ui.sound('wrong'); return; }
@@ -4311,8 +4505,9 @@ window.EMA = window.EMA || {};
       const cid = view.classId, sid = view.studentId;
       const m = store.carried(cid, sid).find(x => x.id === d.id);
       if (!m) return;
-      /* ★ v2.1 — 다시 풀 때는 '왜 틀렸었는지'를 먼저 고릅니다 (처음 채점 때는 안 물어요) */
-      if (!m.why) {
+      /* ★ v2.1 — 다시 풀 때는 '왜 틀렸었는지'를 먼저 고릅니다 (처음 채점 때는 안 물어요)
+         ★ v2.2 — ⏭️ 안 풀었음으로 넘어온 문제는 '틀린' 게 아니라 처음 푸는 문제 → 이유를 안 묻습니다 */
+      if (m.reason !== 'skip' && !m.why) {
         view.carryWhy = d.id;
         EMA.ui.sound('tap');
         render();
@@ -4735,8 +4930,9 @@ window.EMA = window.EMA || {};
       if (stamp) EMA.ui.fx.confetti(40);
       render();
       EMA.ui.toast(stamp
-        ? `${s.name} 대신 채점 완료 · ⭕${st.c1} 🔁${st.c3} ❌${st.c2 + st.c4} · 도장 ✅${res && res.coins ? ` · 코인 +${res.coins}` : ''}`
-        : `${s.name} 채점 저장 · ⭕${st.c1} 🔁${st.c3} ❌${st.c2 + st.c4} (도장은 나중에)`, 4000);
+        ? `${s.name} 대신 채점 완료 · ⭕${st.c1} 🌈${st.c3} ❌${st.c2 + st.c4} · 도장 ✅${res && res.coins ? ` · 코인 +${res.coins}` : ''}`
+        : `${s.name} 채점 저장 · ⭕${st.c1} 🌈${st.c3} ❌${st.c2 + st.c4} (도장은 나중에)`, 4000);
+      setTimeout(perfectToast, 80);
     },
     reportDetail() {
       view.reportDetail = !view.reportDetail;
@@ -4834,8 +5030,33 @@ window.EMA = window.EMA || {};
     classExclSet(d) {
       const on = !store.classExclKeys(view.classId)[d.key];
       const n = store.setClassExcl(view.classId, d.key, on);
+      /* ★ v2.2 — 수업에서 같이 풀었으면 이미 ❌·⭐ 를 누른 학생의 밀린문제까지 해결 처리 */
+      const solved = on && store.resolveClassProblem ? store.resolveClassProblem(view.classId, d.key) : 0;
       EMA.ui.sound(on ? 'tap' : 'coin');
-      EMA.ui.toast(on ? '🏫 수업 풀이로 빼 뒀어요 · 반 전체 ' + n + '문제 제외' : '🏫 다시 학생 문제로 돌아왔어요 · ' + n + '문제 제외', 2600);
+      EMA.ui.toast(on
+        ? `🏫 수업에서 같이 풀이 · 반 전체 ${n}문제 제외` + (solved ? ` · ${solved}명 밀린문제 해결` : '')
+        : '🏫 다시 학생 문제로 돌아왔어요 · ' + n + '문제 제외', 2800);
+      render();
+    },
+    /* ★ v2.2 — 🏫 수업 탭: 문제판 전체 선택 / 해제 */
+    classExclAll(d) {
+      const cid = view.classId;
+      const on = d.on !== '0';
+      const tiles = store.tiles(cid);
+      if (!on) {
+        const n = store.classExclCount(cid);
+        store.clearClassExcl(cid);
+        EMA.ui.toast('↩️ ' + n + '문제를 모두 학생 문제로 되돌렸어요', 2600);
+        render();
+        return;
+      }
+      let solved = 0;
+      tiles.forEach(t => {
+        store.setClassExcl(cid, t.key, true);
+        if (store.resolveClassProblem) solved += store.resolveClassProblem(cid, t.key) ? 1 : 0;
+      });
+      EMA.ui.sound('coin');
+      EMA.ui.toast(`🏫 ${tiles.length}문제를 모두 수업 풀이로 · 반 전체 숙제에서 빠졌어요` + (solved ? ` · ${solved}명 밀린문제 해결` : ''), 3000);
       render();
     },
     classExclClear() {

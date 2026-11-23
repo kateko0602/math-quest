@@ -150,7 +150,7 @@ window.EMA = window.EMA || {};
   const FLAME_MIN = 3;      // 불꽃 인정 최소 문제 수
   /* v1.0 3단계 — 미션·주간 목표·복귀 보상·펫 성장 */
   const MISSION = { need: 3, coins: 10, weekNeed: 5, weekCoins: 30, comeback: 15, comebackDays: 2 };
-  const PET_XP = { need2: 12, need3: 30, dayCap: 15 };   // 펫 경험치: 12 → 2단계, 30 → 3단계(완성) · 하루 15까지
+  const PET_XP = { need2: 12, need3: 30, dayCap: 30 };   // 펫 경험치: 12 → 2단계, 30 → 3단계(완성) · 하루 30까지 (v2.2: 20문제 숙제도 끝까지 쌓이게)
   const PET_STAGES = [
     null,
     { stage: 1, name: '아기', em: '🐣' },
@@ -796,6 +796,19 @@ window.EMA = window.EMA || {};
       const add = Math.max(0, Math.min(add0, PET_XP.dayCap - used));
       if (!add) return 0;
       row[today] = used + add;
+      return this._applyPetXp(s, add, today);
+    }
+    /** ★ v2.2 — 하루 상한 없이 주는 펫 경험치 (올백 보너스 +50 등) */
+    addPetXpRaw(classId, sid, n) {
+      const s = this.student(classId, sid);
+      if (!s) return 0;
+      if (!(s.pets || []).length) return 0;
+      const add = Math.max(0, Number(n) || 0);
+      if (!add) return 0;
+      return this._applyPetXp(s, add, this.state.today);
+    }
+    _applyPetXp(s, add, today) {
+      const pets = s.pets || [];
       let up = [];
       pets.forEach(p => {
         const before = this.petStageOf(p);
@@ -873,6 +886,7 @@ window.EMA = window.EMA || {};
       }
       g.updatedAt = nowHHMM();
       this.save();
+      this.checkPerfectDay(classId, sid, kind);
       return { n: filled.length, keys: filled };
     }
     /** [↩️ 방금 채운 거 되돌리기] — fillRestCorrect 가 채운 칸만 지웁니다 (직접 누른 ⭕/❌는 그대로) */
@@ -1997,6 +2011,9 @@ window.EMA = window.EMA || {};
       const lines = [];
       lines.push(`안녕하세요 어머님, ${c.name || ''} 담임입니다.`);
       lines.push(`${s.name} 학생의 ${r.label} 학습 현황을 보내 드립니다. (${kd(r.from)} - ${kd(r.to)})`);
+      /* ★ v2.2 — 어떤 교재·학기로 공부하는지 함께 (이번 달·이번 학기 리포트에서 특히) */
+      const books = (this.books(classId) || []).map(b => String((b && b.book) || '').trim()).filter(Boolean);
+      if (books.length) lines.push(`· 사용 교재: ${books.join(' · ')}${c.semester ? ` (${c.semester} 학기)` : ''}`);
       lines.push('');
       lines.push('■ ' + r.label + ' 학습 참여도');
       if (r.classDays) lines.push(`· 숙제 ${r.classDays}회 중 ${r.doneClassDays}회 완료 (${r.hwRate}%)`);
@@ -2412,6 +2429,7 @@ window.EMA = window.EMA || {};
       if (mark) this.dropTodayCarry(sid, key);
       g.updatedAt = nowHHMM();
       this.save();
+      this.checkPerfectDay(classId, sid, kind);
       return g.marks[key] || '';
     }
     /** 1초 이유 태그 — 선택 사항(강제 아님) */
@@ -2450,6 +2468,54 @@ window.EMA = window.EMA || {};
 
     /* ---------- 어둠의 알 정화 → 수학 동료 합류 (v0.4) ---------- */
     /** 같은 알을 두 번 정화하지 않습니다(seedKey 로 기억). */
+    /* ---------- ★ v2.2 — 올백 보너스: 오답 0개로 오늘 숙제를 끝내면 펫이 자란다 ---------- */
+    /** 모든 문제를 눌렀고 남은 ❌ 가 0개면, 하루 한 번 펫 알 부화 / 펫 경험치 +50 */
+    checkPerfectDay(classId, sid, kind) {
+      const k = kind === 'print' ? 'print' : 'hw';
+      const g = this.gradeRow(classId, sid, k);
+      const tiles = k === 'print' ? this.printTiles(classId, sid) : this.tiles(classId);
+      if (!tiles.length) return null;
+      let unmarked = 0, openX = 0;
+      tiles.forEach(t => {
+        if ((g.excl || {})[t.key]) return;
+        const m = g.marks[t.key];
+        if (!m) unmarked++;
+        else if (m === 'x' && (g.cleanup || {})[t.key] !== 'fixed') openX++;
+      });
+      if (unmarked || openX) return null;
+      const tag = this.state.today + '|' + k;
+      this.state.perfect = this.state.perfect || {};
+      if (this.state.perfect[sid] === tag) return null;
+      const s = this.student(classId, sid);
+      if (!s) return null;
+      this.state.perfect[sid] = tag;
+      const seed = 'perfect|' + k + '|' + this.state.today;
+      const out = { kind: k, egg: null, hatch: null, xp: 0, coins: 10, stageUp: [] };
+      const hasPets = (s.pets || []).length > 0;
+      if (s.egg) {
+        /* 키우던 펫 알이 있으면 바로 부화 */
+        s.egg.pct = 100;
+        out.hatch = this._hatch(classId, sid);
+        s.egg = null;
+      } else if (hasPets) {
+        /* 펫이 있으면 경험치 +50 (하루 상한과 무관) */
+        out.xp = this.addPetXpRaw(classId, sid, 50);
+      } else {
+        /* 펫도 알도 없으면 새 펫 한 마리 */
+        out.hatch = this.purifyEgg(classId, sid, seed);
+      }
+      s.coins = (s.coins || 0) + out.coins;
+      this.save();
+      this._perfect = out;
+      return out;
+    }
+    /** 화면에서 한 번만 꺼내 쓰는 올백 보너스 알림 */
+    takePerfectBonus() {
+      const b = this._perfect || null;
+      this._perfect = null;
+      return b;
+    }
+
     purifyEgg(classId, sid, seedKey) {
       const s = this.student(classId, sid);
       if (!s) return null;
