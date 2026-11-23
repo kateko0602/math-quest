@@ -947,20 +947,17 @@ window.EMA = window.EMA || {};
 
         <div class="hwprog">
           <div class="hwbar"><i style="width:${g.pct}%"></i></div>
-          <div class="hwptx"><b>${g.done}</b>/${g.total}문제 완료${g.carryOpen ? ` · 밀린 오답 ${g.carryOpen}개 포함` : ''}</div>
+          <div class="hwptx"><b>${g.done}</b>/${g.total}문제 완료${g.carryOpen ? ` · 밀린 오답 ${g.carryOpen}개 포함` : ''}${timing.kind === 'early' ? ' · ⚡얼리버드 2배' : timing.kind === 'shield' ? ' · 🛡️ 수업 당일 50%' : ''}</div>
         </div>
 
-        <div class="hwchips">
+        ${(carried.length || printInfo) ? `<div class="hwchips">
           ${carried.length ? `<button class="hchip warn" data-act="homeTab" data-t="carry">⚔️ 밀린문제 ${carried.length}</button>` : ''}
           ${printInfo ? `<button class="hchip" data-act="homeTab" data-t="print">📝 프린트 ${printCnt.marked}/${printCnt.total}</button>` : ''}
-          <button class="hchip" data-act="gallery">${ic('users')}친구들 풀이</button>
-          <button class="hchip" data-act="openShop">${ic('gift')}상점</button>
-        </div>
+        </div>` : ''}
 
         <button class="btn btn-primary btn-block btn-xl hwgo" data-act="${ctaAct}" ${!hasHw ? 'style="filter:grayscale(.2);opacity:.85"' : ''}>${cta}</button>
-        ${(due.has && !due.passed && st.marked && !sub) ? '<button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="saveTemp">💾 오늘 한 만큼 임시 저장</button>' : ''}
+        ${(due.has && !due.passed && st.marked && !sub) ? '<button class="hlink center" style="margin-top:6px;width:100%" data-act="saveTemp">💾 오늘 한 만큼 임시 저장</button>' : ''}
         ${subRow}
-        ${timing.kind === 'early' ? '<div class="timing early">⚡ 얼리버드 · 코인 2배</div>' : timing.kind === 'shield' ? '<div class="timing shield">🛡️ 수업 당일 · 보스·코인 50%</div>' : ''}
       </div>
 
       ${missionCard(cid, sid)}
@@ -1539,6 +1536,8 @@ window.EMA = window.EMA || {};
         <div class="stat"><div class="sic">${ic('paw')}</div><div class="v">${pets.length}<span>마리</span></div><div class="l">내 펫</div></div>
         <div class="stat"><div class="sic">${ic('alert')}</div><div class="v">${eggs.length}<span>개</span></div><div class="l">못 고친 오답</div></div>
       </div></div>
+
+      <div class="pad" style="margin:-2px 0 10px"><button class="hchip" data-act="gallery">${ic('users')}친구들 풀이</button></div>
 
       ${weakCard(cid, sid)}
 

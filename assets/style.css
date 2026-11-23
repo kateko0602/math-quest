@@ -3542,3 +3542,23 @@ body.sheet-open .fabtop{display:none !important}
 .hwlesson{margin-bottom:6px}
 .hwprog{margin:10px 0 8px}
 .hwgo{min-height:54px}
+
+/* v2.2 — 홈 높이 한 화면에 맞추기 */
+.hero2{padding:12px 14px 10px !important}
+.hero2 .hero-top{gap:8px}
+.hero2 .hero-art2 .hero-mascot{width:82px}
+.hero2 .hero-arch{width:84px;height:92px;bottom:-2px}
+.hero2 .hero-title{font-size:17.5px;margin-top:6px;line-height:1.3}
+.hero2 .hero-sub{font-size:10.5px}
+.hero2 .hero-bot{margin-top:2px}
+.hero-goalbox{flex-basis:84px}
+.lesson-card .bookrow,.hwcard .bookrow{padding:7px 10px;margin-top:5px}
+.hwcard .bookrow .bn{font-size:12.5px}
+.hwcard .bookrow .bp{font-size:10.5px}
+.hwprog{margin:9px 0 8px}
+.hwchips{margin:0 0 9px}
+.hchip{padding:7px 10px;font-size:11px}
+.hwgo{min-height:52px;font-size:16.5px}
+.hlink{color:#1D4ED8;background:none;border:none;text-decoration:underline}
+.hwgo{padding:14px 14px !important;min-height:52px;font-size:16.5px}
+.hwptx{line-height:1.5}
