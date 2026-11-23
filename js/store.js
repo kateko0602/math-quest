@@ -3393,6 +3393,9 @@ window.EMA = window.EMA || {};
       if (!s) return;
       if (patch.nickname != null) s.nickname = patch.nickname;
       if (patch.avatar != null) s.avatar = patch.avatar;
+      /* ★ v2.3 — 20종 3D 캐릭터 id(01_fox … 20_octopus)를 함께 저장 */
+      if (patch.avatarId != null) s.avatarId = patch.avatarId;
+      if (patch.avatar != null && window.EMA_CHARS) s.avatarId = patch.avatar;
       this.save();
     }
     regenPin(classId, sid) {

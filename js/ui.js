@@ -204,6 +204,21 @@ window.EMA = window.EMA || {};
   };
 
   /* ---------- 게임 감성 효과 ---------- */
+
+  /** v2.3 — 축하 팝업에 나오는 3D 캐릭터 줄 (통통 튀어 오르며 말풍선으로 응원) */
+  function charParty(chars, opt) {
+    const list = (chars || []).slice(0, 3);
+    if (!list.length) return '';
+    const big = opt && opt.big;
+    return `<div class="charparty ${big ? 'big' : ''}">
+      ${list.map((c, i) => `<span class="charb" style="animation-delay:${(i * .12).toFixed(2)}s">
+        ${c.line ? `<b class="cbbl" style="animation-delay:${(.16 + i * .12).toFixed(2)}s">${ui.esc(c.line)}</b>` : ''}
+        <img class="cimg avatar-bounce-in" src="${window.EMA_CHARS ? EMA_CHARS.art(c.id) : ''}"
+          alt="" style="animation-delay:${(i * .12).toFixed(2)}s;width:${big ? 92 : 66}px;height:${big ? 92 : 66}px">
+      </span>`).join('')}
+    </div>`;
+  }
+
   ui.fx = {
     hit(el, text, kind) {
       const app = document.getElementById('app');
@@ -259,11 +274,12 @@ window.EMA = window.EMA || {};
       const old = app.querySelector('.celebrate-wrap');
       if (old) old.remove();
       const o = Object.assign({ em: '🎉', title: '', sub: '', kind: 'title', ms: 1900 }, opt || {});
+      const party = charParty(o.chars);
       const wrap = document.createElement('div');
-      wrap.className = 'celebrate-wrap ' + o.kind;
+      wrap.className = 'celebrate-wrap ' + o.kind + (party ? ' haschar' : '');
       wrap.innerHTML = `<div class="celebrate-card">
         <div class="halo"></div>
-        <div class="cem">${o.em}</div>
+        ${party || `<div class="cem">${o.em}</div>`}
         <div class="ct">${ui.esc(o.title)}</div>
         ${o.sub ? `<div class="cs">${ui.esc(o.sub)}</div>` : ''}
       </div>`;
@@ -271,7 +287,7 @@ window.EMA = window.EMA || {};
       setTimeout(() => {
         wrap.classList.add('out');
         setTimeout(() => wrap.remove(), 420);
-      }, o.ms);
+      }, o.ms + (party ? Math.min(2200, (o.chars || []).length * 500) : 0));
       return wrap;
     },
 
@@ -293,12 +309,13 @@ window.EMA = window.EMA || {};
       const praise = o.praise || praises[Math.floor(Math.random() * praises.length)];
       const sparks = Array.from({ length: 14 }, (_, i) =>
         `<i style="left:${8 + Math.round(Math.random() * 84)}%;top:${8 + Math.round(Math.random() * 72)}%;animation-delay:${(Math.random() * .9).toFixed(2)}s"></i>`).join('');
+      const party = charParty(o.chars, { big: true });
       const wrap = document.createElement('div');
-      wrap.className = 'bigceleb ' + o.kind;
+      wrap.className = 'bigceleb ' + o.kind + (party ? ' haschar' : '');
       wrap.innerHTML = `<div class="bc-fw"><i class="f1"></i><i class="f2"></i><i class="f3"></i></div>
         <div class="bc-sparkles">${sparks}</div>
         <div class="bc-card">
-          <div class="bc-em">${o.em}</div>
+          ${party || `<div class="bc-em">${o.em}</div>`}
           <div class="bc-t">${ui.esc(o.title)}</div>
           ${o.sub ? `<div class="bc-s">${ui.esc(o.sub)}</div>` : ''}
           <div class="bc-praise">“${ui.esc(praise)}”</div>

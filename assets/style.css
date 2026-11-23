@@ -3562,3 +3562,182 @@ body.sheet-open .fabtop{display:none !important}
 .hlink{color:#1D4ED8;background:none;border:none;text-decoration:underline}
 .hwgo{padding:14px 14px !important;min-height:52px;font-size:16.5px}
 .hwptx{line-height:1.5}
+
+/* ============================================================================
+   v2.3 — 3D 캐릭터 20종 · 악당 6종 · 움직임
+   ============================================================================ */
+.char-img{display:block;object-fit:contain;user-select:none;-webkit-user-drag:none;pointer-events:none}
+
+/* 둥실둥실 숨 쉬며 까딱이는 대표 캐릭터 */
+@keyframes avatarFloat{
+  0%,100%{transform:translateY(0) rotate(0)}
+  35%{transform:translateY(-4px) rotate(-1.4deg)}
+  70%{transform:translateY(-1px) rotate(1.2deg)}
+}
+.avatar-float{animation:avatarFloat 3.4s ease-in-out infinite;transform-origin:50% 92%}
+
+/* 팝업 등장 — 통통 튀어 오르기 */
+@keyframes avatarBounceIn{
+  0%{transform:translateY(26px) scale(.55);opacity:0}
+  55%{transform:translateY(-9px) scale(1.08);opacity:1}
+  75%{transform:translateY(3px) scale(.97)}
+  100%{transform:translateY(0) scale(1);opacity:1}
+}
+.avatar-bounce-in{animation:avatarBounceIn .66s cubic-bezier(.2,.9,.3,1.1) both}
+
+/* 쫀득하게 흔들리기 (터치) */
+@keyframes avatarJellyTap{
+  0%{transform:scale(1,1)}
+  18%{transform:scale(1.14,.86)}
+  38%{transform:scale(.9,1.1)}
+  58%{transform:scale(1.06,.95)}
+  78%{transform:scale(.98,1.02)}
+  100%{transform:scale(1,1)}
+}
+.avatar-jelly-tap{animation:avatarJellyTap .62s ease-out}
+
+/* 악당 — 위협적으로 으르렁 */
+@keyframes villainFloat{
+  0%,100%{transform:translateY(0) scale(1) rotate(0)}
+  30%{transform:translateY(-5px) scale(1.02) rotate(-1deg)}
+  60%{transform:translateY(1px) scale(.99) rotate(1deg)}
+}
+.villain-float{animation:villainFloat 3.8s ease-in-out infinite;transform-origin:50% 90%}
+@keyframes villainGrowl{
+  0%,100%{filter:drop-shadow(0 6px 10px rgba(120,20,60,.28))}
+  50%{filter:drop-shadow(0 8px 18px rgba(180,30,50,.46))}
+}
+.villain-growl{animation:villainGrowl 2.2s ease-in-out infinite}
+
+@media (prefers-reduced-motion:reduce){
+  .avatar-float,.avatar-bounce-in,.avatar-jelly-tap,.villain-float,.villain-growl{animation:none !important}
+}
+
+/* ---------- 홈 히어로 — 내 대표 캐릭터 (점선 상자 없이) ---------- */
+.hero2 .hero-arch{display:none !important}
+.hero-char{
+  position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;
+  background:none;border:none;padding:0;cursor:pointer;-webkit-tap-highlight-color:transparent;
+}
+.hero-char .hc-plate{
+  position:relative;width:96px;height:96px;border-radius:50%;
+  display:grid;place-items:center;
+  background:radial-gradient(70% 70% at 50% 34%,rgba(255,255,255,.94),rgba(255,255,255,.72) 62%,rgba(255,255,255,.28));
+  box-shadow:0 10px 22px -6px rgba(6,20,52,.45), inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 3px rgba(255,255,255,.30);
+}
+.hero-char .hc-plate::after{
+  content:"";position:absolute;inset:-6px;border-radius:50%;
+  background:radial-gradient(closest-side,rgba(255,255,255,.26),rgba(255,255,255,0) 78%);
+  pointer-events:none;
+}
+.hero-char img{width:84px;height:84px;filter:drop-shadow(0 6px 8px rgba(6,20,52,.30))}
+.hero-char .hc-nm{
+  font-size:10.5px;font-weight:900;color:#EAF2FF;letter-spacing:-.2px;
+  background:rgba(9,26,64,.34);border:1px solid rgba(255,255,255,.22);
+  border-radius:999px;padding:2px 9px;margin-top:4px;white-space:nowrap;
+}
+.hero-char:active .hc-plate{transform:scale(.95)}
+.hero-char .hc-bub{
+  position:absolute;left:calc(100% - 4px);top:14px;
+  background:#fff;color:#20304A;font-size:10.5px;font-weight:900;line-height:1.35;
+  border-radius:12px;padding:6px 10px;white-space:normal;text-align:left;word-break:keep-all;
+  width:158px;box-shadow:0 6px 16px rgba(6,20,52,.3);
+  opacity:0;transition:opacity .18s;pointer-events:none;z-index:4;
+}
+.hero-char .hc-bub::after{content:"";position:absolute;left:-6px;top:14px;border:6px solid transparent;border-right-color:#fff;border-left:0}
+.hero-char.show .hc-bub{opacity:1}
+/* v2.3 — 히어로 안쪽 점선 스티치 제거(더 깔끔하게) */
+.hero2::after{display:none}
+
+/* ---------- 캐릭터 선택 바텀 시트 ---------- */
+.chpick{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:4px 0 2px}
+.chpick button{
+  position:relative;background:#F7FAFF;border:1.5px solid #E6EEFB;border-radius:16px;
+  padding:7px 3px 6px;display:flex;flex-direction:column;align-items:center;gap:3px;
+  -webkit-tap-highlight-color:transparent;transition:transform .12s, box-shadow .2s, border-color .2s;
+}
+.chpick button:active{transform:scale(.94)}
+.chpick img{width:56px;height:56px}
+.chpick .cn{font-size:10px;font-weight:900;color:#33415C;letter-spacing:-.3px;line-height:1.2;text-align:center;word-break:keep-all}
+.chpick .ck{font-size:9.5px;font-weight:900;color:#93A2B8}
+.chpick button.on{border-color:#2563EB;background:#EFF5FF;box-shadow:0 8px 18px -8px rgba(37,99,235,.55), inset 0 0 0 1px #2563EB}
+.chpick button.on .ck{color:#1D4ED8}
+.chpick button.on::after{
+  content:"✓";position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;
+  background:#2563EB;color:#fff;font-size:12px;font-weight:900;display:grid;place-items:center;
+  box-shadow:0 3px 8px rgba(37,99,235,.45);
+}
+.chpick button.mine{background:#FFF8EC;border-color:#FFE0B2}
+
+/* ---------- 랭킹·선생님·프로필 썸네일 ---------- */
+.rank-av{overflow:hidden;background:#F2F7FF;border:1px solid #DCE7FF;padding:2px}
+.rank-av img{width:100%;height:100%;object-fit:contain}
+.avatar-big{overflow:hidden}
+.avatar-big img{width:58px;height:58px;object-fit:contain}
+.se .char-img{width:26px;height:26px}
+.sturow .rank-av{border:none;background:#F2F7FF}
+
+/* ---------- 축하 팝업의 캐릭터들 ---------- */
+.charparty{display:flex;align-items:flex-end;justify-content:center;gap:2px;margin:2px 0 6px}
+.charparty .charb{position:relative;display:flex;flex-direction:column;align-items:center;animation:avatarBounceIn .66s cubic-bezier(.2,.9,.3,1.1) both}
+.charparty .cimg{filter:drop-shadow(0 8px 12px rgba(15,23,42,.22))}
+.charparty .cbbl{
+  background:#fff;color:#23324C;font-size:10.5px;font-weight:900;line-height:1.35;
+  border-radius:12px;padding:5px 9px;margin-bottom:2px;max-width:118px;text-align:center;
+  box-shadow:0 6px 16px rgba(15,23,42,.16);animation:avatarBounceIn .5s ease both;
+  word-break:keep-all;
+}
+.charparty.big .cbbl{font-size:12px;max-width:150px;padding:6px 11px}
+.charparty .charb:nth-child(2){margin-bottom:-2px}
+.charparty .charb:nth-child(3){margin-left:-6px}
+.bc-card.haschar,.bigceleb.haschar .bc-card{padding-top:18px}
+.celebrate-wrap.haschar .celebrate-card{padding-top:20px}
+
+/* ---------- 보스·오답 악당 그림 ---------- */
+.boss-art{width:62px;height:62px;display:grid;place-items:center;flex:0 0 auto}
+.boss-art img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 6px 10px rgba(60,10,40,.28))}
+.boss .hd .boss-art{width:54px;height:54px}
+.bossmini{display:inline-flex;align-items:center;justify-content:center;vertical-align:-4px;margin-right:4px}
+.bossmini img{width:20px;height:20px;object-fit:contain}
+.bosshero-row{display:flex;justify-content:center;gap:6px;margin:2px 0 10px}
+.bosshero-row .bh{display:flex;flex-direction:column;align-items:center;gap:2px}
+.bosshero-row img{width:88px;height:88px;object-fit:contain;filter:drop-shadow(0 8px 14px rgba(60,10,40,.30))}
+.bosshero-row b{font-size:10px;font-weight:900;color:#5A4A6B;white-space:nowrap}
+.carryone .co-em img{width:92px;height:92px;object-fit:contain;filter:drop-shadow(0 8px 14px rgba(60,10,40,.26))}
+.cc-em img{width:40px;height:40px;object-fit:contain}
+.eggrow .er-em img{width:26px;height:26px;object-fit:contain}
+.ph-em.darkegg img{width:96px;height:96px;object-fit:contain}
+.co-em.villain,.cc-em.villain{display:grid;place-items:center}
+
+/* ---------- 빈 화면 응원 (안 고른 친구들도 곳곳에) ---------- */
+.cheerline{
+  display:flex;align-items:center;gap:9px;background:#F5F9FF;border:1px solid #E4EEFB;
+  border-radius:16px;padding:9px 11px;margin:8px 0 0;
+}
+.cheerline img{width:46px;height:46px;flex:0 0 auto}
+.cheerline .cl-tx{font-size:11.5px;font-weight:900;color:#3A4A66;line-height:1.45;word-break:keep-all;text-align:left}
+.cheerline .cl-tx b{color:#1D4ED8}
+.cheerline .cl-nm{display:block;font-size:9.5px;font-weight:900;color:#8AA0BC;margin-top:2px}
+.cheerline.dark{background:linear-gradient(160deg,#2B2140,#3A2B55);border-color:#4A3A6B}
+.cheerline.dark .cl-tx{color:#F3EDFF}
+.cheerline.dark .cl-nm{color:#B7A6D8}
+.cheer-inline{display:inline-flex;align-items:center;gap:6px}
+.cheer-inline img{width:26px;height:26px}
+.empty-cheer{display:flex;flex-direction:column;align-items:center;gap:6px}
+.empty-cheer img{width:64px;height:64px}
+.empty-cheer .ec-l{font-size:11.5px;font-weight:900;color:#6E7F94;text-align:center;line-height:1.4}
+
+/* v2.3 — 전체 화면 축하: 캐릭터가 잘 보이도록 밝은 카드 위에 올립니다 */
+.bigceleb .bc-card{
+  background:linear-gradient(165deg,#FFFFFF,#F2F7FF);
+  border-radius:26px;padding:20px 16px 14px;
+  box-shadow:0 24px 60px rgba(6,20,52,.42), inset 0 1px 0 rgba(255,255,255,.9);
+  width:min(330px, 88vw);
+}
+.bigceleb .bc-card .bc-t{color:var(--navy);text-shadow:none}
+.bigceleb .bc-card .bc-s{color:#5B6B80}
+.bigceleb .bc-card .bc-tap{color:#93A2B8}
+.bigceleb .bc-card .bc-praise{box-shadow:0 8px 20px rgba(255,209,102,.35)}
+.bigceleb .bc-card .bc-em{filter:drop-shadow(0 8px 14px rgba(15,23,42,.2))}
+.bigceleb .charparty{margin:0 0 8px}
+.bigceleb .bc-fw,.bigceleb .bc-sparkles{position:absolute;inset:0;pointer-events:none}

@@ -24,6 +24,36 @@ window.EMA = window.EMA || {};
   const ic = (name, cls) => (window.EMA && EMA.icons ? EMA.icons.html(name, cls) : '');
   const GAME = () => window.EMA_GAME || { pets: [], shop: [], bosses: [], titles: [], rarity: {}, dailyTitles: [], monsters: [], tags: [], story: {} };
   const STORY = () => GAME().story || {};
+  /* v2.3 — 3D 캐릭터 사전 (js/characters.js) */
+  const CH = () => window.EMA_CHARS || null;
+  const charIdOf = (stu) => (CH() ? CH().idOf(stu) : (stu && stu.avatar) || '01_fox');
+  const charImg = (id, size, cls, style) => (CH() ? CH().img(id, { size, cls, style }) : '');
+  const villainImg = (id, size, cls, style) => (CH() ? CH().img(id, { size, cls, style, alt: '' }) : '');
+  /** 빈 화면·곳곳의 응원 한 줄 — 날짜+학생마다 같은 친구가 나옵니다 */
+  function cheerLine(ctx, opt) {
+    if (!CH()) return '';
+    const o = opt || {};
+    const who = o.id ? CH().info(o.id) : CH().pickFor(view.studentId || '', ctx);
+    const line = o.line || CH().cheer(who.id);
+    return `<div class="cheerline ${o.cls || ''}">
+      <img class="avatar-float" src="${CH().art(who.id)}" alt="" loading="lazy">
+      <span class="cl-tx">${esc(line)}<span class="cl-nm">${esc(who.name)} ${esc(who.nick)}</span></span>
+    </div>`;
+  }
+  function emptyCheer(ctx, title) {
+    if (!CH()) return '';
+    const who = CH().pickFor(view.studentId || '', ctx);
+    return `<div class="empty-cheer">
+      <img class="avatar-float" src="${CH().art(who.id)}" alt="" loading="lazy">
+      <span class="ec-l">${esc(CH().cheer(who.id))}</span>
+    </div>`;
+  }
+  /** 축하 팝업에 같이 나올 친구들 (내 캐릭터 + 다른 친구들) */
+  function partyOf(n) {
+    if (!CH()) return null;
+    const me = store.student(view.classId, view.studentId);
+    return CH().party(charIdOf(me), n);
+  }
   const MIN = 3;
   const REUP_MS = 3600000;
   const STAR_MAX = 5;          // ⭐ 질문은 숙제 1건당 5개까지 (나머지는 선생님께 직접)
@@ -65,6 +95,7 @@ window.EMA = window.EMA || {};
     lastResult: null,
     bigPhotoSid: null, bigPhotoAt: '', bigPhotoFrom: '',
     tOpen: {}, stuOpen: {}, installOpen: false,
+    charTap: 0, charBub: '',                              // v2.3 — 배너 캐릭터 톡톡 (대사 바뀜)
     scrollTarget: null,
     resetScroll: false
   };
@@ -222,10 +253,12 @@ window.EMA = window.EMA || {};
     };
   }
 
-  /** 홈 히어로 (v2.2) — 왼쪽 인사·마스코트, 오른쪽 오늘 목표 링 + 연속 일수 */
+  /** 홈 히어로 (v2.3) — 왼쪽 인사, 오른쪽 오늘 목표 링 · 내 대표 3D 캐릭터(점선 상자 없이) */
   function heroBanner(cid, sid, streak) {
     const me = store.student(cid, sid) || {};
     const g = todayGoal(cid, sid);
+    const who = CH() ? CH().info(charIdOf(me)) : null;
+    const bub = view.charBub || (CH() ? CH().cheer(who.id) : '');
     return `<div class="hero hero2">
       <div class="hero-top">
         <div class="hero-tx">
@@ -239,7 +272,13 @@ window.EMA = window.EMA || {};
         </div>
       </div>
       <div class="hero-bot">
-        <div class="hero-art2"><div class="hero-arch"></div>${mascotSvg()}</div>
+        <div class="hero-art2">
+          ${who ? `<button class="hero-char ${view.charTap ? 'show' : ''}" data-act="charTap" aria-label="${esc(who.nick)} — 내 캐릭터 바꾸기">
+            <span class="hc-bub">${esc(bub)}</span>
+            <span class="hc-plate">${charImg(who.id, 84, view.charTap ? 'avatar-jelly-tap' : 'avatar-float')}</span>
+            <span class="hc-nm">${esc(who.nick)} · 바꾸기</span>
+          </button>` : mascotSvg()}
+        </div>
         <div class="hero-side">
           ${(() => { const lv2 = store.level(cid, sid), st2 = store.stats(cid, sid);
             return `<span class="hero-lv">Lv.${lv2.lv} · <b>${st2.xp}</b> XP</span>`; })()}
@@ -260,7 +299,7 @@ window.EMA = window.EMA || {};
     const ch = (STORY().chapters || [])[new Date(store.state.today + 'T12:00:00').getDate() % Math.max(1, (STORY().chapters || [1]).length)];
     return `<div class="boss">
       <div class="hd">
-        <div class="boss-em">${boss.def.em || '👾'}</div>
+        <div class="boss-em boss-art villain-float">${villainImg(CH() ? CH().bossArt(boss.def.id) : 'boss_01_shadow_king', 54)}</div>
         <div class="grow">
           <div class="nm">${esc(boss.def.name || '보스')}</div>
           <div class="taunt">${esc((boss.def.taunts || [''])[new Date(store.state.today + 'T12:00:00').getDate() % Math.max(1, (boss.def.taunts || ['']).length)])}</div>
@@ -365,6 +404,10 @@ window.EMA = window.EMA || {};
   }
   function avatarHtml(stu, size) {
     const sz = size || 36;
+    const id = charIdOf(stu);
+    if (CH()) {
+      return `<span class="rank-av" style="width:${sz}px;height:${sz}px">${charImg(id, sz - 4)}</span>`;
+    }
     return `<span class="rank-av" style="width:${sz}px;height:${sz}px;font-size:${Math.round(sz * .52)}px">${esc(stu.avatar || '🙂')}</span>`;
   }
   function sheetWrap(title, inner, opt) {
@@ -485,9 +528,16 @@ window.EMA = window.EMA || {};
     if (r.weekly) bits.push('주간 목표 +' + r.weekly);
     EMA.ui.sound('coin');
     EMA.ui.toast('🎯 ' + bits.join(' · ') + '코인!', 3400);
+    if (!r.weekly && r.mission) {
+      setTimeout(() => EMA.ui.fx.celebrate({
+        kind: 'title', title: '오늘 미션 달성!',
+        sub: '3문제 채웠어요 · +' + r.mission + '코인',
+        chars: partyOf(1), ms: 2100
+      }), 400);
+    }
     if (r.weekly || r.comeback) {
       if (r.weekly) {
-        bigCeleb({ kind: 'title', em: '🏅', title: '주간 목표 달성!', sub: '이번 주 ' + r.weekDays + '일 미션 완료 · +' + r.coins + '코인' });
+        bigCeleb({ kind: 'title', em: '🏅', title: '주간 목표 달성!', sub: '이번 주 ' + r.weekDays + '일 미션 완료 · +' + r.coins + '코인', chars: partyOf(2) });
       } else {
         EMA.ui.fx.celebrate({
           kind: 'title', em: '🌈',
@@ -600,11 +650,16 @@ window.EMA = window.EMA || {};
     const st = STORY();
     const lines = st.lines || [];
     const chapters = st.chapters || [];
+    const bosses = (GAME().bosses || []).filter(b => b.art).slice(0, 3);
     return sheetWrap('📖 ' + (st.title || '숫자 왕국 구출 대작전'), `
       <div class="storybox">
         <div class="s-em">🏰</div>
         ${lines.map(l => `<p class="s-line">${esc(l)}</p>`).join('')}
       </div>
+      ${bosses.length ? `<div class="bosshero-row">
+        ${bosses.map(b => `<span class="bh"><img class="villain-float villain-growl" src="${CH().art(b.art)}" alt="">
+          <b>${esc(b.name)}</b></span>`).join('')}
+      </div>` : ''}
       ${chapters.length ? `<div class="sect-t" style="margin-top:14px"><span>보스 스토리</span><span class="grow"></span><span class="hint">4장</span></div>
       <div class="chapters">
         ${chapters.map((ch, i) => `<div class="chap">
@@ -641,10 +696,10 @@ window.EMA = window.EMA || {};
     const me = sid ? store.student(cid, sid) : null;
     const on = EMA.sfx.on();
     return sheetWrap('⚙️ 설정', `
-      ${me ? `<div class="setrow" data-act="editProfile">
-        <span class="se">${esc(me.avatar || '🙂')}</span>
+      ${me ? `<div class="setrow" data-act="openCharPicker">
+        <span class="se">${charImg(charIdOf(me), 30)}</span>
         <span class="st">${esc(me.nickname || me.name)}</span>
-        <span class="sv">캐릭터 · 닉네임</span><span class="chev">›</span></div>` : ''}
+        <span class="sv">내 캐릭터 · 닉네임</span><span class="chev">›</span></div>` : ''}
       <button class="setrow" data-act="toggleSound">
         <span class="se">${on ? '🔊' : '🔇'}</span><span class="st">소리</span>
         <span class="toggle ${on ? 'on' : ''}"><i></i><b>${on ? '켜짐' : '꺼짐'}</b></span></button>
@@ -660,7 +715,7 @@ window.EMA = window.EMA || {};
       <div class="hint wrap" style="margin:6px 6px 0">초기화하면 지금 데이터를 먼저 이 기기에 백업해 두고, 이 화면에서만 새로 시작해요.</div>
       <div class="sethd">앱</div>
       ${installGuide()}
-      <div class="hint center" style="margin-top:12px">숙제 대소동 v2.2 · 숫자 왕국 구출 대작전 ${demoChip()}</div>
+      <div class="hint center" style="margin-top:12px">숙제 대소동 v2.3 · 숫자 왕국 구출 대작전 ${demoChip()}</div>
     `);
   }
 
@@ -779,7 +834,7 @@ window.EMA = window.EMA || {};
         <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="openStory">📖 이야기 보기</button>
         <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="teacherEntry">👩‍🏫 선생님이세요? 선생님 모드</button>
         <div class="pin-hint">학생 PIN은 선생님께 물어보세요 · 내 PIN은 ⚙️ 설정에서 바꿀 수 있어요</div>
-        <div class="verline">v2.2 ${demoChip()}</div>
+        <div class="verline">v2.3 ${demoChip()}</div>
       </div>
       ${sheetHtml()}`;
     }
@@ -943,7 +998,7 @@ window.EMA = window.EMA || {};
         ${(l && String(l.lesson || '').trim()) ? `<div class="hwlesson"><span class="k">진도</span><span class="v">${esc(stripBookLead(l.lesson, bs))}</span></div>` : ''}
         ${bookRows}
         ${!bs.length && hasHwText ? `<div class="hwlesson"><span class="k">숙제</span><span class="v">${esc(l.homework)}</span></div>` : ''}
-        ${(!bs.length && !hasHwText) ? '<div class="hwempty">오늘은 숙제가 없어요</div>' : ''}
+        ${(!bs.length && !hasHwText) ? `<div class="hwempty">오늘은 숙제가 없어요</div>${emptyCheer('nohw')}` : ''}
 
         <div class="hwprog">
           <div class="hwbar"><i style="width:${g.pct}%"></i></div>
@@ -970,7 +1025,7 @@ window.EMA = window.EMA || {};
     const cnt = store.printCounts(cid, sid);
     const sub = store.submission(cid, sid, null, 'print');
     if (!info || !tiles.length) {
-      return `<div class="card"><div class="empty">📝 오늘은 오답프린트가 없어요</div></div>`;
+      return `<div class="card"><div class="empty">📝 오늘은 오답프린트가 없어요</div>${emptyCheer('noprint')}</div>`;
     }
     return `
       <div class="card">
@@ -1040,8 +1095,8 @@ window.EMA = window.EMA || {};
           <span class="co-step">${q.idx + 1} / ${q.ids.length}</span>
           <span class="co-left">남은 ${list.length}개</span>
         </div>
-        <div class="co-em">${m.em || '👾'}</div>
-        <div class="co-nm">${esc(m.name || '못 고친 오답')}</div>
+        <div class="co-em villain">${villainImg(CH() ? CH().minionFor(m.why) : 'minion_01_slime', 92, 'villain-float')}</div>
+        <div class="co-nm">${esc(CH() ? CH().info(CH().minionFor(m.why)).name : (m.name || '못 고친 오답'))}</div>
         <div class="co-lb">${esc(m.book === '프린트' ? '' : m.book + ' ')}<b>${m.page}쪽 ${esc(m.num)}번</b></div>
         <div class="co-meta">${esc(m.date.slice(5))} · ${reasonTxt[m.reason] || '❌'}${tries}</div>
         ${overdueText(m) ? `<div class="co-late">⏰ ${esc(overdueText(m).replace(' · ', ''))}</div>` : ''}
@@ -1072,7 +1127,7 @@ window.EMA = window.EMA || {};
         return carryOneDone(list, solved, view.carryOne);
       }
       view.carryOne = null;
-      return `<div class="card"><div class="empty">🎉 밀린 문제가 없어요!${solved.length ? `<br><small>지금까지 ${solved.length}개를 스스로 고쳤어요</small>` : ''}</div></div>`;
+      return `<div class="card"><div class="empty">🎉 밀린 문제가 없어요!${solved.length ? `<br><small>지금까지 ${solved.length}개를 스스로 고쳤어요</small>` : ''}</div>${emptyCheer('carry')}</div>`;
     }
     if (one) return carryOneCard(cid, sid, list, solved, doneToday, reasonTxt, tagDefs);
     return `${carryModeSw()}` +
@@ -1085,9 +1140,9 @@ window.EMA = window.EMA || {};
         const whyDef = (GAME().tags || []).find(td => td.id === m.why);
         return `<div class="carrywrap">
           <div class="carrycard">
-            <div class="cc-em">${m.em || '👾'}</div>
+            <div class="cc-em villain">${villainImg(CH() ? CH().minionFor(m.why) : 'minion_01_slime', 40)}</div>
             <div class="grow">
-              <div class="cc-nm">${esc(m.name || '못 고친 오답')}${whyDef ? `<span class="whybadge">${whyDef.em} ${esc(whyDef.label)}</span>` : ''}</div>
+              <div class="cc-nm">${esc(CH() ? CH().info(CH().minionFor(m.why)).name : (m.name || '못 고친 오답'))}${whyDef ? `<span class="whybadge">${whyDef.em} ${esc(whyDef.label)}</span>` : ''}</div>
               <div class="cc-lb">${esc(m.book === '프린트' ? '' : m.book + ' ')}${m.page}쪽 ${esc(m.num)}번 <span class="dot">·</span> ${esc(m.date.slice(5))} <span class="dot">·</span> ${reasonTxt[m.reason] || '❌'}${tries}${overdueText(m) ? `<br><span class="late-note">⏰ ${esc(overdueText(m).replace(' · ', ''))}</span>` : ''}</div>
             </div>
             <div class="cc-do">
@@ -1406,15 +1461,24 @@ window.EMA = window.EMA || {};
         <div class="kv"><span class="k">🪙 코인</span><span>+${r && r.coins != null ? r.coins : 0}${r && r.photoBonus ? ` <span class="photo-bonus">📸 사진 +${r.photoBonus}</span>` : ''} · 지금 <b>${coinsNow}</b></span></div>
         <div class="kv"><span class="k">✨ XP</span><span>+${r && r.xp != null ? r.xp : st.xp}</span></div>
         ${sub && sub.noPhoto ? '<div class="kv"><span class="k">📸 사진</span><span><span class="nophoto-pill">⚡ 사진 없이 완료 · 선생님이 책으로 확인</span></span></div>' : ''}
-        <div class="kv"><span class="k">${boss.def.em || '👾'} 보스</span><span>${boss.hp}% 남음</span></div>
+        <div class="kv"><span class="k">보스</span><span>${boss.hp}% 남음</span></div>
         ${r && r.join && r.join.pet ? `<div class="kv"><span class="k">🐾 새 펫</span><span>${r.join.pet.em} ${esc(r.join.pet.name)}</span></div>` : ''}
         ${r && r.join && r.join.coins ? `<div class="kv"><span class="k">🐾 펫의 힘</span><span>펫 코인 +${r.join.coins}</span></div>` : ''}
         <div class="kv"><span class="k">🎯 오늘 미션</span><span>${missionLine(cid, sid)}</span></div>
       </div>
-      ${carriedNow ? `<div class="card tight">
+      ${boss.def.art ? `<div class="card tight bossvs">
+        <div class="row" style="align-items:center;gap:8px">
+          <span class="boss-art villain-float" style="width:52px;height:52px">${villainImg(boss.def.art, 52)}</span>
+          <span class="grow" style="min-width:0"><b class="t" style="font-size:13px;font-weight:900;color:var(--navy)">${esc(boss.def.name)}</b>
+            <span class="hint" style="display:block;margin-top:2px">${esc((boss.def.taunts || [''])[0])}</span></span>
+          <span class="pill ${boss.left === 0 ? 'ok' : 'warn'}">${boss.left === 0 ? '클리어!' : '남은 ' + boss.left + '명'}</span>
+        </div>
+      </div>` : ''}
+      ${(carriedNow ? `<div class="card tight">
         <div class="row"><span class="grow muted" style="font-size:12.5px">⚔️ 밀린문제 <b>${carriedNow}개</b></span>
         <button class="btn btn-mint btn-sm" data-act="homeTab" data-t="carry">고치기 →</button></div>
-      </div>` : ''}
+      </div>` : '')}
+      ${cheerLine('done')}
       ${(!isPrint && r && !r.reupload && !r.already) ? `<div class="notifyline">📣 선생님께 <b>'오늘 열심히 했어요!'</b> 알림이 전달됐어요!</div>` : ''}
       <div class="cta-wrap">
         <button class="btn btn-primary btn-block btn-lg" data-act="goHome">🏠 숙제로 돌아가기</button>
@@ -1520,16 +1584,18 @@ window.EMA = window.EMA || {};
       ${topbar({ title: '내 도감', sub: c.name, right: `${coinChip(cid, sid)}${gearBtn()}` })}
       <div class="card">
         <div class="avatarbox">
-          <button class="avatar-big" style="border:none;cursor:pointer" data-act="editProfile">${esc(me.avatar || '🙂')}</button>
+          <button class="avatar-big" style="border:none;cursor:pointer" data-act="openCharPicker" aria-label="내 캐릭터 바꾸기">${charImg(charIdOf(me), 58)}</button>
           <div class="grow" style="min-width:0">
             <div class="nmline">${esc(me.nickname || me.name)} <span class="pill">${esc(me.name)}</span></div>
             <div class="chips" style="margin:6px 0">
               <span class="title-chip">${esc(todayTitle(cid, sid))}</span>
               <span class="chip streak">🔥 ${streak}일</span>
+              <button class="chip" data-act="openCharPicker" style="border:none">🎨 캐릭터 바꾸기</button>
             </div>
             <div class="lvlbar"><i style="width:${lv.into}%"></i></div>
           </div>
         </div>
+        ${cheerLine('record', { id: charIdOf(me) })}
       </div>
       <div class="pad"><div class="stat-grid">
         <div class="stat"><div class="sic">${ic('flame')}</div><div class="v">${streak}<span>일</span></div><div class="l">연속 불꽃</div></div>
@@ -1573,7 +1639,7 @@ window.EMA = window.EMA || {};
       <div class="card tight">
         ${eggs.length ? eggs.slice(0, 6).map(m => `
           <div class="eggrow">
-            <span class="er-em">🥚</span>
+            <span class="er-em">${villainImg(CH() ? CH().minionFor(m.why) : 'minion_01_slime', 26)}</span>
             <span class="grow" style="min-width:0"><b>${esc(m.label || (m.page + '쪽 ' + m.num + '번'))}</b>
               <small>${esc(m.unitName || '')}${m.reason === 'star' ? ' · ⭐질문' : m.reason === 'skip' ? ' · ⏭️안 풀었음' : ''}</small></span>
             ${m.today
@@ -1640,10 +1706,10 @@ window.EMA = window.EMA || {};
             </div>
             <div class="rank-v">${esc(r.value || '')}</div>
           </div>`).join('')
-          : `<div class="empty">아직 오늘 기록이 없어요.<br><small>첫 번째 주자가 되어 보세요!</small></div>`}
+          : `<div class="empty">아직 오늘 기록이 없어요.<br><small>첫 번째 주자가 되어 보세요!</small></div>${emptyCheer('rank', '')}`}
       </div>
       <div class="card tight">
-        <div class="card-hd"><span class="t">${boss.def.em || '👾'} 우리 반 보스전</span><span class="grow"></span><span class="pill ${boss.left === 0 ? 'ok' : 'warn'}">${boss.left === 0 ? '클리어!' : '남은 ' + boss.left + '명'}</span></div>
+        <div class="card-hd"><span class="t"><span class="bossmini">${villainImg(CH() ? CH().bossArt(boss.def.id) : 'boss_01_shadow_king', 20)}</span> 우리 반 보스전</span><span class="grow"></span><span class="pill ${boss.left === 0 ? 'ok' : 'warn'}">${boss.left === 0 ? '클리어!' : '남은 ' + boss.left + '명'}</span></div>
         <div class="hpbar" style="background:#E9EEF6"><div class="fill" style="width:${boss.hp}%"></div></div>
         <div class="muted" style="margin-top:8px;font-size:12px">보스 HP ${boss.hp}% · 도장 ${boss.stamped}/${boss.total}</div>
         <div class="hint" style="margin-top:6px">닉네임으로만 보여요</div>
@@ -2273,7 +2339,7 @@ window.EMA = window.EMA || {};
       moveStu: sheetMoveStu, copyLesson: sheetCopyLesson, startfrom: sheetStartFrom,
       bookall: sheetBookAll, apphelp: sheetAppHelp, stuReset: sheetStuReset,
       stuCarry: sheetStuCarry, proxy: sheetProxy, whyfix: sheetWhyFix,
-      kingdom: sheetKingdom
+      kingdom: sheetKingdom, avatar: sheetAvatar
     };
     const fn = map[view.sheet];
     return fn ? fn() : '';
@@ -2413,11 +2479,33 @@ window.EMA = window.EMA || {};
     `);
   }
 
+  /* v2.3 — 20종 3D 캐릭터 고르기 (온보딩·설정·내 도감 공통) */
+  function charGrid(chosen, act) {
+    if (!CH()) return '';
+    const mine = CH().defaultFor(view.studentId || '');
+    return `<div class="chpick">${CH().list().map(a => `<button class="${a.id === chosen ? 'on' : ''} ${a.id === mine ? 'mine' : ''}"
+      data-act="${act || 'pickAvatar'}" data-a="${a.id}" aria-label="${esc(a.name)} ${esc(a.nick)}" aria-pressed="${a.id === chosen}">
+      ${charImg(a.id, 56)}<span class="cn">${esc(a.nick)}</span><span class="ck">${esc(a.name)}</span></button>`).join('')}</div>`;
+  }
+
+  function sheetAvatar() {
+    const cid = view.classId, sid = view.studentId;
+    const me = store.student(cid, sid) || {};
+    const chosen = view.pending.avatar || charIdOf(me);
+    const who = CH() ? CH().info(chosen) : null;
+    return sheetWrap('내 캐릭터 고르기', `
+      <div class="sub">마음에 드는 친구를 톡 누르면 <b>바로 내 캐릭터</b>가 돼요 · 20마리</div>
+      ${charGrid(chosen, 'pickAvatar')}
+      ${who ? `<div class="cheerline"><img class="avatar-float" src="${CH().art(who.id)}" alt="">
+        <span class="cl-tx">“${esc(CH().cheer(who.id))}”<span class="cl-nm">${esc(who.name)} ${esc(who.nick)}</span></span></div>` : ''}
+      <button class="btn btn-ghost btn-block btn-sm" style="margin-top:12px" data-act="editProfile">✏️ 닉네임도 바꿀래요</button>
+    `, { wide: true });
+  }
+
   function sheetOnboard() {
     const cid = view.classId, sid = view.studentId;
     const me = store.student(cid, sid);
-    const avs = ['🦊', '🐰', '🐯', '🐼', '🐶', '🐨', '🐻', '🐷', '🐸', '🦄'];
-    const chosen = view.pending.avatar || me.avatar || '🦊';
+    const chosen = view.pending.avatar || charIdOf(me || {});
     const st = STORY();
     return sheetWrap('내 캐릭터 만들기', `
       <div class="storybox small">
@@ -2425,28 +2513,27 @@ window.EMA = window.EMA || {};
         <b class="s-title">${esc(st.title || '숫자 왕국 구출 대작전')}</b>
         <p class="s-line">${esc((st.lines || [])[1] || '오답을 다시 풀어 고치면 펫 알이 부화해요!')}</p>
       </div>
-      <div class="sub">캐릭터와 닉네임(한글 4자)을 정해요</div>
-      <div class="avatars">${avs.map(a => `<button class="${a === chosen ? 'on' : ''}" data-act="avatar" data-a="${a}">${a}</button>`).join('')}</div>
+      <div class="sub">함께할 친구를 하나 고르고, 닉네임(한글 4자)을 정해요</div>
+      ${charGrid(chosen, 'pickAvatar')}
       <div style="margin-top:14px">
         <input id="nickInput" class="tinput" placeholder="닉네임 (예: 도연)" maxlength="4" value="${esc(view.pending.nickname || '')}">
       </div>
       <button class="btn btn-primary btn-block" style="margin-top:14px" data-act="saveOnboard">시작하기</button>
-    `);
+    `, { wide: true });
   }
 
   function sheetProfile() {
     const cid = view.classId, sid = view.studentId;
     const me = store.student(cid, sid);
-    const avs = ['🦊', '🐰', '🐯', '🐼', '🐶', '🐨', '🐻', '🐷', '🐸', '🦄'];
-    const chosen = view.pending.avatar || me.avatar || '🦊';
+    const chosen = view.pending.avatar || charIdOf(me || {});
     return sheetWrap('캐릭터 · 닉네임', `
-      <div class="sub">닉네임은 한글 4자까지</div>
-      <div class="avatars">${avs.map(a => `<button class="${a === chosen ? 'on' : ''}" data-act="avatar" data-a="${a}">${a}</button>`).join('')}</div>
+      <div class="sub">닉네임은 한글 4자까지 · 캐릭터는 톡 누르면 바뀌어요</div>
+      ${charGrid(chosen, 'pickAvatar')}
       <div style="margin-top:14px">
         <input id="nickInput" class="tinput" placeholder="닉네임" maxlength="4" value="${esc(view.pending.nickname || me.nickname || '')}">
       </div>
       <button class="btn btn-primary btn-block" style="margin-top:14px" data-act="saveProfile">저장</button>
-    `);
+    `, { wide: true });
   }
 
   function sheetPinChange() {
@@ -2560,7 +2647,7 @@ window.EMA = window.EMA || {};
     if (!m) return '';
     return sheetWrap('❌ 못 고친 오답', `
       <div class="pethero dark">
-        <div class="ph-em darkegg">🥚</div>
+        <div class="ph-em darkegg villain">${villainImg(CH() ? CH().minionFor(m.why) : 'minion_01_slime', 96, 'villain-float')}</div>
         <div class="ph-rar">${m.today ? '오늘 생긴 오답' : '밀린문제'}</div>
         <div class="ph-line">${m.page}쪽 ${m.num}번</div>
       </div>
@@ -3465,10 +3552,12 @@ window.EMA = window.EMA || {};
       EMA.ui.toast(`🎉 오답 0개 올백! ${pet.name} 부화 · 도감에 담았어요 (+${pb.coins}코인)`, 4600);
       EMA.ui.sound('legendary');
       EMA.ui.fx.confetti && EMA.ui.fx.confetti(80);
+      EMA.ui.fx.celebrate({ kind: 'legend', title: '올백 완벽 클리어!', sub: `오답 0개 · ${pet.name} 부화 (+${pb.coins}코인)`, chars: partyOf(2), ms: 2400 });
     } else {
       EMA.ui.toast(`🎉 오답 0개 올백! 펫 경험치 +${pb.xp || 50} · 코인 +${pb.coins}`, 4200);
       EMA.ui.sound('crit');
       EMA.ui.fx.confetti && EMA.ui.fx.confetti(50);
+      EMA.ui.fx.celebrate({ kind: 'legend', title: '올백 완벽 클리어!', sub: `오답 0개 · 펫 경험치 +${pb.xp || 50} · 코인 +${pb.coins}`, chars: partyOf(2), ms: 2300 });
     }
   }
 
@@ -4215,7 +4304,7 @@ window.EMA = window.EMA || {};
         if (r && r.titles && r.titles.length) {
           r.titles.forEach(t => items.push({ kind: 'title', em: t.em || '🏅', title: t.name + ' 획득!', sub: '새 칭호가 열렸어요', sfx: 'fanfare' }));
         }
-        if (r && r.killed) setTimeout(() => bigCeleb({ kind: 'boss', em: '🏆', title: '보스 처치!', sub: '반 전원 보너스 코인 30개 · 한정판 칭호', sfx: 'bossdown' }), 3000);
+        if (r && r.killed) setTimeout(() => bigCeleb({ kind: 'boss', title: '보스 처치!', sub: (r.killed.boss && r.killed.boss.name ? r.killed.boss.name + ' 격파! · ' : '') + '반 전원 보너스 코인 30개 · 한정판 칭호', chars: partyOf(2), sfx: 'bossdown' }), 3000);
         if (r && r.sub && r.sub.shield) items.push({ kind: 'shield', em: '🛡️', title: '보스 방어막 발동!', sub: '수업 당일에 몰아서 내서 보스·코인 50%만 들어갔어요', sfx: 'shield' });
         else if (r && r.sub && r.sub.early) items.push({ kind: 'early', em: '⚡', title: '얼리버드 크리티컬 2배!', sub: '일찍 내서 코인 2배 + XP 20 보너스!', sfx: 'fanfare' });
         if (r && r.carried) items.push({ kind: 'title', em: '🥚', title: '안 푼 ' + r.carried + '문제 → 밀린문제', sub: '제출 기한이 지나 ⚔️ 밀린문제로 넘어갔어요', sfx: 'tap', ms: 1800 });
@@ -4238,7 +4327,7 @@ window.EMA = window.EMA || {};
             kind: 'title', em: pr ? '📝' : '🎉',
             title: pr ? '프린트 끝!' : '오늘 숙제 완료!',
             sub: `코인 +${lr.coins != null ? lr.coins : 0} · XP +${lr.xp != null ? lr.xp : 0}` + (lr.carried ? ` · 밀린문제 ${lr.carried}개` : ''),
-            ms: 2600
+            ms: 2600, chars: partyOf(2)
           });
         }, 420);
       }
@@ -4463,7 +4552,7 @@ window.EMA = window.EMA || {};
         if (items.length) setTimeout(() => celebrateQueue(items), 3000);
       }
       if (r.killed && r.killed.boss) {
-        setTimeout(() => bigCeleb({ kind: 'boss', em: '🏆', title: '보스 처치!', sub: '반 전원 보너스 코인 30개 · 한정판 칭호', sfx: 'bossdown' }), 900);
+        setTimeout(() => bigCeleb({ kind: 'boss', title: '보스 처치!', sub: '반 전원 보너스 코인 30개 · 한정판 칭호', chars: partyOf(2), sfx: 'bossdown' }), 900);
       }
     },
     feed() {
@@ -4522,11 +4611,12 @@ window.EMA = window.EMA || {};
       const sub = r.skip
         ? '안 푼 문제라 코인 +1만 들어요'
         : `+${r.coins}코인 · +${r.xp} XP${r.join && r.join.pet ? ' · 🥚→🐾 펫 알 부화!' : ''}`;
-      EMA.ui.fx.celebrate({ kind: 'title', em: r.skip ? '✅' : '⚔️', title: '해결!', sub, ms: 1700 });
+      if (r.skip) EMA.ui.fx.celebrate({ kind: 'title', em: '✅', title: '해결!', sub, ms: 1700 });
+      else EMA.ui.fx.celebrate({ kind: 'title', title: '해결!', sub, chars: partyOf(1), ms: 1900 });
       if (r.join && r.join.pet) EMA.ui.sound('hatch');
       const nextHint = (view.carryMode === 'one' && store.carried(cid, sid).length) ? ' · 다음 문제 →' : '';
       EMA.ui.toast((r.capped ? '해결! 오늘 정식 보상 5개를 넘어 코인 1개만 들어요' : r.skip ? '해결! 안 푼 문제는 코인 1개만 들어요' : '밀린문제 하나 해결! ⚔️') + nextHint);
-      if (r.killed && r.killed.boss) setTimeout(() => bigCeleb({ kind: 'boss', em: '🏆', title: '보스 처치!', sub: '반 전원 보너스 코인 30개', sfx: 'bossdown' }), 1800);
+      if (r.killed && r.killed.boss) setTimeout(() => bigCeleb({ kind: 'boss', title: '보스 처치!', sub: (r.killed.boss.name || '보스') + ' 격파! · 반 전원 보너스 코인 30개', chars: partyOf(2), sfx: 'bossdown' }), 1800);
       if (r.effort && !r.skip) EMA.ui.fx.banner('📣 선생님께 \'오늘 열심히 했어요!\' 알림이 전달됐어요!', 'effort', 3400);
       if (mx && mx.then) mx.then(x => x && missionToast(x));
       else if (mx) missionToast(mx);
@@ -4577,12 +4667,46 @@ window.EMA = window.EMA || {};
     /* ---- 프로필 ---- */
     editProfile() { view.pending = { photo: view.pending.photo, avatar: null, nickname: '', yphoto: null }; view.sheet = 'profile'; render(); },
     avatar(d) { view.pending.avatar = d.a; EMA.ui.sound('tap'); render(); },
+    /* ★ v2.3 — 20종 3D 캐릭터 고르기: 톡 누르면 바로 저장 */
+    openCharPicker() {
+      const me = store.student(view.classId, view.studentId);
+      view.pending.avatar = me ? charIdOf(me) : null;
+      view.sheet = 'avatar';
+      EMA.ui.sound('tap');
+      render();
+    },
+    pickAvatar(d) {
+      if (!CH() || !CH().byId[d.a]) return;
+      const me = store.student(view.classId, view.studentId);
+      const before = me ? charIdOf(me) : null;
+      view.pending.avatar = d.a;
+      store.saveProfile(view.classId, view.studentId, { avatar: d.a, avatarId: d.a });
+      view.charTap = 0;
+      view.charBub = CH().cheer(d.a);
+      EMA.ui.sound(before === d.a ? 'tap' : 'levelup');
+      if (view.sheet === 'avatar') { /* 고르는 중에는 시트를 유지 */ }
+      render();
+      if (before !== d.a) EMA.ui.toast(CH().info(d.a).nick + '(' + CH().info(d.a).name + ')가 내 캐릭터가 됐어요!');
+    },
+    /** 배너 캐릭터 톡 — 쫀득하게 흔들리고 응원 대사가 바뀜. 말풍선이 떠 있을 때 한 번 더 누르면 고르기 */
+    charTap() {
+      if (!CH()) return;
+      if (view.charTap) { actions.openCharPicker(); return; }
+      const me = store.student(view.classId, view.studentId);
+      view.charTap = 1;
+      view.charBub = CH().cheer(charIdOf(me));
+      EMA.ui.sound('tap');
+      render();
+      setTimeout(() => { if (view.charTap) { view.charTap = 0; render(); } }, 2400);
+    },
+    charPick() { actions.openCharPicker(); },
     saveProfile() {
       const nick = (document.querySelector('#nickInput') || {}).value || '';
       if (nick && !/^[가-힣]{1,4}$/.test(nick)) { EMA.ui.toast('닉네임은 한글 4글자 이내로 정해 주세요'); return; }
       const me = store.student(view.classId, view.studentId);
+      const av = view.pending.avatar || (me ? charIdOf(me) : null);
       store.saveProfile(view.classId, view.studentId, {
-        avatar: view.pending.avatar || me.avatar,
+        avatar: av, avatarId: av,
         nickname: nick || me.nickname
       });
       view.sheet = null; EMA.ui.toast('저장했어요'); EMA.ui.sound('coin');
@@ -4591,7 +4715,9 @@ window.EMA = window.EMA || {};
     saveOnboard() {
       const nick = (document.querySelector('#nickInput') || {}).value || '';
       if (!/^[가-힣]{1,4}$/.test(nick)) { EMA.ui.toast('닉네임은 한글 1~4글자로 정해 주세요 (예: 도연)'); return; }
-      store.saveProfile(view.classId, view.studentId, { avatar: view.pending.avatar || '🦊', nickname: nick });
+      const me0 = store.student(view.classId, view.studentId);
+      const av = view.pending.avatar || charIdOf(me0 || {});
+      store.saveProfile(view.classId, view.studentId, { avatar: av, avatarId: av, nickname: nick });
       view.pending = { photo: null, avatar: null, nickname: '', yphoto: null };
       view.sheet = null; view.flow = null;
       saveDraft();
@@ -4784,7 +4910,7 @@ window.EMA = window.EMA || {};
         shield: { kind: 'shield', em: '🛡️', title: '보스 방어막 발동!', sub: '수업 당일에 몰아서 내면 보스·코인 50%만 들어가요', sfx: 'shield' },
         early: { kind: 'early', em: '⚡', title: '얼리버드 크리티컬 2배!', sub: '숙제 나간 당일·다음 날 내면 코인 2배', sfx: 'fanfare' },
         legend: { kind: 'legend', em: '🐈', title: '전설 피타고라스 냥이 획득!', sub: '전설 등급 · 도감에 등록됐어요', sfx: 'legendary', ms: 2300 },
-        boss: { kind: 'boss', em: '🏆', title: '보스 처치!', sub: '반 전원 보너스 코인 30개 · 한정판 칭호', sfx: 'bossdown', ms: 2400 }
+        boss: { kind: 'boss', title: '보스 처치!', sub: '반 전원 보너스 코인 30개 · 한정판 칭호', chars: partyOf(2), sfx: 'bossdown', ms: 2400 }
       };
       const o = map[d.k]; if (!o) return;
       EMA.ui.fx.celebrate(o);

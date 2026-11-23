@@ -1,14 +1,16 @@
-/* 숙제 대소동 v2.2 — 서비스 워커
+/* 숙제 대소동 v2.3 — 서비스 워커
    · HTML·JS·CSS는 '네트워크 우선' — 새 버전이 늦게 뜨는 일이 없습니다.
    · 아이콘·글꼴 같은 정적 파일만 캐시에서 바로 꺼내 씁니다(빠른 실행 + 설치 조건).
    · 새 버전을 올리면 CACHE 이름이 바뀌고, 예전 캐시는 activate에서 지웁니다.
 */
-const CACHE = 'ema-v2.2-1';
+const CACHE = 'ema-v2.3-1';
 const PRECACHE = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon-180.png',
-  './manifest.webmanifest'
+  './manifest.webmanifest',
+  './assets/avatars/01_fox.png',
+  './assets/villains/boss_01_shadow_king.png'
 ];
 
 self.addEventListener('install', e => {
